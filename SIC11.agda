@@ -143,9 +143,6 @@ data O⁰ : ℕ → ℕ → Set where
   refₒ    : ∀ {i} → ℕ → O⁰ i (suc i)
   getₒ    : ∀ {i} → ℕ → O⁰ i (suc i)
   argₒ    : ∀ {i} → ℕ → O⁰ i (suc i)
-  sigₒ    : ∀ {i} → Sig → O⁰ i (suc i)
-
-infixr 5 _┆_
 
 data O¹ : Set where
   _∥_   : O¹ → O¹ → O¹
@@ -156,9 +153,10 @@ data O¹ : Set where
   outₒ  : List⁺ (O⁰ 0 1) → O¹
 
 data O² : Set where
-  _fork_ : O⁰ 0 1 → O¹ → O²
-  _then_ : O² → O² → O²
+  sigₒ : Sig → O¹ → O²
+  seqₒ : O² → O² → O²
 
+infixr  5 _┆_
 infixr 10 _∥_
 
 example-O⁰ : O⁰ 0 1
@@ -215,8 +213,8 @@ comp¹ (x │ s)      = comp¹ x ∥ comp¹ s
 
 -- Compiling signature dispatch sequences
 comp² : S² → O²
-comp² (s ┌ k) = (sigₒ s)  fork (comp¹ k)
-comp² (a └ b) = (comp² a) then (comp² b)
+comp² (s ┌ k) = sigₒ s (comp¹ k)
+comp² (a └ b) = seqₒ (comp² a) (comp² b)
 
 
 ------------------------------------------------------------------------
@@ -225,6 +223,7 @@ comp² (a └ b) = (comp² a) then (comp² b)
 --
 
 data Oᴱ : Set where
+  fyi          : O¹ → Oᴱ → Oᴱ
   ADD          : Oᴱ
   ADDRESS      : Oᴱ
   AND          : Oᴱ
@@ -234,6 +233,7 @@ data Oᴱ : Set where
   EQ           : Oᴱ
   EXP          : Oᴱ
   ISZERO       : Oᴱ
+  REVERTIF     : Oᴱ
   JUMP         : ℕ → Oᴱ
   JUMPDEST     : Oᴱ
   JUMPI        : ℕ → Oᴱ
@@ -258,14 +258,14 @@ data Oᴱ : Set where
   SWAP         : ℕ → Oᴱ
   TIMESTAMP    : Oᴱ
   _⟫_          : Oᴱ → Oᴱ → Oᴱ
-  ΔJUMPI       : ℕ → Oᴱ
+  ΔJUMPI       : Oᴱ → Oᴱ
 
 infixr 10 _⟫_
 
 ADD-safe =
   PUSH 0 ⟫ DUP  2 ⟫ SLT ⟫ DUP  3 ⟫ DUP 3 ⟫ ADD    ⟫ DUP 4 ⟫ SLT ⟫ AND ⟫
   DUP  2 ⟫ PUSH 0 ⟫ SLT ⟫ SWAP 3 ⟫ DUP 1 ⟫ SWAP 4 ⟫ ADD   ⟫ SLT ⟫ AND ⟫
-  OR
+  OR ⟫ REVERTIF
 
 prelude = JUMP 5 ⟫ JUMPDEST ⟫ REVERT ⟫ JUMPDEST
 
@@ -285,9 +285,6 @@ O⁰→Oᴱ (calleeₒ) = ADDRESS
 O⁰→Oᴱ (refₒ x)  = PUSH (x +ℕ 64) ⟫ MLOAD
 O⁰→Oᴱ (getₒ x)  = PUSH x ⟫ SLOAD
 O⁰→Oᴱ (argₒ x)  = PUSH (x ×ℕ 32) ⟫ CALLDATALOAD
-O⁰→Oᴱ (sigₒ x)  = PUSH 224 ⟫ PUSH 2 ⟫ EXP ⟫
-                  PUSH 0 ⟫ CALLDATALOAD ⟫ DIV ⟫
-                  PUSHSIG x ⟫ EQ
 O⁰→Oᴱ (getₖₒ)   = SLOAD
 O⁰→Oᴱ (H¹ₒ)     = PUSH 0  ⟫ MSTORE ⟫
                   PUSH 32 ⟫ PUSH 0 ⟫ KECCAK256
@@ -324,23 +321,31 @@ O⁰#→Oᴱ (x at i) = O⁰→Oᴱ x ⟫ PUSH i ⟫ MSTORE
 outₒ→Oᴱ : ℕ → List⁺ (O⁰ 0 1) → Oᴱ
 outₒ→Oᴱ i xs = foldr₁ _⟫_ (map⁺ O⁰#→Oᴱ (index⁺ i xs))
 
-O¹→Oᴱ : O¹ → Oᴱ
-O¹→Oᴱ (iffₒ o)     = O⁰→Oᴱ o ⟫ ISZERO ⟫ JUMPI 3
-O¹→Oᴱ (defₒ i x)   = O⁰→Oᴱ x ⟫ PUSH (i +ℕ 64) ⟫ MSTORE
-O¹→Oᴱ (setₒ i x)   = O⁰→Oᴱ x ⟫ PUSH i         ⟫ SSTORE
-O¹→Oᴱ (setₖₒ k x)  = O⁰→Oᴱ x ⟫ O⁰→Oᴱ k ⟫ SSTORE
-O¹→Oᴱ (outₒ xs)    = outₒ→Oᴱ 1024 xs
-O¹→Oᴱ (o₁ ∥ o₂)    = O¹→Oᴱ o₁ ⟫ O¹→Oᴱ o₂
+mutual
+  O¹→Oᴱ′ : O¹ → Oᴱ
+  O¹→Oᴱ′ (iffₒ o)     = O⁰→Oᴱ o ⟫ ISZERO ⟫ JUMPI 3
+  O¹→Oᴱ′ (defₒ i x)   = O⁰→Oᴱ x ⟫ PUSH (i +ℕ 64) ⟫ MSTORE
+  O¹→Oᴱ′ (setₒ i x)   = O⁰→Oᴱ x ⟫ PUSH i         ⟫ SSTORE
+  O¹→Oᴱ′ (setₖₒ k x)  = O⁰→Oᴱ x ⟫ O⁰→Oᴱ k ⟫ SSTORE
+  O¹→Oᴱ′ (outₒ xs)    = outₒ→Oᴱ 1024 xs
+  O¹→Oᴱ′ (o₁ ∥ o₂)    = O¹→Oᴱ o₁ ⟫ O¹→Oᴱ o₂
+
+  O¹→Oᴱ : O¹ → Oᴱ
+  O¹→Oᴱ o@(_ ∥ _) = O¹→Oᴱ′ o
+  O¹→Oᴱ o = fyi o (O¹→Oᴱ′ o)
 
 O²→Oᴱ : O² → Oᴱ
-O²→Oᴱ (p fork k) = O⁰→Oᴱ p ⟫ ISZERO ⟫ ΔJUMPI (|Oᴱ| (O¹→Oᴱ k)) ⟫ O¹→Oᴱ k
-O²→Oᴱ (a then b) = O²→Oᴱ a ⟫ O²→Oᴱ b
+O²→Oᴱ (sigₒ s k) =
+  PUSH 224 ⟫ PUSH 2 ⟫ EXP ⟫ PUSH 0 ⟫ CALLDATALOAD ⟫ DIV ⟫
+  PUSHSIG s ⟫ EQ ⟫ ISZERO ⟫ ΔJUMPI (O¹→Oᴱ k)
+O²→Oᴱ (seqₒ a b) =
+  O²→Oᴱ a ⟫ O²→Oᴱ b
 
 S¹→Oᴱ : S¹ → Oᴱ
 S¹→Oᴱ s = prelude ⟫ O¹→Oᴱ (comp¹ s)
 
 S²→Oᴱ : S² → Oᴱ
-S²→Oᴱ s = prelude ⟫ O²→Oᴱ (comp² s)
+S²→Oᴱ s = prelude ⟫ O²→Oᴱ (comp² s) ⟫ REVERT
 
 
 ------------------------------------------------------------------------
@@ -355,6 +360,7 @@ hex x with Data.String.toList (showInBase 16 x)
 ... | s = "ERROR"
 
 code : Oᴱ → String
+code (fyi o¹ oᴱ) = code oᴱ
 code (x₁ ⟫ x₂) = code x₁ ++ code x₂
 code ADD = "01"
 code ADDRESS = "30"
@@ -366,7 +372,7 @@ code JUMPDEST = "5b"
 code (JUMP x) = "60" ++ hex x ++ "56"
 code (JUMPI 0) = "600357"
 code (JUMPI x) = "60" ++ hex x ++ "57"
-code (ΔJUMPI x) = "60[" ++ hex x ++ "]57"
+code (ΔJUMPI x) = "[" ++ code x ++ "]"
 code KECCAK256 = "20"
 code MLOAD = "51"
 code MSTORE = "52"
@@ -389,6 +395,7 @@ code TIMESTAMP = "42"
 code (DUP x) = hex (0x7f +ℕ x)
 code (SWAP x) = hex (0x8f +ℕ x)
 code REVERT = "fd"
+code REVERTIF = "600357"
 code RETURN = "f3"
 
 compile : S² → String
@@ -471,4 +478,4 @@ ilk =
    │ setₖ dₓ₁ ↧ dᵤ ↥ x₅
    │ iff safe x₂ x₃
 
-ilk-code =  ilk
+ilk-code = S²→Oᴱ ilk
