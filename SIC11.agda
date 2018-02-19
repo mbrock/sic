@@ -222,45 +222,49 @@ comp² (a └ b) = seqₒ (comp² a) (comp² b)
 --     “Compiling EV²M to EVM assembly”
 --
 
-data Oᴱ : Set where
-  fyi          : O¹ → Oᴱ → Oᴱ
-  ADD          : Oᴱ
-  ADDRESS      : Oᴱ
-  AND          : Oᴱ
-  CALLDATALOAD : Oᴱ
-  CALLER       : Oᴱ
-  DUP          : ℕ → Oᴱ
-  EQ           : Oᴱ
-  EXP          : Oᴱ
-  ISZERO       : Oᴱ
-  REVERTIF     : Oᴱ
-  JUMP         : ℕ → Oᴱ
-  JUMPDEST     : Oᴱ
-  JUMPI        : ℕ → Oᴱ
-  KECCAK256    : Oᴱ
-  MLOAD        : Oᴱ
-  MSTORE       : Oᴱ
-  MUL          : Oᴱ
-  NOT          : Oᴱ
-  OR           : Oᴱ
-  PUSH         : ℕ → Oᴱ
-  PUSHSIG      : Sig → Oᴱ
-  RETURN       : Oᴱ
-  REVERT       : Oᴱ
-  DIV          : Oᴱ
-  SDIV         : Oᴱ
-  SGT          : Oᴱ
-  SLOAD        : Oᴱ
-  SLT          : Oᴱ
-  SSTORE       : Oᴱ
-  STOP         : Oᴱ
-  SUB          : Oᴱ
-  SWAP         : ℕ → Oᴱ
-  TIMESTAMP    : Oᴱ
-  _⟫_          : Oᴱ → Oᴱ → Oᴱ
-  ΔJUMPI       : Oᴱ → Oᴱ
+module Oᴱ where
 
-infixr 10 _⟫_
+  data Oᴱ : Set where
+    fyi          : O¹ → Oᴱ → Oᴱ
+    ADD          : Oᴱ
+    ADDRESS      : Oᴱ
+    AND          : Oᴱ
+    CALLDATALOAD : Oᴱ
+    CALLER       : Oᴱ
+    DUP          : ℕ → Oᴱ
+    EQ           : Oᴱ
+    EXP          : Oᴱ
+    ISZERO       : Oᴱ
+    REVERTIF     : Oᴱ
+    JUMP         : ℕ → Oᴱ
+    JUMPDEST     : Oᴱ
+    JUMPI        : ℕ → Oᴱ
+    KECCAK256    : Oᴱ
+    MLOAD        : Oᴱ
+    MSTORE       : Oᴱ
+    MUL          : Oᴱ
+    NOT          : Oᴱ
+    OR           : Oᴱ
+    PUSH         : ℕ → Oᴱ
+    PUSHSIG      : Sig → Oᴱ
+    RETURN       : Oᴱ
+    REVERT       : Oᴱ
+    DIV          : Oᴱ
+    SDIV         : Oᴱ
+    SGT          : Oᴱ
+    SLOAD        : Oᴱ
+    SLT          : Oᴱ
+    SSTORE       : Oᴱ
+    STOP         : Oᴱ
+    SUB          : Oᴱ
+    SWAP         : ℕ → Oᴱ
+    TIMESTAMP    : Oᴱ
+    _⟫_          : Oᴱ → Oᴱ → Oᴱ
+    ΔJUMPI       : Oᴱ → Oᴱ
+
+  infixr 10 _⟫_
+
+open Oᴱ
 
 ADD-safe =
   PUSH 0 ⟫ DUP  2 ⟫ SLT ⟫ DUP  3 ⟫ DUP 3 ⟫ ADD    ⟫ DUP 4 ⟫ SLT ⟫ AND ⟫
@@ -358,49 +362,6 @@ hex x with Data.String.toList (showInBase 16 x)
 ... | s@(c₁ ∷ c₂ ∷ []) = Data.String.fromList s
 ... | s@(c₁ ∷ []) = Data.String.fromList ('0' ∷ c₁ ∷ [])
 ... | s = "ERROR"
-
-code : Oᴱ → String
-code (fyi o¹ oᴱ) = code oᴱ
-code (x₁ ⟫ x₂) = code x₁ ++ code x₂
-code ADD = "01"
-code ADDRESS = "30"
-code AND = "16"
-code CALLDATALOAD = "35"
-code CALLER = "33"
-code EQ = "14"
-code JUMPDEST = "5b"
-code (JUMP x) = "60" ++ hex x ++ "56"
-code (JUMPI 0) = "600357"
-code (JUMPI x) = "60" ++ hex x ++ "57"
-code (ΔJUMPI x) = "[" ++ code x ++ "]"
-code KECCAK256 = "20"
-code MLOAD = "51"
-code MSTORE = "52"
-code MUL = "02"
-code EXP = "0a"
-code OR = "17"
-code (PUSH x) = "60" ++ hex x
-code (PUSHSIG (sig x _ _)) = "<" ++ x ++ ">"
-code DIV = "04"
-code SDIV = "05"
-code SGT = "13"
-code SLOAD = "54"
-code SLT = "12"
-code NOT = "19"
-code ISZERO = "15"
-code SSTORE = "55"
-code STOP = "00"
-code SUB = "03"
-code TIMESTAMP = "42"
-code (DUP x) = hex (0x7f +ℕ x)
-code (SWAP x) = hex (0x8f +ℕ x)
-code REVERT = "fd"
-code REVERTIF = "600357"
-code RETURN = "f3"
-
-compile : S² → String
-compile x = code (S²→Oᴱ x)
-
 
 ------------------------------------------------------------------------
 -- ✿ Section 8
