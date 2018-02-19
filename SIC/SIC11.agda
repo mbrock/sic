@@ -12,6 +12,9 @@ open import Data.List.NonEmpty using (List⁺; [_]; foldr₁) renaming (map to m
 open import Data.List using (List; _∷_; []; map)
 open import Data.Nat using (ℕ; _⊔_; suc) renaming (_≟_ to _≟ℕ_; _+_ to _+ℕ_; _*_ to _×ℕ_)
 
+open import Data.Integer using (ℤ; -_; +_) renaming (_+_ to _+ℤ_; _-_ to _-ℤ_)
+open import Data.Product using (Σ; ,_) renaming (_,_ to _Σ,_)
+
 ------------------------------------------------------------------------
 -- ✿ Section 1
 --     SIC syntax data types
@@ -218,25 +221,28 @@ module Oᴱ where
     AND          : Oᴱ
     CALLDATALOAD : Oᴱ
     CALLER       : Oᴱ
+    DIV          : Oᴱ
     DUP          : ℕ → Oᴱ
     EQ           : Oᴱ
     EXP          : Oᴱ
     ISZERO       : Oᴱ
-    REVERTIF     : Oᴱ
     JUMP         : ℕ → Oᴱ
     JUMPDEST     : Oᴱ
     JUMPI        : ℕ → Oᴱ
     KECCAK256    : Oᴱ
+    LOOP         : Oᴱ → Oᴱ → Oᴱ
     MLOAD        : Oᴱ
+    MOD          : Oᴱ
     MSTORE       : Oᴱ
     MUL          : Oᴱ
     NOT          : Oᴱ
     OR           : Oᴱ
+    POP          : Oᴱ
     PUSH         : ℕ → Oᴱ
     PUSHSIG      : Sig → Oᴱ
     RETURN       : Oᴱ
     REVERT       : Oᴱ
-    DIV          : Oᴱ
+    REVERTIF     : Oᴱ
     SDIV         : Oᴱ
     SGT          : Oᴱ
     SLOAD        : Oᴱ
@@ -245,24 +251,54 @@ module Oᴱ where
     STOP         : Oᴱ
     SUB          : Oᴱ
     SWAP         : ℕ → Oᴱ
+    THEN         : Oᴱ → Oᴱ
     TIMESTAMP    : Oᴱ
+    XOR          : Oᴱ
     _⟫_          : Oᴱ → Oᴱ → Oᴱ
-    ΔJUMPI       : Oᴱ → Oᴱ
-    WHILE        : Oᴱ → Oᴱ → Oᴱ
 
   infixr 10 _⟫_
 
 open Oᴱ
 
-ADD-safe =
-  PUSH 0 ⟫ DUP  2 ⟫ SLT ⟫ DUP  3 ⟫ DUP 3 ⟫ ADD    ⟫ DUP 4 ⟫ SLT ⟫ AND ⟫
-  DUP  2 ⟫ PUSH 0 ⟫ SLT ⟫ SWAP 3 ⟫ DUP 1 ⟫ SWAP 4 ⟫ ADD   ⟫ SLT ⟫ AND ⟫
-  OR ⟫ REVERTIF
+prelude = JUMP 6 ⟫ JUMPDEST ⟫ REVERT ⟫ JUMPDEST
 
-prelude = JUMP 5 ⟫ JUMPDEST ⟫ REVERT ⟫ JUMPDEST
+-- XADD-bad =
+--   PUSH 0 ⟫ DUP  2 ⟫ SLT ⟫ DUP  3 ⟫ DUP 3 ⟫ ADD    ⟫ DUP 4 ⟫ SLT ⟫ AND ⟫
+--   DUP  2 ⟫ PUSH 0 ⟫ SLT ⟫ SWAP 3 ⟫ DUP 1 ⟫ SWAP 4 ⟫ ADD   ⟫ SLT ⟫ AND ⟫
+--   OR ⟫ REVERTIF
 
-ADD-safe-example =
-  prelude ⟫ PUSH 0 ⟫ SLOAD ⟫ PUSH 1 ⟫ SLOAD ⟫ ADD-safe
+XADD = DUP 2 ⟫ DUP 2 ⟫ XOR ⟫ NOT ⟫ SWAP 2 ⟫ DUP 2 ⟫ ADD ⟫ DUP 1 ⟫ SWAP 2 ⟫
+  XOR ⟫ SWAP 1 ⟫ SWAP 2 ⟫ AND ⟫ PUSH 255 ⟫ PUSH 2 ⟫ EXP ⟫ AND ⟫ REVERTIF
+
+-- XMUL-bad = DUP 2 ⟫ DUP 2 ⟫ MUL ⟫ DUP 3 ⟫ ISZERO ⟫ SWAP 3 ⟫ DUP 3 ⟫ DIV ⟫
+--   SWAP 3 ⟫ EQ ⟫ OR ⟫ ISZERO ⟫ REVERTIF
+
+XMUL = DUP 2 ⟫ DUP 2 ⟫ MUL ⟫ DUP 2 ⟫ DUP 2 ⟫ DIV ⟫ SWAP 2 ⟫ SWAP 3 ⟫
+  SWAP 1 ⟫ SWAP 2 ⟫ EQ ⟫ SWAP 2 ⟫ ISZERO ⟫ SWAP 1 ⟫ SWAP 2 ⟫ OR ⟫
+  ISZERO ⟫ REVERTIF
+
+RAY = PUSH 27 ⟫ PUSH 10 ⟫ EXP
+RMUL = RAY ⟫ XMUL ⟫ PUSH 2 ⟫ RAY ⟫ DIV ⟫ XADD ⟫ DIV
+
+RPOW = PUSH 2 ⟫ DUP 3 ⟫ MOD ⟫ ISZERO ⟫
+  DUP 1 ⟫ RAY ⟫ MUL ⟫ SWAP 1 ⟫ ISZERO ⟫ DUP 3 ⟫ MUL ⟫ ADD ⟫
+  SWAP 1 ⟫ SWAP 2 ⟫ PUSH 2 ⟫ SWAP 1 ⟫ DIV ⟫
+  LOOP (DUP 1) (
+    SWAP 2 ⟫ DUP 1 ⟫ RMUL ⟫ SWAP 1 ⟫ SWAP 2 ⟫ SWAP 1 ⟫ SWAP 2 ⟫
+    PUSH 2 ⟫ DUP 2 ⟫ MOD ⟫ ISZERO ⟫
+    THEN (SWAP 2 ⟫ SWAP 1 ⟫ DUP 2 ⟫ RMUL ⟫ SWAP 1 ⟫ SWAP 2) ⟫
+    PUSH 2 ⟫ SWAP 2 ⟫ DIV
+  ) ⟫ SWAP 2 ⟫ POP ⟫ POP
+
+XEXP = PUSH 2 ⟫ DUP 3 ⟫ MOD ⟫ ISZERO ⟫
+  DUP 1 ⟫ PUSH 1 ⟫ MUL ⟫ SWAP 1 ⟫ ISZERO ⟫ DUP 3 ⟫ MUL ⟫ ADD ⟫
+  SWAP 1 ⟫ SWAP 2 ⟫ PUSH 2 ⟫ SWAP 1 ⟫ DIV ⟫
+  LOOP (DUP 1) (
+    SWAP 2 ⟫ DUP 1 ⟫ MUL ⟫ SWAP 2 ⟫
+    PUSH 2 ⟫ DUP 2 ⟫ MOD ⟫ ISZERO ⟫
+    THEN (SWAP 2 ⟫ SWAP 1 ⟫ DUP 2 ⟫ MUL ⟫ SWAP 1 ⟫ SWAP 2) ⟫
+    PUSH 2 ⟫ SWAP 2 ⟫ DIV
+  ) ⟫ SWAP 2 ⟫ POP ⟫ POP
 
 |Oᴱ| : Oᴱ → ℕ
 |Oᴱ| (x ⟫ y) = |Oᴱ| x +ℕ |Oᴱ| y
@@ -280,8 +316,8 @@ O⁰→Oᴱ (argₒ x)  = PUSH (x ×ℕ 32) ⟫ CALLDATALOAD
 O⁰→Oᴱ (getₖₒ)   = SLOAD
 O⁰→Oᴱ (H¹ₒ)     = PUSH 0  ⟫ MSTORE ⟫
                   PUSH 32 ⟫ PUSH 0 ⟫ KECCAK256
-O⁰→Oᴱ (+ₒ)      = ADD-safe
-O⁰→Oᴱ (−ₒ)      = PUSH 0 ⟫ SUB ⟫ ADD-safe
+O⁰→Oᴱ (+ₒ)      = XADD
+O⁰→Oᴱ (−ₒ)      = PUSH 0 ⟫ SUB ⟫ XADD
 O⁰→Oᴱ (×ₒ)      = MUL
 O⁰→Oᴱ  ^ₒ       = EXP
 O⁰→Oᴱ (≡ₒ)      = EQ
@@ -329,7 +365,7 @@ mutual
 O²→Oᴱ : O² → Oᴱ
 O²→Oᴱ (sigₒ s k) =
   PUSH 224 ⟫ PUSH 2 ⟫ EXP ⟫ PUSH 0 ⟫ CALLDATALOAD ⟫ DIV ⟫
-  PUSHSIG s ⟫ EQ ⟫ ISZERO ⟫ ΔJUMPI (O¹→Oᴱ k)
+  PUSHSIG s ⟫ EQ ⟫ ISZERO ⟫ THEN (O¹→Oᴱ k)
 O²→Oᴱ (seqₒ a b) =
   O²→Oᴱ a ⟫ O²→Oᴱ b
 
@@ -339,9 +375,104 @@ S¹→Oᴱ s = prelude ⟫ O¹→Oᴱ (comp¹ s)
 S²→Oᴱ : S² → Oᴱ
 S²→Oᴱ s = prelude ⟫ O²→Oᴱ (comp² s) ⟫ REVERT
 
-
 ------------------------------------------------------------------------
 -- ✿ Section 7
+--     “Assembling EVM assembly”
+--
+
+data Opcode : ℕ → Set where
+  B1   : ℕ      → Opcode 1
+  B2   : ℤ      → Opcode 2
+  BSig : String → Opcode 4
+
+data Bytes : ℕ → Set where
+  op_ : ∀ {m} → Opcode m → Bytes m
+  Δ   : ℤ     → Bytes 2
+  _⦂_ : ∀ {m n} → Bytes m → Bytes n → Bytes (m +ℕ n)
+
+size : ∀ {m} → Bytes m → ℕ
+size {m} _ = m
+
+data Opcode⋆ : Set where
+  _⟩_ : ∀ {m} → Opcode m → Opcode⋆ → Opcode⋆
+  fin : Opcode⋆
+
+infixr 1 _⟩_
+
+append : Opcode⋆ → Opcode⋆ → Opcode⋆
+append (x ⟩ o₁) o₂ = x ⟩ append o₁ o₂
+append fin o₂ = o₂
+
+⋆ : ∀ {n} → ℤ → Bytes n → Opcode⋆
+⋆ i (op x) = x ⟩ fin
+⋆ i (Δ x) = B2 (i +ℤ x) ⟩ fin
+⋆ i (b₁ ⦂ b₂) = append (⋆ i b₁) (⋆ (i +ℤ (+ size b₁)) b₂)
+
+infixr 10 _⦂_
+
+code : Oᴱ → Σ ℕ Bytes
+code (fyi o¹ oᴱ) = code oᴱ
+code (x₁ ⟫ x₂) with code x₁
+... | (i Σ, x₁ᴱ) with code x₂
+... | (j Σ, x₂ᴱ) = , (x₁ᴱ ⦂ x₂ᴱ)
+code ADD = , op B1 0x01
+code ADDRESS = , op B1 0x30
+code AND = , op B1 0x16
+code CALLDATALOAD = , op B1 0x35
+code CALLER = , op B1 0x33
+code EQ = , op B1 0x14
+code JUMPDEST = , op B1 0x5b
+code (JUMP x)  = , op B1 0x61 ⦂ op B2 (+ x) ⦂ op B1 0x56
+code (JUMPI x) = , op B1 0x61 ⦂ op B2 (+ x) ⦂ op B1 0x57
+code (THEN x) with code x
+... | i Σ, bs = , op B1 0x61 ⦂ Δ (+ (i +ℕ 2)) ⦂ op B1 0x57 ⦂ bs ⦂ op B1 0x5b
+
+code (LOOP p k) with code p
+... | iₚ Σ, bsₚ   with code k
+... | iₖ Σ, bsₖ =
+  , op B1 0x5b ⦂ bsₚ ⦂ op B1 0x15 ⦂ op B1 0x61 ⦂ Δ (+ (3 +ℕ iₖ +ℕ 4))
+    ⦂ op B1 0x57 ⦂ bsₖ
+    ⦂ op B1 0x61 ⦂ Δ (- (+ (1 +ℕ iₖ +ℕ 5 +ℕ iₚ +ℕ 1))) ⦂ op B1 0x56
+    ⦂ op B1 0x5b
+
+code KECCAK256 = , op B1 0x20
+code MLOAD = , op B1 0x51
+code MSTORE = , op B1 0x52
+code MUL = , op B1 0x02
+code MOD = , op B1 0x06
+code EXP = , op B1 0x0a
+code OR = , op B1 0x17
+code (PUSH x) = , op B1 0x60 ⦂ op B1 x
+code (PUSHSIG (sig x _ _)) = , op B1 0x63 ⦂ op BSig x
+code DIV = , op B1 0x04
+code SDIV = , op B1 0x05
+code SGT = , op B1 0x13
+code SLOAD = , op B1 0x54
+code SLT = , op B1 0x12
+code NOT = , op B1 0x19
+code ISZERO = , op B1 0x15
+code POP = , op B1 0x50
+code SSTORE = , op B1 0x55
+code STOP = , op B1 0x00
+code SUB = , op B1 0x03
+code TIMESTAMP = , op B1 0x42
+code (DUP x) = , op B1 (0x7f +ℕ x)
+code (SWAP x) = , op B1 (0x8f +ℕ x)
+code REVERT = , op B1 0xfd
+code REVERTIF = , op B1 0x60 ⦂ op B1 0x04 ⦂ op B1 0x57
+code RETURN = , op B1 0xf3
+code XOR = , op B1 0x18
+
+compile : S² → Opcode⋆
+compile s² with code (S²→Oᴱ s²)
+... | _ Σ, b = ⋆ (+ 0) b
+
+assemble : Oᴱ → Opcode⋆
+assemble oᴱ with code (prelude ⟫ oᴱ ⟫ STOP)
+... | _ Σ, b = ⋆ (+ 0) b
+
+------------------------------------------------------------------------
+-- ✿ Section 8
 --     “Dai Credit System”
 --
 
@@ -417,3 +548,8 @@ ilk =
    │ iff safe x₂ x₃
 
 ilk-code = S²→Oᴱ ilk
+
+RPOW-example = PUSH 3 ⟫ PUSH 5 ⟫ RAY ⟫ MUL ⟫ RPOW
+XEXP-example = PUSH 10 ⟫ PUSH 5 ⟫ XEXP
+XMUL-example = PUSH 3 ⟫ PUSH 5 ⟫ XMUL
+XADD-example = PUSH 3 ⟫ PUSH 8 ⟫ XADD
