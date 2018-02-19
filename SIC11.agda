@@ -175,7 +175,7 @@ mutual
   ⟨comp⁰⟩ʰ (⟨⟩ x)   = comp⁰ x ┆ H¹ₒ
   ⟨comp⁰⟩ʰ (x , xs) = comp⁰ x ┆ ⟨comp⁰⟩ʰ xs ┆ H²ₒ
 
-  -- Compiling left-associative hashing of expression sequences
+  -- Compiling left-associative expression sequences
   ⟨comp⁰⟩ᵒ : ⟨S⁰⟩ → List⁺ (O⁰ 0 1)
   ⟨comp⁰⟩ᵒ x = map⁺ comp⁰ (⟨S⁰⟩→List⁺ x)
 
@@ -244,8 +244,10 @@ data Oᴱ : Set where
   NOT          : Oᴱ
   OR           : Oᴱ
   PUSH         : ℕ → Oᴱ
+  PUSHSIG      : Sig → Oᴱ
   RETURN       : Oᴱ
   REVERT       : Oᴱ
+  DIV          : Oᴱ
   SDIV         : Oᴱ
   SGT          : Oᴱ
   SLOAD        : Oᴱ
@@ -261,13 +263,18 @@ data Oᴱ : Set where
 infixr 10 _⟫_
 
 ADD-safe =
-  (PUSH 0 ⟫ DUP  2 ⟫ SLT ⟫ (DUP  3 ⟫ DUP 3 ⟫ ADD)    ⟫ DUP 4 ⟫ SLT ⟫ AND) ⟫
-  (DUP  2 ⟫ PUSH 0 ⟫ SLT ⟫ SWAP 3 ⟫ (DUP 1 ⟫ SWAP 4 ⟫ ADD)   ⟫ SLT ⟫ AND) ⟫
+  PUSH 0 ⟫ DUP  2 ⟫ SLT ⟫ DUP  3 ⟫ DUP 3 ⟫ ADD    ⟫ DUP 4 ⟫ SLT ⟫ AND ⟫
+  DUP  2 ⟫ PUSH 0 ⟫ SLT ⟫ SWAP 3 ⟫ DUP 1 ⟫ SWAP 4 ⟫ ADD   ⟫ SLT ⟫ AND ⟫
   OR
 
-Oᴱ-length : Oᴱ → ℕ
-Oᴱ-length (x ⟫ y) = Oᴱ-length x +ℕ Oᴱ-length y
-Oᴱ-length _ = 1
+prelude = JUMP 5 ⟫ JUMPDEST ⟫ REVERT ⟫ JUMPDEST
+
+ADD-safe-example =
+  prelude ⟫ PUSH 0 ⟫ SLOAD ⟫ PUSH 1 ⟫ SLOAD ⟫ ADD-safe
+
+|Oᴱ| : Oᴱ → ℕ
+|Oᴱ| (x ⟫ y) = |Oᴱ| x +ℕ |Oᴱ| y
+|Oᴱ| _ = 1
 
 O⁰→Oᴱ : ∀ {i j} → O⁰ i j → Oᴱ
 O⁰→Oᴱ (#ₒ n)    = PUSH n
@@ -278,7 +285,9 @@ O⁰→Oᴱ (calleeₒ) = ADDRESS
 O⁰→Oᴱ (refₒ x)  = PUSH (x +ℕ 64) ⟫ MLOAD
 O⁰→Oᴱ (getₒ x)  = PUSH x ⟫ SLOAD
 O⁰→Oᴱ (argₒ x)  = PUSH (x ×ℕ 32) ⟫ CALLDATALOAD
-O⁰→Oᴱ (sigₒ x)  = CALLDATALOAD ⟫ PUSH 66 ⟫ EQ
+O⁰→Oᴱ (sigₒ x)  = PUSH 224 ⟫ PUSH 2 ⟫ EXP ⟫
+                  PUSH 0 ⟫ CALLDATALOAD ⟫ DIV ⟫
+                  PUSHSIG x ⟫ EQ
 O⁰→Oᴱ (getₖₒ)   = SLOAD
 O⁰→Oᴱ (H¹ₒ)     = PUSH 0  ⟫ MSTORE ⟫
                   PUSH 32 ⟫ PUSH 0 ⟫ KECCAK256
@@ -320,14 +329,12 @@ O¹→Oᴱ (iffₒ o)     = O⁰→Oᴱ o ⟫ ISZERO ⟫ JUMPI 3
 O¹→Oᴱ (defₒ i x)   = O⁰→Oᴱ x ⟫ PUSH (i +ℕ 64) ⟫ MSTORE
 O¹→Oᴱ (setₒ i x)   = O⁰→Oᴱ x ⟫ PUSH i         ⟫ SSTORE
 O¹→Oᴱ (setₖₒ k x)  = O⁰→Oᴱ x ⟫ O⁰→Oᴱ k ⟫ SSTORE
-O¹→Oᴱ (outₒ xs)    = PUSH 1024 ⟫ MSTORE
+O¹→Oᴱ (outₒ xs)    = outₒ→Oᴱ 1024 xs
 O¹→Oᴱ (o₁ ∥ o₂)    = O¹→Oᴱ o₁ ⟫ O¹→Oᴱ o₂
 
 O²→Oᴱ : O² → Oᴱ
-O²→Oᴱ (p fork k) = O⁰→Oᴱ p ⟫ ΔJUMPI (Oᴱ-length (O¹→Oᴱ k)) ⟫ O¹→Oᴱ k
+O²→Oᴱ (p fork k) = O⁰→Oᴱ p ⟫ ISZERO ⟫ ΔJUMPI (|Oᴱ| (O¹→Oᴱ k)) ⟫ O¹→Oᴱ k
 O²→Oᴱ (a then b) = O²→Oᴱ a ⟫ O²→Oᴱ b
-
-prelude = JUMP 5 ⟫ JUMPDEST ⟫ REVERT ⟫ JUMPDEST
 
 S¹→Oᴱ : S¹ → Oᴱ
 S¹→Oᴱ s = prelude ⟫ O¹→Oᴱ (comp¹ s)
@@ -367,6 +374,8 @@ code MUL = "02"
 code EXP = "0a"
 code OR = "17"
 code (PUSH x) = "60" ++ hex x
+code (PUSHSIG (sig x _ _)) = "<" ++ x ++ ">"
+code DIV = "04"
 code SDIV = "05"
 code SGT = "13"
 code SLOAD = "54"
@@ -462,4 +471,4 @@ ilk =
    │ setₖ dₓ₁ ↧ dᵤ ↥ x₅
    │ iff safe x₂ x₃
 
-ilk-code = compile ilk
+ilk-code =  ilk
