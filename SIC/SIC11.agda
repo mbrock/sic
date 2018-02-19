@@ -262,16 +262,8 @@ open Oᴱ
 
 prelude = JUMP 6 ⟫ JUMPDEST ⟫ REVERT ⟫ JUMPDEST
 
--- XADD-bad =
---   PUSH 0 ⟫ DUP  2 ⟫ SLT ⟫ DUP  3 ⟫ DUP 3 ⟫ ADD    ⟫ DUP 4 ⟫ SLT ⟫ AND ⟫
---   DUP  2 ⟫ PUSH 0 ⟫ SLT ⟫ SWAP 3 ⟫ DUP 1 ⟫ SWAP 4 ⟫ ADD   ⟫ SLT ⟫ AND ⟫
---   OR ⟫ REVERTIF
-
 XADD = DUP 2 ⟫ DUP 2 ⟫ XOR ⟫ NOT ⟫ SWAP 2 ⟫ DUP 2 ⟫ ADD ⟫ DUP 1 ⟫ SWAP 2 ⟫
   XOR ⟫ SWAP 1 ⟫ SWAP 2 ⟫ AND ⟫ PUSH 255 ⟫ PUSH 2 ⟫ EXP ⟫ AND ⟫ REVERTIF
-
--- XMUL-bad = DUP 2 ⟫ DUP 2 ⟫ MUL ⟫ DUP 3 ⟫ ISZERO ⟫ SWAP 3 ⟫ DUP 3 ⟫ DIV ⟫
---   SWAP 3 ⟫ EQ ⟫ OR ⟫ ISZERO ⟫ REVERTIF
 
 XMUL = DUP 2 ⟫ DUP 2 ⟫ MUL ⟫ DUP 2 ⟫ DUP 2 ⟫ DIV ⟫ SWAP 2 ⟫ SWAP 3 ⟫
   SWAP 1 ⟫ SWAP 2 ⟫ EQ ⟫ SWAP 2 ⟫ ISZERO ⟫ SWAP 1 ⟫ SWAP 2 ⟫ OR ⟫
