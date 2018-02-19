@@ -354,17 +354,6 @@ S²→Oᴱ s = prelude ⟫ O²→Oᴱ (comp² s) ⟫ REVERT
 
 ------------------------------------------------------------------------
 -- ✿ Section 7
---     “Compiling EVM assembly to EVM bytecode”
---
-
-hex : ℕ → String
-hex x with Data.String.toList (showInBase 16 x)
-... | s@(c₁ ∷ c₂ ∷ []) = Data.String.fromList s
-... | s@(c₁ ∷ []) = Data.String.fromList ('0' ∷ c₁ ∷ [])
-... | s = "ERROR"
-
-------------------------------------------------------------------------
--- ✿ Section 8
 --     “Dai Credit System”
 --
 
