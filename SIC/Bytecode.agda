@@ -1,5 +1,7 @@
+module SIC.Bytecode where
+
+open import SIC.SIC11 using (module Oᴱ; sig; S²; S²→Oᴱ)
 open import Data.Nat
-open import SIC11 using (module Oᴱ; sig; S²; S²→Oᴱ)
 open import Data.Product
 open import Agda.Builtin.String
 

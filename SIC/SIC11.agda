@@ -2,28 +2,15 @@
 -- ✿ SIC: Symbolic Instruction Code
 --
 
-module SIC11 where
+module SIC.SIC11 where
 
--- Strings for ABI signatures
+open import Data.String using (String) renaming (_==_ to _string==_)
 open import Agda.Builtin.String using (String)
 
-open import Agda.Primitive using (lzero)
-open import Algebra using (CommutativeRing)
-open import Data.Bool.Base using (if_then_else_; Bool; true; false)
-open import Data.Fin.Subset using (Subset)
-open import Data.Integer using (ℤ) renaming (_+_ to _+ℤ_; _*_ to _×ℤ_; _<_ to _<ℤ_; _-_ to _−ℤ_)
-open import Data.Integer.Properties using (+-*-commutativeRing; <-isStrictTotalOrder)
+open import Data.Bool.Base using (Bool)
 open import Data.List.NonEmpty using (List⁺; [_]; foldr₁) renaming (map to map⁺; _∷_ to _∷⁺_)
 open import Data.List using (List; _∷_; []; map)
-open import Data.String using (_++_)
-open import Data.Maybe using (Maybe; just; nothing)
 open import Data.Nat using (ℕ; _⊔_; suc) renaming (_≟_ to _≟ℕ_; _+_ to _+ℕ_; _*_ to _×ℕ_)
-open import Data.Nat.Show using (showInBase)
-open import Relation.Binary using (StrictTotalOrder; IsStrictTotalOrder; Rel)
-open import Relation.Binary.Core renaming (_≡_ to _≋_)
-open import Relation.Nullary.Decidable using (⌊_⌋)
-open import Relation.Nullary using (Dec; yes; no)
-open import Data.List using (any)
 
 ------------------------------------------------------------------------
 -- ✿ Section 1
@@ -70,7 +57,7 @@ data Sig : Set where
   sig : String → ℕ → ℕ → Sig
 
 _is_ : Sig → Sig → Bool
-sig s₁ x₁ y₁ is sig s₂ x₂ y₂ = s₁ Data.String.== s₂
+sig s₁ x₁ y₁ is sig s₂ x₂ y₂ = s₁ string== s₂
 
 data S¹ : Set where
   iff_    : S⁰ → S¹
