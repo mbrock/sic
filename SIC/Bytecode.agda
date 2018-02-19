@@ -2,6 +2,7 @@ module SIC.Bytecode where
 
 open import SIC.SIC11 using (module Oᴱ; sig; S²; S²→Oᴱ)
 open import Data.Nat
+open import Data.Integer using (ℤ; -_; +_) renaming (_+_ to _+ℤ_; _-_ to _-ℤ_)
 open import Data.Product
 open import Agda.Builtin.String
 
@@ -9,12 +10,12 @@ open Oᴱ
 
 data Opcode : ℕ → Set where
   B1   : ℕ      → Opcode 1
-  B2   : ℕ      → Opcode 2
+  B2   : ℤ      → Opcode 2
   BSig : String → Opcode 4
 
 data Bytes : ℕ → Set where
   op_ : ∀ {m} → Opcode m → Bytes m
-  Δ   : ℕ     → Bytes 2
+  Δ   : ℤ     → Bytes 2
   _⦂_ : ∀ {m n} → Bytes m → Bytes n → Bytes (m + n)
 
 size : ∀ {m} → Bytes m → ℕ
@@ -30,10 +31,10 @@ append : Opcode⋆ → Opcode⋆ → Opcode⋆
 append (x ⟩ o₁) o₂ = x ⟩ append o₁ o₂
 append fin o₂ = o₂
 
-⋆ : ∀ {n} → ℕ → Bytes n → Opcode⋆
+⋆ : ∀ {n} → ℤ → Bytes n → Opcode⋆
 ⋆ i (op x) = x ⟩ fin
-⋆ i (Δ x) = B2 (i + x) ⟩ fin
-⋆ i (b₁ ⦂ b₂) = append (⋆ i b₁) (⋆ (i + size b₁) b₂)
+⋆ i (Δ x) = B2 (i +ℤ x) ⟩ fin
+⋆ i (b₁ ⦂ b₂) = append (⋆ i b₁) (⋆ (i +ℤ (+ size b₁)) b₂)
 
 infixr 10 _⦂_
 
@@ -49,10 +50,17 @@ code CALLDATALOAD = , op B1 0x35
 code CALLER = , op B1 0x33
 code EQ = , op B1 0x14
 code JUMPDEST = , op B1 0x5b
-code (JUMP x)  = , op B1 0x61 ⦂ op B2 x ⦂ op B1 0x56
-code (JUMPI x) = , op B1 0x61 ⦂ op B2 x ⦂ op B1 0x57
+code (JUMP x)  = , op B1 0x61 ⦂ op B2 (+ x) ⦂ op B1 0x56
+code (JUMPI x) = , op B1 0x61 ⦂ op B2 (+ x) ⦂ op B1 0x57
 code (ΔJUMPI x) with code x
-code (ΔJUMPI x) | i , bs = , op B1 0x61 ⦂ Δ i ⦂ bs
+... | i , bs = , op B1 0x61 ⦂ Δ (+ i) ⦂ op B1 0x57 ⦂ bs
+
+code (WHILE p k) with code p
+... | iₚ , bsₚ   with code k
+... | iₖ , bsₖ =
+  , op B1 0x5b ⦂ bsₚ ⦂ op B1 0x15 ⦂ op B1 0x61 ⦂ Δ (+ (3 + iₖ + 4)) ⦂ op B1 0x57 ⦂ bsₖ
+    ⦂ op B1 0x61 ⦂ Δ (- (+ (1 + iₖ + 5 + iₚ + 1))) ⦂ op B1 0x56 ⦂ op B1 0x5b
+
 code KECCAK256 = , op B1 0x20
 code MLOAD = , op B1 0x51
 code MSTORE = , op B1 0x52
@@ -80,4 +88,7 @@ code RETURN = , op B1 0xf3
 
 compile : S² → Opcode⋆
 compile s² with code (S²→Oᴱ s²)
-... | _ , b = ⋆ 0 b
+... | _ , b = ⋆ (+ 0) b
+
+lol = PUSH 5 ⟫ WHILE (PUSH 1 ⟫ DUP 1 ⟫ SUB) (DUP 1 ⟫ DUP 1 ⟫ SSTORE)
+lol⋆ = ⋆ (+ 0) (proj₂ (code lol))

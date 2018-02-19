@@ -248,6 +248,7 @@ module Oᴱ where
     TIMESTAMP    : Oᴱ
     _⟫_          : Oᴱ → Oᴱ → Oᴱ
     ΔJUMPI       : Oᴱ → Oᴱ
+    WHILE        : Oᴱ → Oᴱ → Oᴱ
 
   infixr 10 _⟫_
 
