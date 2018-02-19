@@ -30,7 +30,7 @@ append fin o₂ = o₂
 
 ⋆ : ∀ {n} → ℕ → Bytes n → Opcode⋆
 ⋆ i (op x) = x ⟩ fin
-⋆ i (Δ x) = B2 i ⟩ fin
+⋆ i (Δ x) = B2 (i + x) ⟩ fin
 ⋆ i (b₁ ⦂ b₂) = append (⋆ i b₁) (⋆ (i + size b₁) b₂)
 
 infixr 10 _⦂_
@@ -58,7 +58,7 @@ code MUL = , op B1 0x02
 code EXP = , op B1 0x0a
 code OR = , op B1 0x17
 code (PUSH x) = , op B1 0x60 ⦂ op B1 x
-code (PUSHSIG (sig x _ _)) = , op BSig x
+code (PUSHSIG (sig x _ _)) = , op B1 0x63 ⦂ op BSig x
 code DIV = , op B1 0x04
 code SDIV = , op B1 0x05
 code SGT = , op B1 0x13
