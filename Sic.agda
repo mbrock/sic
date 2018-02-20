@@ -532,7 +532,7 @@ module EVM-Assembly where
   code′ (JUMP x)  = , op B1 0x61 ⦂ op B2 (+ x) ⦂ op B1 0x56
   code′ (JUMPI x) = , op B1 0x61 ⦂ op B2 (+ x) ⦂ op B1 0x57
   code′ (THEN x) with code′ x
-  ... | i Σ, bs = , op B1 0x61 ⦂ Δ (+ (i +ℕ 2)) ⦂ op B1 0x57 ⦂ bs ⦂ op B1 0x5b
+  ... | i Σ, bs = , op B1 0x61 ⦂ Δ (+ (i +ℕ 3)) ⦂ op B1 0x57 ⦂ bs ⦂ op B1 0x5b
   code′ (LOOP p k) with code′ p
   ... | iₚ Σ, bsₚ   with code′ k
   ... | iₖ Σ, bsₖ =
@@ -587,7 +587,7 @@ module EVM-Assembly where
   B⁰⋆→String : B⁰⋆ → String
   B⁰⋆→String (B1   x ⟩ x₁) = ℤ→hex 2 (+ x) ++ B⁰⋆→String x₁
   B⁰⋆→String (B2   x ⟩ x₁) = ℤ→hex 4 x ++ B⁰⋆→String x₁
-  B⁰⋆→String (BSig x ⟩ x₁) = "63[" ++ x ++ "]" ++ B⁰⋆→String x₁
+  B⁰⋆→String (BSig x ⟩ x₁) = "[" ++ x ++ "]" ++ B⁰⋆→String x₁
   B⁰⋆→String fin = ""
 
 module Main where
