@@ -90,11 +90,12 @@ module Sⁿ where
     _│_  : S¹ → S¹ → S¹
 
   data S² : Set where
-    act : String → S¹ → S²
+    act_::_ : String → S¹ → S²
     _//_ : S² → S² → S²
 
   infixr 1 _//_
-  infixr 2 _│_
+  infixr 2 act_::_
+  infixr 3 _│_
 
   infix  10 iff_ _≜_ _←_ _←ₖ_
 
@@ -253,7 +254,7 @@ module Compile where
 
   -- Compiling signature dispatch sequences
   comp² : S² → O²
-  comp² (act s k) = sigₒ s (comp¹ k)
+  comp² (act s :: k) = sigₒ s (comp¹ k)
   comp² (a // b) = seqₒ (comp² a) (comp² b)
 
   -- Some compile-time assertions
