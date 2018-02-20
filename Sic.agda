@@ -452,7 +452,7 @@ module Sic→EVM where
   O²→Oᴱ : O² → Oᴱ
   O²→Oᴱ (sigₒ s k) =
     PUSH 224 ⟫ PUSH 2 ⟫ EXP ⟫ PUSH 0 ⟫ CALLDATALOAD ⟫ DIV ⟫
-    PUSHSIG s ⟫ EQ ⟫ ISZERO ⟫ THEN (O¹→Oᴱ (O¹-memory k) k)
+    PUSHSIG s ⟫ EQ ⟫ ISZERO ⟫ THEN (O¹→Oᴱ (O¹-memory k) k ⟫ STOP)
   O²→Oᴱ (seqₒ a b) =
     O²→Oᴱ a ⟫ O²→Oᴱ b
 
