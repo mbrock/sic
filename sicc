@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -e
+[[ $# -eq 2 ]] || { echo "usage: sicc [AGDA-FILE] [CONTRACT-NAME]"; exit 1; }
+home=$(pwd)
+file=$(realpath "$1")
+{ echo IOTCM "\"$file\"" NonInteractive Indirect \
+    \( Cmd_load "\"$file\"" \
+    [\"--include-path=$home/agda-stdlib/src\"\] \)
+  echo IOTCM "\"$file\"" None Indirect \
+    \( Cmd_compute_toplevel DefaultCompute \"compile-and-assemble $2\" \)
+} | agda --interaction | grep 'Normal Form' | awk '{print $4}' | tr -d '"\\'
