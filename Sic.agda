@@ -411,24 +411,25 @@ module Sic→EVM where
                     PUSH 64 ⟫ PUSH 0 ⟫ KECCAK256
 
   record Index a : Set where
-    constructor _at_
+    constructor _at_from_
     field
       thing : a
       index : ℕ
+      base  : ℕ
 
   open import Data.List using (List; _∷_; [])
   open import Data.List.NonEmpty using (List⁺; [_]) renaming (_∷_ to _∷⁺_)
 
-  index : ∀ {t} → ℕ → List t → List (Index t)
-  index i [] = []
-  index i (x ∷ xs) = x at i ∷ index (suc i) xs
+  index : ∀ {t} → ℕ → ℕ → List t → List (Index t)
+  index j i [] = []
+  index j i (x ∷ xs) = x at j from i ∷ index (suc j) i xs
 
   index⁺ : ∀ {t} → ℕ → List⁺ t → List⁺ (Index t)
-  index⁺ i (x ∷⁺ []) = [ x at i ]
-  index⁺ i (x ∷⁺ xs) = x at i ∷⁺ index (suc i) xs
+  index⁺ i (x ∷⁺ []) = [ x at 0 from i ]
+  index⁺ i (x ∷⁺ xs) = x at 0 from i ∷⁺ index 1 i xs
 
   O⁰#→Oᴱ : Index (O⁰ 0 1) → Oᴱ
-  O⁰#→Oᴱ (x at i) = O⁰→Oᴱ x ⟫ PUSH i ⟫ MSTORE
+  O⁰#→Oᴱ (x at j from i) = O⁰→Oᴱ x ⟫ PUSH (i +ℕ j ×ℕ 32) ⟫ MSTORE
 
   outₒ→Oᴱ : ℕ → List⁺ (O⁰ 0 1) → Oᴱ
   outₒ→Oᴱ i xs = foldr₁ _⟫_ (map O⁰#→Oᴱ (index⁺ i xs)) ⟫ return
