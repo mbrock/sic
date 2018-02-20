@@ -431,8 +431,10 @@ module Sic→EVM where
   O⁰#→Oᴱ (x at i) = O⁰→Oᴱ x ⟫ PUSH i ⟫ MSTORE
 
   outₒ→Oᴱ : ℕ → List⁺ (O⁰ 0 1) → Oᴱ
-  outₒ→Oᴱ i xs = foldr₁ _⟫_ (map O⁰#→Oᴱ (index⁺ i xs))
-    where open import Data.List.NonEmpty using (foldr₁; map)
+  outₒ→Oᴱ i xs = foldr₁ _⟫_ (map O⁰#→Oᴱ (index⁺ i xs)) ⟫ return
+    where
+      open import Data.List.NonEmpty using (foldr₁; map; length)
+      return = PUSH (32 ×ℕ length xs) ⟫ PUSH i ⟫ RETURN
 
   mutual
     O¹→Oᴱ′ : ℕ → O¹ → Oᴱ
@@ -440,7 +442,8 @@ module Sic→EVM where
     O¹→Oᴱ′ n (defₒ i x)   = O⁰→Oᴱ x ⟫ PUSH (i ×ℕ 32 +ℕ 64) ⟫ MSTORE
     O¹→Oᴱ′ n (setₒ i x)   = O⁰→Oᴱ x ⟫ PUSH i         ⟫ SSTORE
     O¹→Oᴱ′ n (setₖₒ k x)  = O⁰→Oᴱ x ⟫ O⁰→Oᴱ k ⟫ SSTORE
-    O¹→Oᴱ′ n (outₒ xs)    = outₒ→Oᴱ (suc n ×ℕ 32 +ℕ 64) xs
+    O¹→Oᴱ′ n (outₒ xs)    = outₒ→Oᴱ offset xs
+      where offset = suc n ×ℕ 32 +ℕ 64
     O¹→Oᴱ′ n (o₁ ∥ o₂)    = O¹→Oᴱ n o₁ ⟫ O¹→Oᴱ n o₂
 
     O¹→Oᴱ : ℕ → O¹ → Oᴱ
