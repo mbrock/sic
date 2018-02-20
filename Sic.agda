@@ -91,7 +91,7 @@ module Sⁿ where
 
   data S² : Set where
     act : String → S¹ → S²
-    _//_  : S² → S² → S²
+    _//_ : S² → S² → S²
 
   infixr 1 _//_
   infixr 2 _│_
@@ -460,6 +460,9 @@ module Sic→EVM where
   S²→Oᴱ : S² → Oᴱ
   S²→Oᴱ s = prelude ⟫ O²→Oᴱ (Compile.comp² s) ⟫ REVERT
 
+  compile : S² → Oᴱ
+  compile s = prelude ⟫ O²→Oᴱ (Compile.comp² s) ⟫ REVERT
+
 
 -- Section 8: Assembling EVM assembly
 --
@@ -586,8 +589,8 @@ module Main where
   open EVM-Assembly
   open Sic→EVM
 
-  compile : S² → B⁰⋆
-  compile s² = ⋆ (code (S²→Oᴱ s²))
+  compile-and-assemble : S² → B⁰⋆
+  compile-and-assemble s² = ⋆ (code (S²→Oᴱ s²))
 
   assemble : Oᴱ → B⁰⋆
   assemble oᴱ = ⋆ (code (prelude ⟫ oᴱ ⟫ STOP))
@@ -625,3 +628,7 @@ module Dappsys where
   k₁ ↧ₖ k₂ ↥ₖ v = (k₁ ↧ₖ v) │ (k₂ ↥ₖ v)
 
   infix 19 _↧ₖ_↥ₖ_
+
+open Sⁿ public
+open Sic→EVM public
+open Main public
