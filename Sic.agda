@@ -570,17 +570,23 @@ module EVM-Assembly where
   code : (o : Oᴱ) → B¹ (proj₁ (code′ o))
   code o = proj₂ (code′ o)
 
-  open import Data.String using (String; _++_)
+  open import Data.String using (String; _++_; toList; fromList)
+  open import Data.List using (length; replicate)
 
-  ℤ→hex : ℤ → String
-  ℤ→hex (+_ n) = Data.Nat.Show.showInBase 16 n ++ " "
+  0-pad : ℕ → String → String
+  0-pad n s with (+ n) -ℤ (+ length (toList s))
+  0-pad n s | +_ i = fromList (replicate i '0') ++ s
+  0-pad n s | ℤ.negsuc n₁ = "{erroneously-huge}"
+
+  ℤ→hex : ℕ → ℤ → String
+  ℤ→hex n (+_ x) = 0-pad n (Data.Nat.Show.showInBase 16 x)
     where import Data.Nat.Show
-  ℤ→hex (ℤ.negsuc n) = "{erroneously-negative}"
+  ℤ→hex _ (ℤ.negsuc n) = "{erroneously-negative}"
 
   B⁰⋆→String : B⁰⋆ → String
-  B⁰⋆→String (B1   x ⟩ x₁) = "B1 " ++ ℤ→hex (+ x) ++ B⁰⋆→String x₁
-  B⁰⋆→String (B2   x ⟩ x₁) = "B2 " ++ ℤ→hex x ++ B⁰⋆→String x₁
-  B⁰⋆→String (BSig x ⟩ x₁) = "B1 63 [" ++ x ++ "] " ++ B⁰⋆→String x₁
+  B⁰⋆→String (B1   x ⟩ x₁) = ℤ→hex 2 (+ x) ++ B⁰⋆→String x₁
+  B⁰⋆→String (B2   x ⟩ x₁) = ℤ→hex 4 x ++ B⁰⋆→String x₁
+  B⁰⋆→String (BSig x ⟩ x₁) = "63[" ++ x ++ "]" ++ B⁰⋆→String x₁
   B⁰⋆→String fin = ""
 
 module Main where
