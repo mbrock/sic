@@ -2,10 +2,11 @@
 -- ✿ SIC: Symbolic Instruction Code
 --
 
-module SIC.SIC11 where
+module SIC12 where
 
-open import Data.String using (String) renaming (_==_ to _string==_)
+open import Data.String using (String; _++_) renaming (_==_ to _string==_)
 open import Agda.Builtin.String using (String)
+open import Data.Nat.Show using (showInBase)
 
 open import Data.Bool.Base using (Bool)
 open import Data.List.NonEmpty using (List⁺; [_]; foldr₁) renaming (map to map⁺; _∷_ to _∷⁺_)
@@ -456,12 +457,22 @@ code RETURN = , op B1 0xf3
 code XOR = , op B1 0x18
 
 compile : S² → Opcode⋆
-compile s² with code (S²→Oᴱ s²)
+compile s² with code (prelude ⟫ S²→Oᴱ s² ⟫ STOP)
 ... | _ Σ, b = ⋆ (+ 0) b
 
 assemble : Oᴱ → Opcode⋆
 assemble oᴱ with code (prelude ⟫ oᴱ ⟫ STOP)
 ... | _ Σ, b = ⋆ (+ 0) b
+
+hexpad : ℤ → String
+hexpad (+_ n) = showInBase 16 n ++ " "
+hexpad (ℤ.negsuc n) = "{erroneously-negative}"
+
+Opcode⋆→String : Opcode⋆ → String
+Opcode⋆→String (B1   x ⟩ x₁) = "B1 " ++ hexpad (+ x) ++ Opcode⋆→String x₁
+Opcode⋆→String (B2   x ⟩ x₁) = "B2 " ++ hexpad x ++ Opcode⋆→String x₁
+Opcode⋆→String (BSig x ⟩ x₁) = "B1 63 [" ++ x ++ "] " ++ Opcode⋆→String x₁
+Opcode⋆→String fin = ""
 
 ------------------------------------------------------------------------
 -- ✿ Section 8
@@ -471,7 +482,7 @@ assemble oᴱ with code (prelude ⟫ oᴱ ⟫ STOP)
 #0 = # 0; #1 = # 1; #2 = # 2; #3 = # 3
 x₁ = $ 0; x₂ = $ 1; x₃ = $ 2; x₄ = $ 3; x₅ = $ 4
 tmp₁ = 0; tmp₂ = 1
-Φ = 0; Ψ = 1; Ω = 2; t₀ = 3; χ = 4; Σd = 5
+Φ = 0; Ψ = 1; Ω = 2; t₀ = 3; χ = 4; Σd = 5; Θ = 6
 
 Cᵘ = λ u → ⟨ u , #0 ⟩
 Dᵘ = λ u → ⟨ u , #1 ⟩
@@ -483,10 +494,10 @@ Dₓ₁ = Dᵘ x₁
 cₓ₁ = cᵘ x₁
 dₓ₁ = dᵘ x₁
 
-Cᵤ = Cᵘ Uₐ
-Dᵤ = Dᵘ Uₐ
-cᵤ = cᵘ Uₐ
-dᵤ = dᵘ Uₐ
+Cᵥ = Cᵘ Uₐ
+Dᵥ = Dᵘ Uₐ
+cᵥ = cᵘ Uₐ
+dᵥ = dᵘ Uₐ
 
 is-root = getₖ ⟨ #0 , Uₐ ⟩ ≡ #1
 
@@ -501,47 +512,12 @@ gazeᵤ = sig "gaze" 1 0
 dripᵣ = sig "drip" 1 0
 giveᵤ = sig "give" 5 0
 
-ilk =
-   moldᵣ
-   ┌ set Φ ← x₁
-   │ set Ψ ← x₂
-   │ set Ω ← x₃
-   └
 
-   slipᵣ
-   ┌ iff is-root
-   │ setₖ Cₓ₁ ↥ x₂
-   │ setₖ Dₓ₁ ↥ x₃
-   └
+-- ilk-code = S²→Oᴱ ilk
 
-   gazeᵤ
-   ┌ out ⟨ (getₖ Cₓ₁) , (getₖ Dₓ₁) , (getₖ cₓ₁) , (getₖ dₓ₁) ⟩
-   └
-
-   let Δχ = tmp₁ in
-   dripᵣ
-   ┌ def Δχ ≜ (get Φ ^ (t − get t₀) − #1) × get χ
-   │ set χ ↑ ref Δχ
-   │ set t₀ ← t
-   │ out ⟨ (ref Δχ × get Σd) ⟩
-   └
-
-   let
-     safe = λ Δc Δd →
-       let safe₁ = (get χ × get Ψ × getₖ dᵤ ≤ getₖ cᵤ) ∨ Δd ≤ #0 ∧ Δc ≥ #0
-           safe₂ = (get χ × get Σd ≤ get Ω) ∨ Δd ≤ #0 in
-         safe₁ ∧ safe₂ in
-   giveᵤ
-   ┌ iff x₂ ≥ #0 ∧ x₃ ≥ #0 ∧ x₄ ≥ #0 ∧ x₅ ≥ #0
-   │ setₖ Cᵤ ↧ Cₓ₁ ↥ x₂
-   │ setₖ Dᵤ ↧ Dₓ₁ ↥ x₃
-   │ setₖ cᵤ ↧ cₓ₁ ↥ x₄
-   │ setₖ dₓ₁ ↧ dᵤ ↥ x₅
-   │ iff safe x₂ x₃
-
-ilk-code = S²→Oᴱ ilk
-
-RPOW-example = PUSH 3 ⟫ PUSH 5 ⟫ RAY ⟫ MUL ⟫ RPOW
+RPOW-example = PUSH 3 ⟫ PUSH 5 ⟫ RAY ⟫ MUL ⟫ RPOW ⟫ PUSHSIG giveᵤ
 XEXP-example = PUSH 10 ⟫ PUSH 5 ⟫ XEXP
 XMUL-example = PUSH 3 ⟫ PUSH 5 ⟫ XMUL
 XADD-example = PUSH 3 ⟫ PUSH 8 ⟫ XADD
+
+main = "⟨" ++ Opcode⋆→String (assemble RPOW-example) ++ "⟩"
