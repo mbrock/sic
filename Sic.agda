@@ -1,20 +1,23 @@
 ------------------------------------------------------------------------
--- ✿ SIC: Symbolic Instruction Code
+-- ✿ Sic: Symbolic Instruction Code
 --
 
-module SIC12 where
+module Sic where
 
-open import Data.String using (String; _++_) renaming (_==_ to _string==_)
+open import Data.String using (String; _++_)
+  renaming (_==_ to _string==_)
 open import Agda.Builtin.String using (String)
 open import Data.Nat.Show using (showInBase)
-
 open import Data.Bool.Base using (Bool)
-open import Data.List.NonEmpty using (List⁺; [_]; foldr₁) renaming (map to map⁺; _∷_ to _∷⁺_)
+open import Data.List.NonEmpty using (List⁺; [_]; foldr₁)
+  renaming (map to map⁺; _∷_ to _∷⁺_)
 open import Data.List using (List; _∷_; []; map)
-open import Data.Nat using (ℕ; _⊔_; suc) renaming (_≟_ to _≟ℕ_; _+_ to _+ℕ_; _*_ to _×ℕ_)
-
-open import Data.Integer using (ℤ; -_; +_) renaming (_+_ to _+ℤ_; _-_ to _-ℤ_)
-open import Data.Product using (Σ; ,_) renaming (_,_ to _Σ,_)
+open import Data.Nat using (ℕ; _⊔_; suc)
+  renaming (_≟_ to _≟ℕ_; _+_ to _+ℕ_; _*_ to _×ℕ_)
+open import Data.Integer using (ℤ; +_)
+  renaming (_+_ to _+ℤ_; _-_ to _-ℤ_; -_ to -ℤ_)
+open import Data.Product using (Σ; ,_)
+  renaming (_,_ to _Σ,_)
 
 ------------------------------------------------------------------------
 -- ✿ Section 1
@@ -23,15 +26,16 @@ open import Data.Product using (Σ; ,_) renaming (_,_ to _Σ,_)
 
 mutual
   data S⁰ : Set where
-    #  : ℕ → S⁰
-    Uₐ : S⁰
-    &ₐ : S⁰
-    t  : S⁰
+    # : ℕ → S⁰
+    u : S⁰
+    t : S⁰
 
+    -_  : S⁰ → S⁰
     _+_ : S⁰ → S⁰ → S⁰
     _−_ : S⁰ → S⁰ → S⁰
     _×_ : S⁰ → S⁰ → S⁰
     _^_ : S⁰ → S⁰ → S⁰
+    ¬_  : S⁰ → S⁰
     _∨_ : S⁰ → S⁰ → S⁰
     _∧_ : S⁰ → S⁰ → S⁰
     _≥_ : S⁰ → S⁰ → S⁰
@@ -57,46 +61,43 @@ $ i = arg i
 _⟩ : S⁰ → ⟨S⁰⟩
 x ⟩ = ⟨⟩ x
 
-data Sig : Set where
-  sig : String → ℕ → ℕ → Sig
-
-_is_ : Sig → Sig → Bool
-sig s₁ x₁ y₁ is sig s₂ x₂ y₂ = s₁ string== s₂
-
 data S¹ : Set where
-  iff_    : S⁰ → S¹
-  def_≜_  : ℕ → S⁰ → S¹
-  set_←_  : ℕ → S⁰ → S¹
-  setₖ_←_ : ⟨S⁰⟩ → S⁰ → S¹
-  out_    : ⟨S⁰⟩ → S¹
-  _│_     : S¹ → S¹ → S¹
+  iff_ : S⁰ → S¹
+  _≜_  : ℕ → S⁰ → S¹
+  _←_  : ℕ → S⁰ → S¹
+  _←ₖ_ : ⟨S⁰⟩ → S⁰ → S¹
+  fyi_ : ⟨S⁰⟩ → S¹
+  _│_  : S¹ → S¹ → S¹
 
 data S² : Set where
-  _┌_  : Sig → S¹ → S²
-  _└_  : S² → S² → S²
+  act : String → S¹ → S²
+  _//_  : S² → S² → S²
 
 ------------------------------------------------------------------------
 -- ✿ Section 2
 --     SIC operator precedence and fixity
 --
 
-infixr 2 _┌_
-infixr 3 _│_
-infixl 1 _└_
+infixr 1 _//_
+infixr 2 _│_
 
 infix  10 iff_
-infix  10 def_≜_
-infix  10 set_←_
-infix  10 setₖ_←_
+infix  10 _≜_
+infix  10 _←_
+infix  10 _←ₖ_
+
+infix  19 _↧ₖ_↥ₖ_
 
 infixl 31 _∨_
 infixl 32 _∧_
+infixl 33 ¬_
 
 infixl 35 _≡_
 infixl 36 _≥_
 
 infixl 40 _+_ _−_
 infixl 41 _×_
+infixl 42 -_
 
 infix  50 getₖ_
 infix  50 get_
@@ -117,7 +118,6 @@ data O⁰ : ℕ → ℕ → Set where
   _┆_     : ∀ {i j k} → O⁰ i j → O⁰ j k → O⁰ i k
   #ₒ      : ∀ {i} → ℕ → O⁰ i (suc i)
   callerₒ : ∀ {i} → O⁰ i (suc i)
-  calleeₒ : ∀ {i} → O⁰ i (suc i)
   timeₒ   : ∀ {i} → O⁰ i (suc i)
   getₖₒ   : ∀ {i} → O⁰ (suc i) (suc i)
   H¹ₒ     : ∀ {i} → O⁰ (suc i) (suc i)
@@ -129,6 +129,7 @@ data O⁰ : ℕ → ℕ → Set where
   ≡ₒ      : ∀ {i} → O⁰ (suc (suc i)) (suc i)
   ≥ₒ      : ∀ {i} → O⁰ (suc (suc i)) (suc i)
   ≤ₒ      : ∀ {i} → O⁰ (suc (suc i)) (suc i)
+  ¬ₒ      : ∀ {i} → O⁰ (suc i) (suc i)
   ∧ₒ      : ∀ {i} → O⁰ (suc (suc i)) (suc i)
   ∨ₒ      : ∀ {i} → O⁰ (suc (suc i)) (suc i)
   refₒ    : ∀ {i} → ℕ → O⁰ i (suc i)
@@ -144,7 +145,7 @@ data O¹ : Set where
   outₒ  : List⁺ (O⁰ 0 1) → O¹
 
 data O² : Set where
-  sigₒ : Sig → O¹ → O²
+  sigₒ : String → O¹ → O²
   seqₒ : O² → O² → O²
 
 infixr  5 _┆_
@@ -175,8 +176,7 @@ mutual
   -- Compiling expressions
   comp⁰ : ∀ {i} → S⁰ → O⁰ i (suc i)
   comp⁰ (# n)     = #ₒ n
-  comp⁰ Uₐ        = callerₒ
-  comp⁰ &ₐ        = calleeₒ
+  comp⁰ u         = callerₒ
   comp⁰ (get x)   = getₒ x
   comp⁰ (ref x)   = refₒ x
   comp⁰ (arg x)   = argₒ x
@@ -184,8 +184,10 @@ mutual
   comp⁰ (sha k)   = ⟨comp⁰⟩ʰ k
   comp⁰ (x + y)   = comp⁰ x ┆ comp⁰ y ┆ +ₒ
   comp⁰ (x − y)   = comp⁰ x ┆ comp⁰ y ┆ −ₒ
+  comp⁰ (- x)     = comp⁰ x ┆ #ₒ 0    ┆ −ₒ
   comp⁰ (x × y)   = comp⁰ x ┆ comp⁰ y ┆ ×ₒ
   comp⁰ (x ^ y)   = comp⁰ x ┆ comp⁰ y ┆ ^ₒ
+  comp⁰ (¬ x)     = comp⁰ x ┆ ¬ₒ
   comp⁰ (x ∨ y)   = comp⁰ x ┆ comp⁰ y ┆ ∨ₒ
   comp⁰ (x ∧ y)   = comp⁰ x ┆ comp⁰ y ┆ ∧ₒ
   comp⁰ (x ≥ y)   = comp⁰ x ┆ comp⁰ y ┆ ≥ₒ
@@ -195,17 +197,17 @@ mutual
 
 -- Compiling statement sequences
 comp¹ : S¹ → O¹
-comp¹ (iff x)      = iffₒ (comp⁰ x)
-comp¹ (def i ≜ x)  = defₒ i (comp⁰ x)
-comp¹ (set i ← x)  = setₒ i (comp⁰ x)
-comp¹ (setₖ k ← x) = setₖₒ (comp⁰ x) (⟨comp⁰⟩ʰ k)
-comp¹ (out x)      = outₒ (⟨comp⁰⟩ᵒ x)
-comp¹ (x │ s)      = comp¹ x ∥ comp¹ s
+comp¹ (iff x)  = iffₒ (comp⁰ x)
+comp¹ (i ≜ x)  = defₒ i (comp⁰ x)
+comp¹ (i ← x)  = setₒ i (comp⁰ x)
+comp¹ (k ←ₖ x) = setₖₒ (comp⁰ x) (⟨comp⁰⟩ʰ k)
+comp¹ (fyi x)  = outₒ (⟨comp⁰⟩ᵒ x)
+comp¹ (x │ s)  = comp¹ x ∥ comp¹ s
 
 -- Compiling signature dispatch sequences
 comp² : S² → O²
-comp² (s ┌ k) = sigₒ s (comp¹ k)
-comp² (a └ b) = seqₒ (comp² a) (comp² b)
+comp² (act s k) = sigₒ s (comp¹ k)
+comp² (a // b) = seqₒ (comp² a) (comp² b)
 
 
 ------------------------------------------------------------------------
@@ -216,7 +218,7 @@ comp² (a └ b) = seqₒ (comp² a) (comp² b)
 module Oᴱ where
 
   data Oᴱ : Set where
-    fyi          : O¹ → Oᴱ → Oᴱ
+    tag          : O¹ → Oᴱ → Oᴱ
     ADD          : Oᴱ
     ADDRESS      : Oᴱ
     AND          : Oᴱ
@@ -240,7 +242,7 @@ module Oᴱ where
     OR           : Oᴱ
     POP          : Oᴱ
     PUSH         : ℕ → Oᴱ
-    PUSHSIG      : Sig → Oᴱ
+    PUSHSIG      : String → Oᴱ
     RETURN       : Oᴱ
     REVERT       : Oᴱ
     REVERTIF     : Oᴱ
@@ -265,16 +267,14 @@ prelude = JUMP 6 ⟫ JUMPDEST ⟫ REVERT ⟫ JUMPDEST
 
 XADD = DUP 2 ⟫ DUP 2 ⟫ XOR ⟫ NOT ⟫ SWAP 2 ⟫ DUP 2 ⟫ ADD ⟫ DUP 1 ⟫ SWAP 2 ⟫
   XOR ⟫ SWAP 1 ⟫ SWAP 2 ⟫ AND ⟫ PUSH 255 ⟫ PUSH 2 ⟫ EXP ⟫ AND ⟫ REVERTIF
-
+XSUB = PUSH 0 ⟫ SUB ⟫ XADD
 XMUL = DUP 2 ⟫ DUP 2 ⟫ MUL ⟫ DUP 2 ⟫ DUP 2 ⟫ DIV ⟫ SWAP 2 ⟫ SWAP 3 ⟫
   SWAP 1 ⟫ SWAP 2 ⟫ EQ ⟫ SWAP 2 ⟫ ISZERO ⟫ SWAP 1 ⟫ SWAP 2 ⟫ OR ⟫
   ISZERO ⟫ REVERTIF
-
-RAY = PUSH 27 ⟫ PUSH 10 ⟫ EXP
-RMUL = RAY ⟫ XMUL ⟫ PUSH 2 ⟫ RAY ⟫ DIV ⟫ XADD ⟫ DIV
-
+RONE = PUSH 27 ⟫ PUSH 10 ⟫ EXP
+RMUL = RONE ⟫ XMUL ⟫ PUSH 2 ⟫ RONE ⟫ DIV ⟫ XADD ⟫ DIV
 RPOW = PUSH 2 ⟫ DUP 3 ⟫ MOD ⟫ ISZERO ⟫
-  DUP 1 ⟫ RAY ⟫ MUL ⟫ SWAP 1 ⟫ ISZERO ⟫ DUP 3 ⟫ MUL ⟫ ADD ⟫
+  DUP 1 ⟫ RONE ⟫ MUL ⟫ SWAP 1 ⟫ ISZERO ⟫ DUP 3 ⟫ MUL ⟫ ADD ⟫
   SWAP 1 ⟫ SWAP 2 ⟫ PUSH 2 ⟫ SWAP 1 ⟫ DIV ⟫
   LOOP (DUP 1) (
     SWAP 2 ⟫ DUP 1 ⟫ RMUL ⟫ SWAP 1 ⟫ SWAP 2 ⟫ SWAP 1 ⟫ SWAP 2 ⟫
@@ -302,23 +302,23 @@ O⁰→Oᴱ (#ₒ n)    = PUSH n
 O⁰→Oᴱ timeₒ     = TIMESTAMP
 O⁰→Oᴱ (x₁ ┆ x₂) = O⁰→Oᴱ x₁ ⟫ O⁰→Oᴱ x₂
 O⁰→Oᴱ (callerₒ) = CALLER
-O⁰→Oᴱ (calleeₒ) = ADDRESS
 O⁰→Oᴱ (refₒ x)  = PUSH (x +ℕ 64) ⟫ MLOAD
 O⁰→Oᴱ (getₒ x)  = PUSH x ⟫ SLOAD
 O⁰→Oᴱ (argₒ x)  = PUSH (x ×ℕ 32) ⟫ CALLDATALOAD
 O⁰→Oᴱ (getₖₒ)   = SLOAD
 O⁰→Oᴱ (H¹ₒ)     = PUSH 0  ⟫ MSTORE ⟫
                   PUSH 32 ⟫ PUSH 0 ⟫ KECCAK256
-O⁰→Oᴱ (+ₒ)      = XADD
-O⁰→Oᴱ (−ₒ)      = PUSH 0 ⟫ SUB ⟫ XADD
-O⁰→Oᴱ (×ₒ)      = MUL
-O⁰→Oᴱ  ^ₒ       = EXP
-O⁰→Oᴱ (≡ₒ)      = EQ
-O⁰→Oᴱ (≥ₒ)      = SGT ⟫ ISZERO
-O⁰→Oᴱ (≤ₒ)      = SLT ⟫ ISZERO
-O⁰→Oᴱ (∧ₒ)      = AND
-O⁰→Oᴱ (∨ₒ)      = OR
-O⁰→Oᴱ (H²ₒ)     = PUSH 0  ⟫ MSTORE ⟫
+O⁰→Oᴱ +ₒ      = XADD
+O⁰→Oᴱ −ₒ      = XSUB
+O⁰→Oᴱ ×ₒ      = RMUL
+O⁰→Oᴱ ^ₒ      = RPOW
+O⁰→Oᴱ ≡ₒ      = EQ
+O⁰→Oᴱ ≥ₒ      = SGT ⟫ ISZERO
+O⁰→Oᴱ ≤ₒ      = SLT ⟫ ISZERO
+O⁰→Oᴱ ¬ₒ      = ISZERO
+O⁰→Oᴱ ∧ₒ      = AND
+O⁰→Oᴱ ∨ₒ      = OR
+O⁰→Oᴱ H²ₒ     = PUSH 0  ⟫ MSTORE ⟫
                   PUSH 32 ⟫ MSTORE ⟫
                   PUSH 64 ⟫ PUSH 0 ⟫ KECCAK256
 
@@ -353,7 +353,7 @@ mutual
 
   O¹→Oᴱ : O¹ → Oᴱ
   O¹→Oᴱ o@(_ ∥ _) = O¹→Oᴱ′ o
-  O¹→Oᴱ o = fyi o (O¹→Oᴱ′ o)
+  O¹→Oᴱ o = tag o (O¹→Oᴱ′ o)
 
 O²→Oᴱ : O² → Oᴱ
 O²→Oᴱ (sigₒ s k) =
@@ -404,7 +404,7 @@ append fin o₂ = o₂
 infixr 10 _⦂_
 
 code : Oᴱ → Σ ℕ Bytes
-code (fyi o¹ oᴱ) = code oᴱ
+code (tag o¹ oᴱ) = code oᴱ
 code (x₁ ⟫ x₂) with code x₁
 ... | (i Σ, x₁ᴱ) with code x₂
 ... | (j Σ, x₂ᴱ) = , (x₁ᴱ ⦂ x₂ᴱ)
@@ -425,7 +425,7 @@ code (LOOP p k) with code p
 ... | iₖ Σ, bsₖ =
   , op B1 0x5b ⦂ bsₚ ⦂ op B1 0x15 ⦂ op B1 0x61 ⦂ Δ (+ (3 +ℕ iₖ +ℕ 4))
     ⦂ op B1 0x57 ⦂ bsₖ
-    ⦂ op B1 0x61 ⦂ Δ (- (+ (1 +ℕ iₖ +ℕ 5 +ℕ iₚ +ℕ 1))) ⦂ op B1 0x56
+    ⦂ op B1 0x61 ⦂ Δ (-ℤ (+ (1 +ℕ iₖ +ℕ 5 +ℕ iₚ +ℕ 1))) ⦂ op B1 0x56
     ⦂ op B1 0x5b
 
 code KECCAK256 = , op B1 0x20
@@ -436,7 +436,7 @@ code MOD = , op B1 0x06
 code EXP = , op B1 0x0a
 code OR = , op B1 0x17
 code (PUSH x) = , op B1 0x60 ⦂ op B1 x
-code (PUSHSIG (sig x _ _)) = , op B1 0x63 ⦂ op BSig x
+code (PUSHSIG x) = , op B1 0x63 ⦂ op BSig x
 code DIV = , op B1 0x04
 code SDIV = , op B1 0x05
 code SGT = , op B1 0x13
@@ -476,48 +476,29 @@ Opcode⋆→String fin = ""
 
 ------------------------------------------------------------------------
 -- ✿ Section 8
---     “Dai Credit System”
+--     “Free Dapp Tools”
 --
 
-#0 = # 0; #1 = # 1; #2 = # 2; #3 = # 3
+⓪ = # 0; ① = # 1; ② = # 2; ③ = # 3; ④ = # 4
 x₁ = $ 0; x₂ = $ 1; x₃ = $ 2; x₄ = $ 3; x₅ = $ 4
-tmp₁ = 0; tmp₂ = 1
-Φ = 0; Ψ = 1; Ω = 2; t₀ = 3; χ = 4; Σd = 5; Θ = 6
 
-Cᵘ = λ u → ⟨ u , #0 ⟩
-Dᵘ = λ u → ⟨ u , #1 ⟩
-cᵘ = λ u → ⟨ u , #2 ⟩
-dᵘ = λ u → ⟨ u , #3 ⟩
+v = x₁
+root = getₖ ⟨ ⓪ , u ⟩ ≡ ①
 
-Cₓ₁ = Cᵘ x₁
-Dₓ₁ = Dᵘ x₁
-cₓ₁ = cᵘ x₁
-dₓ₁ = dᵘ x₁
-
-Cᵥ = Cᵘ Uₐ
-Dᵥ = Dᵘ Uₐ
-cᵥ = cᵘ Uₐ
-dᵥ = dᵘ Uₐ
-
-is-root = getₖ ⟨ #0 , Uₐ ⟩ ≡ #1
-
-setₖ_↧_↥_ = λ k₁ k₂ Δ → iff (Δ + getₖ k₁ ≥ #0) │ iff (Δ + getₖ k₂ ≥ #0) -- XXX
-setₖ_↧_ = λ k Δ → iff (getₖ k ≥ #0) − Δ -- XXX
-setₖ_↥_ = λ k Δ → iff (getₖ k ≥ #0) + Δ -- XXX
-set_↑_ = λ k Δ → set k ← get k + Δ
-
-moldᵣ = sig "mold" 3 0
-slipᵣ = sig "slip" 3 0
-gazeᵤ = sig "gaze" 1 0
-dripᵣ = sig "drip" 1 0
-giveᵤ = sig "give" 5 0
+_↑_ : ℕ → S⁰ → S¹
+_↓_ : ℕ → S⁰ → S¹
+_↥_ : ℕ → S⁰ → S¹
+_↧_ : ℕ → S⁰ → S¹
+_↥ₖ_ : ⟨S⁰⟩ → S⁰ → S¹
+_↧ₖ_ : ⟨S⁰⟩ → S⁰ → S¹
 
 
--- ilk-code = S²→Oᴱ ilk
+n ↑  v = n ← get n + v
+n ↥  v = n ←  get  n + v │ iff get  n ≥ ⓪
+k ↥ₖ v = k ←ₖ getₖ k + v │ iff getₖ k ≥ ⓪
+n ↓  v = n ↑  (- v)
+n ↧  v = n ↥  (- v)
+k ↧ₖ v = k ↥ₖ (- v)
 
-RPOW-example = PUSH 3 ⟫ PUSH 5 ⟫ RAY ⟫ MUL ⟫ RPOW ⟫ PUSHSIG giveᵤ
-XEXP-example = PUSH 10 ⟫ PUSH 5 ⟫ XEXP
-XMUL-example = PUSH 3 ⟫ PUSH 5 ⟫ XMUL
-XADD-example = PUSH 3 ⟫ PUSH 8 ⟫ XADD
-
-main = "⟨" ++ Opcode⋆→String (assemble RPOW-example) ++ "⟩"
+_↧ₖ_↥ₖ_ : ⟨S⁰⟩ → ⟨S⁰⟩ → S⁰ → S¹
+k₁ ↧ₖ k₂ ↥ₖ v = (k₁ ↧ₖ v) │ (k₂ ↥ₖ v)
