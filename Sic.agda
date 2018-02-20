@@ -18,6 +18,8 @@ open import Data.Integer using (ℤ; +_)
   renaming (_+_ to _+ℤ_; _-_ to _-ℤ_; -_ to -ℤ_)
 open import Data.Product using (Σ; ,_; proj₁; proj₂)
   renaming (_,_ to _Σ,_)
+open import Relation.Binary.PropositionalEquality
+  using (refl) renaming (_≡_ to _≣_)
 
 ------------------------------------------------------------------------
 -- ✿ Section 1
@@ -151,8 +153,21 @@ data O² : Set where
 infixr  5 _┆_
 infixr 10 _∥_
 
-example-O⁰ : O⁰ 0 1
-example-O⁰ = #ₒ 1 ┆ #ₒ 1 ┆ +ₒ
+-- In order to allocate memory (say, for EVM return values),
+-- we need to compute the memory requirements of operations.
+
+O⁰-memory : ∀ {m n} → O⁰ m n → ℕ
+O⁰-memory (refₒ i) = suc i
+O⁰-memory (o₁ ┆ o₂) = O⁰-memory o₁ ⊔ O⁰-memory o₂
+O⁰-memory _ = 0
+
+O¹-memory : O¹ → ℕ
+O¹-memory (defₒ i x) = suc i ⊔ O⁰-memory x
+O¹-memory (outₒ xs) = foldr₁ _⊔_ (map⁺ O⁰-memory xs)
+O¹-memory (iffₒ x) = O⁰-memory x
+O¹-memory (setₖₒ k x) = O⁰-memory x
+O¹-memory (setₒ i x) = O⁰-memory x
+O¹-memory (o₁ ∥ o₂) = O¹-memory o₁ ⊔ O¹-memory o₂
 
 ------------------------------------------------------------------------
 -- ✿ Section 5
@@ -209,6 +224,19 @@ comp² : S² → O²
 comp² (act s k) = sigₒ s (comp¹ k)
 comp² (a // b) = seqₒ (comp² a) (comp² b)
 
+private
+  module Memory-Size-Examples where
+    S¹-memory : S¹ → ℕ
+    S¹-memory s = O¹-memory (comp¹ s)
+
+    example-1 : S¹-memory (0 ← # 0) ≣ 0
+    example-1 = refl
+
+    example-2 : S¹-memory (0 ≜ # 0) ≣ 1
+    example-2 = refl
+
+    example-3 : S¹-memory (0 ≜ ref 1 + ref 2) ≣ 3
+    example-3 = refl
 
 ------------------------------------------------------------------------
 -- ✿ Section 6
@@ -341,22 +369,22 @@ outₒ→Oᴱ : ℕ → List⁺ (O⁰ 0 1) → Oᴱ
 outₒ→Oᴱ i xs = foldr₁ _⟫_ (map⁺ O⁰#→Oᴱ (index⁺ i xs))
 
 mutual
-  O¹→Oᴱ′ : O¹ → Oᴱ
-  O¹→Oᴱ′ (iffₒ o)     = O⁰→Oᴱ o ⟫ ISZERO ⟫ JUMPI 3
-  O¹→Oᴱ′ (defₒ i x)   = O⁰→Oᴱ x ⟫ PUSH (i +ℕ 64) ⟫ MSTORE
-  O¹→Oᴱ′ (setₒ i x)   = O⁰→Oᴱ x ⟫ PUSH i         ⟫ SSTORE
-  O¹→Oᴱ′ (setₖₒ k x)  = O⁰→Oᴱ x ⟫ O⁰→Oᴱ k ⟫ SSTORE
-  O¹→Oᴱ′ (outₒ xs)    = outₒ→Oᴱ 128 xs
-  O¹→Oᴱ′ (o₁ ∥ o₂)    = O¹→Oᴱ o₁ ⟫ O¹→Oᴱ o₂
+  O¹→Oᴱ′ : ℕ → O¹ → Oᴱ
+  O¹→Oᴱ′ n (iffₒ o)     = O⁰→Oᴱ o ⟫ ISZERO ⟫ JUMPI 3
+  O¹→Oᴱ′ n (defₒ i x)   = O⁰→Oᴱ x ⟫ PUSH (i ×ℕ 32 +ℕ 64) ⟫ MSTORE
+  O¹→Oᴱ′ n (setₒ i x)   = O⁰→Oᴱ x ⟫ PUSH i         ⟫ SSTORE
+  O¹→Oᴱ′ n (setₖₒ k x)  = O⁰→Oᴱ x ⟫ O⁰→Oᴱ k ⟫ SSTORE
+  O¹→Oᴱ′ n (outₒ xs)    = outₒ→Oᴱ (suc n ×ℕ 32 +ℕ 64) xs
+  O¹→Oᴱ′ n (o₁ ∥ o₂)    = O¹→Oᴱ n o₁ ⟫ O¹→Oᴱ n o₂
 
-  O¹→Oᴱ : O¹ → Oᴱ
-  O¹→Oᴱ o@(_ ∥ _) = O¹→Oᴱ′ o
-  O¹→Oᴱ o = tag o (O¹→Oᴱ′ o)
+  O¹→Oᴱ : ℕ → O¹ → Oᴱ
+  O¹→Oᴱ n o@(_ ∥ _) = O¹→Oᴱ′ n o
+  O¹→Oᴱ n o = tag o (O¹→Oᴱ′ n o)
 
 O²→Oᴱ : O² → Oᴱ
 O²→Oᴱ (sigₒ s k) =
   PUSH 224 ⟫ PUSH 2 ⟫ EXP ⟫ PUSH 0 ⟫ CALLDATALOAD ⟫ DIV ⟫
-  PUSHSIG s ⟫ EQ ⟫ ISZERO ⟫ THEN (O¹→Oᴱ k)
+  PUSHSIG s ⟫ EQ ⟫ ISZERO ⟫ THEN (O¹→Oᴱ (O¹-memory k) k)
 O²→Oᴱ (seqₒ a b) =
   O²→Oᴱ a ⟫ O²→Oᴱ b
 
