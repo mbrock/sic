@@ -16,7 +16,7 @@ open import Data.Nat using (ℕ; _⊔_; suc)
   renaming (_≟_ to _≟ℕ_; _+_ to _+ℕ_; _*_ to _×ℕ_)
 open import Data.Integer using (ℤ; +_)
   renaming (_+_ to _+ℤ_; _-_ to _-ℤ_; -_ to -ℤ_)
-open import Data.Product using (Σ; ,_)
+open import Data.Product using (Σ; ,_; proj₁; proj₂)
   renaming (_,_ to _Σ,_)
 
 ------------------------------------------------------------------------
@@ -263,8 +263,6 @@ module Oᴱ where
 
 open Oᴱ
 
-prelude = JUMP 6 ⟫ JUMPDEST ⟫ REVERT ⟫ JUMPDEST
-
 XADD = DUP 2 ⟫ DUP 2 ⟫ XOR ⟫ NOT ⟫ SWAP 2 ⟫ DUP 2 ⟫ ADD ⟫ DUP 1 ⟫ SWAP 2 ⟫
   XOR ⟫ SWAP 1 ⟫ SWAP 2 ⟫ AND ⟫ PUSH 255 ⟫ PUSH 2 ⟫ EXP ⟫ AND ⟫ REVERTIF
 XSUB = PUSH 0 ⟫ SUB ⟫ XADD
@@ -348,7 +346,7 @@ mutual
   O¹→Oᴱ′ (defₒ i x)   = O⁰→Oᴱ x ⟫ PUSH (i +ℕ 64) ⟫ MSTORE
   O¹→Oᴱ′ (setₒ i x)   = O⁰→Oᴱ x ⟫ PUSH i         ⟫ SSTORE
   O¹→Oᴱ′ (setₖₒ k x)  = O⁰→Oᴱ x ⟫ O⁰→Oᴱ k ⟫ SSTORE
-  O¹→Oᴱ′ (outₒ xs)    = outₒ→Oᴱ 1024 xs
+  O¹→Oᴱ′ (outₒ xs)    = outₒ→Oᴱ 128 xs
   O¹→Oᴱ′ (o₁ ∥ o₂)    = O¹→Oᴱ o₁ ⟫ O¹→Oᴱ o₂
 
   O¹→Oᴱ : O¹ → Oᴱ
@@ -362,8 +360,7 @@ O²→Oᴱ (sigₒ s k) =
 O²→Oᴱ (seqₒ a b) =
   O²→Oᴱ a ⟫ O²→Oᴱ b
 
-S¹→Oᴱ : S¹ → Oᴱ
-S¹→Oᴱ s = prelude ⟫ O¹→Oᴱ (comp¹ s)
+prelude = JUMP 6 ⟫ JUMPDEST ⟫ REVERT ⟫ JUMPDEST
 
 S²→Oᴱ : S² → Oᴱ
 S²→Oᴱ s = prelude ⟫ O²→Oᴱ (comp² s) ⟫ REVERT
@@ -373,41 +370,44 @@ S²→Oᴱ s = prelude ⟫ O²→Oᴱ (comp² s) ⟫ REVERT
 --     “Assembling EVM assembly”
 --
 
-data Opcode : ℕ → Set where
-  B1   : ℕ      → Opcode 1
-  B2   : ℤ      → Opcode 2
-  BSig : String → Opcode 4
+-- Concrete bytes indexed by size
+data B⁰ : ℕ → Set where
+  B1   : ℕ      → B⁰ 1
+  B2   : ℤ      → B⁰ 2
+  BSig : String → B⁰ 4
 
-data Bytes : ℕ → Set where
-  op_ : ∀ {m} → Opcode m → Bytes m
-  Δ   : ℤ     → Bytes 2
-  _⦂_ : ∀ {m n} → Bytes m → Bytes n → Bytes (m +ℕ n)
+-- Byte sequences with unresolved deltas
+data B¹ : ℕ → Set where
+  op_ : ∀ {m} → B⁰ m → B¹ m
+  Δ   : ℤ → B¹ 2
+  _⦂_ : ∀ {m n} → B¹ m → B¹ n → B¹ (m +ℕ n)
 
-size : ∀ {m} → Bytes m → ℕ
+size : ∀ {m} → B¹ m → ℕ
 size {m} _ = m
 
-data Opcode⋆ : Set where
-  _⟩_ : ∀ {m} → Opcode m → Opcode⋆ → Opcode⋆
-  fin : Opcode⋆
+bytes : (p : Σ ℕ B¹) → B¹ (proj₁ p)
+bytes = proj₂
+
+data B⁰⋆ : Set where
+  _⟩_ : ∀ {m} → B⁰ m → B⁰⋆ → B⁰⋆
+  fin : B⁰⋆
 
 infixr 1 _⟩_
 
-append : Opcode⋆ → Opcode⋆ → Opcode⋆
+append : B⁰⋆ → B⁰⋆ → B⁰⋆
 append (x ⟩ o₁) o₂ = x ⟩ append o₁ o₂
 append fin o₂ = o₂
 
-⋆ : ∀ {n} → ℤ → Bytes n → Opcode⋆
+⋆ : ∀ {n} → ℤ → B¹ n → B⁰⋆
 ⋆ i (op x) = x ⟩ fin
 ⋆ i (Δ x) = B2 (i +ℤ x) ⟩ fin
 ⋆ i (b₁ ⦂ b₂) = append (⋆ i b₁) (⋆ (i +ℤ (+ size b₁)) b₂)
 
 infixr 10 _⦂_
 
-code : Oᴱ → Σ ℕ Bytes
+code : Oᴱ → Σ ℕ B¹
 code (tag o¹ oᴱ) = code oᴱ
-code (x₁ ⟫ x₂) with code x₁
-... | (i Σ, x₁ᴱ) with code x₂
-... | (j Σ, x₂ᴱ) = , (x₁ᴱ ⦂ x₂ᴱ)
+code (x₁ ⟫ x₂) = , (bytes (code x₁) ⦂ bytes (code x₂))
 code ADD = , op B1 0x01
 code ADDRESS = , op B1 0x30
 code AND = , op B1 0x16
@@ -417,6 +417,7 @@ code EQ = , op B1 0x14
 code JUMPDEST = , op B1 0x5b
 code (JUMP x)  = , op B1 0x61 ⦂ op B2 (+ x) ⦂ op B1 0x56
 code (JUMPI x) = , op B1 0x61 ⦂ op B2 (+ x) ⦂ op B1 0x57
+
 code (THEN x) with code x
 ... | i Σ, bs = , op B1 0x61 ⦂ Δ (+ (i +ℕ 2)) ⦂ op B1 0x57 ⦂ bs ⦂ op B1 0x5b
 
@@ -456,11 +457,10 @@ code REVERTIF = , op B1 0x60 ⦂ op B1 0x04 ⦂ op B1 0x57
 code RETURN = , op B1 0xf3
 code XOR = , op B1 0x18
 
-compile : S² → Opcode⋆
-compile s² with code (prelude ⟫ S²→Oᴱ s² ⟫ STOP)
-... | _ Σ, b = ⋆ (+ 0) b
+compile : S² → B⁰⋆
+compile s² = ⋆ (+ 0) (bytes (code (S²→Oᴱ s²)))
 
-assemble : Oᴱ → Opcode⋆
+assemble : Oᴱ → B⁰⋆
 assemble oᴱ with code (prelude ⟫ oᴱ ⟫ STOP)
 ... | _ Σ, b = ⋆ (+ 0) b
 
@@ -468,11 +468,11 @@ hexpad : ℤ → String
 hexpad (+_ n) = showInBase 16 n ++ " "
 hexpad (ℤ.negsuc n) = "{erroneously-negative}"
 
-Opcode⋆→String : Opcode⋆ → String
-Opcode⋆→String (B1   x ⟩ x₁) = "B1 " ++ hexpad (+ x) ++ Opcode⋆→String x₁
-Opcode⋆→String (B2   x ⟩ x₁) = "B2 " ++ hexpad x ++ Opcode⋆→String x₁
-Opcode⋆→String (BSig x ⟩ x₁) = "B1 63 [" ++ x ++ "] " ++ Opcode⋆→String x₁
-Opcode⋆→String fin = ""
+B⁰⋆→String : B⁰⋆ → String
+B⁰⋆→String (B1   x ⟩ x₁) = "B1 " ++ hexpad (+ x) ++ B⁰⋆→String x₁
+B⁰⋆→String (B2   x ⟩ x₁) = "B2 " ++ hexpad x ++ B⁰⋆→String x₁
+B⁰⋆→String (BSig x ⟩ x₁) = "B1 63 [" ++ x ++ "] " ++ B⁰⋆→String x₁
+B⁰⋆→String fin = ""
 
 ------------------------------------------------------------------------
 -- ✿ Section 8
@@ -491,7 +491,6 @@ _↥_ : ℕ → S⁰ → S¹
 _↧_ : ℕ → S⁰ → S¹
 _↥ₖ_ : ⟨S⁰⟩ → S⁰ → S¹
 _↧ₖ_ : ⟨S⁰⟩ → S⁰ → S¹
-
 
 n ↑  v = n ← get n + v
 n ↥  v = n ←  get  n + v │ iff get  n ≥ ⓪
