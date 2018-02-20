@@ -589,8 +589,8 @@ module Main where
   open EVM-Assembly
   open Sic→EVM
 
-  compile-and-assemble : S² → B⁰⋆
-  compile-and-assemble s² = ⋆ (code (S²→Oᴱ s²))
+  compile-and-assemble : S² → String
+  compile-and-assemble s² = B⁰⋆→String (⋆ (code (S²→Oᴱ s²)))
 
   assemble : Oᴱ → B⁰⋆
   assemble oᴱ = ⋆ (code (prelude ⟫ oᴱ ⟫ STOP))
