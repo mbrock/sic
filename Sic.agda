@@ -217,17 +217,17 @@ module Sⁿ→Oⁿ where
     S⁰→O⁰ (get x)   = S⁰→O⁰ x ┆ getₖₒ
     S⁰→O⁰ (ref x)   = refₒ x
     S⁰→O⁰ (arg x)   = argₒ x
-    S⁰→O⁰ (x + y)   = S⁰→O⁰ x ┆ S⁰→O⁰ y ┆ +ₒ
-    S⁰→O⁰ (x − y)   = S⁰→O⁰ x ┆ S⁰→O⁰ y ┆ −ₒ
-    S⁰→O⁰ (- x)     = S⁰→O⁰ x ┆ #ₒ 0    ┆ −ₒ
-    S⁰→O⁰ (x × y)   = S⁰→O⁰ x ┆ S⁰→O⁰ y ┆ ×ₒ
-    S⁰→O⁰ (x ^ y)   = S⁰→O⁰ x ┆ S⁰→O⁰ y ┆ ^ₒ
+    S⁰→O⁰ (x + y)   = S⁰→O⁰ y ┆ S⁰→O⁰ x ┆ +ₒ
+    S⁰→O⁰ (x − y)   = S⁰→O⁰ y ┆ S⁰→O⁰ x ┆ −ₒ
+    S⁰→O⁰ (- x)     = #ₒ 0    ┆ S⁰→O⁰ x ┆ −ₒ
+    S⁰→O⁰ (x × y)   = S⁰→O⁰ y ┆ S⁰→O⁰ x ┆ ×ₒ
+    S⁰→O⁰ (x ^ y)   = S⁰→O⁰ y ┆ S⁰→O⁰ x ┆ ^ₒ
     S⁰→O⁰ (¬ x)     = S⁰→O⁰ x ┆ ¬ₒ
-    S⁰→O⁰ (x ∨ y)   = S⁰→O⁰ x ┆ S⁰→O⁰ y ┆ ∨ₒ
-    S⁰→O⁰ (x ∧ y)   = S⁰→O⁰ x ┆ S⁰→O⁰ y ┆ ∧ₒ
-    S⁰→O⁰ (x ≥ y)   = S⁰→O⁰ x ┆ S⁰→O⁰ y ┆ ≥ₒ
-    S⁰→O⁰ (x ≤ y)   = S⁰→O⁰ x ┆ S⁰→O⁰ y ┆ ≤ₒ
-    S⁰→O⁰ (x ≡ y)   = S⁰→O⁰ x ┆ S⁰→O⁰ y ┆ ≡ₒ
+    S⁰→O⁰ (x ∨ y)   = S⁰→O⁰ y ┆ S⁰→O⁰ x ┆ ∨ₒ
+    S⁰→O⁰ (x ∧ y)   = S⁰→O⁰ y ┆ S⁰→O⁰ x ┆ ∧ₒ
+    S⁰→O⁰ (x ≥ y)   = S⁰→O⁰ y ┆ S⁰→O⁰ x ┆ ≥ₒ
+    S⁰→O⁰ (x ≤ y)   = S⁰→O⁰ y ┆ S⁰→O⁰ x ┆ ≤ₒ
+    S⁰→O⁰ (x ≡ y)   = S⁰→O⁰ y ┆ S⁰→O⁰ x ┆ ≡ₒ
     S⁰→O⁰ t         = timeₒ
 
   -- Compiling statement sequences
@@ -270,7 +270,7 @@ module Sⁿ→Oⁿ where
 --
 -- We now introduce a data type denoting EVM assembly.
 --
--- Our EVM assembly type has the control flow structures LOOP and THEN,
+-- Our EVM assembly type has the control flow structures LOOP and ELSE
 -- which are taken care of later by the bytecode assembler.
 --
 
@@ -313,7 +313,7 @@ module EVM where
     STOP         : Oᴱ
     SUB          : Oᴱ
     SWAP         : ℕ → Oᴱ
-    THEN         : Oᴱ → Oᴱ
+    ELSE         : Oᴱ → Oᴱ
     TIMESTAMP    : Oᴱ
     XOR          : Oᴱ
     _⟫_          : Oᴱ → Oᴱ → Oᴱ
@@ -351,20 +351,30 @@ module EVM-Math where
     LOOP (DUP 1) (
       SWAP 2 ⟫ DUP 1 ⟫ RMUL ⟫ SWAP 1 ⟫ SWAP 2 ⟫ SWAP 1 ⟫ SWAP 2 ⟫
       PUSH 2 ⟫ DUP 2 ⟫ MOD ⟫ ISZERO ⟫
-      THEN (SWAP 2 ⟫ SWAP 1 ⟫ DUP 2 ⟫ RMUL ⟫ SWAP 1 ⟫ SWAP 2) ⟫
+      ELSE (SWAP 2 ⟫ SWAP 1 ⟫ DUP 2 ⟫ RMUL ⟫ SWAP 1 ⟫ SWAP 2) ⟫
       PUSH 2 ⟫ SWAP 2 ⟫ DIV
     ) ⟫ SWAP 2 ⟫ POP ⟫ POP
 
-  XEXP = PUSH 2 ⟫ DUP 3 ⟫ MOD ⟫ ISZERO ⟫
-    DUP 1 ⟫ PUSH 1 ⟫ MUL ⟫ SWAP 1 ⟫ ISZERO ⟫ DUP 3 ⟫ MUL ⟫ ADD ⟫
-    SWAP 1 ⟫ SWAP 2 ⟫ PUSH 2 ⟫ SWAP 1 ⟫ DIV ⟫
-    LOOP (DUP 1) (
-      SWAP 2 ⟫ DUP 1 ⟫ MUL ⟫ SWAP 2 ⟫
-      PUSH 2 ⟫ DUP 2 ⟫ MOD ⟫ ISZERO ⟫
-      THEN (SWAP 2 ⟫ SWAP 1 ⟫ DUP 2 ⟫ MUL ⟫ SWAP 1 ⟫ SWAP 2) ⟫
-      PUSH 2 ⟫ SWAP 2 ⟫ DIV
-    ) ⟫ SWAP 2 ⟫ POP ⟫ POP
+    -- rpow(x, n) => z
+    --   z = n % 2 ? x : 1
+    --   for (n /= 2; n != 0; n /= 2)
+    --     x = x * x
+    --     if (n % 2)
+    --       z = z * x
 
+    -- f(1) = x; f(0) = 1
+    -- f(a) = !a + a * x
+    -- f(0) = 1 + 0 * x; f(1) = 0 + 1 * x
+
+  RPOW′ =
+    let z = 2 ×ℕ 32 in
+    DUP 2 ⟫ PUSH 2 ⟫ SWAP 1 ⟫ MOD ⟫ DUP 1 ⟫ ISZERO ⟫
+    SWAP 1 ⟫ DUP 3 ⟫ MUL ⟫ ADD ⟫ PUSH z ⟫ MSTORE ⟫
+    SWAP 1 ⟫ PUSH 2 ⟫ SWAP 1 ⟫ DIV ⟫ LOOP (DUP 1) (
+      SWAP 1 ⟫ DUP 1 ⟫ MUL ⟫ PUSH 2 ⟫ DUP 3 ⟫ MOD ⟫ ISZERO ⟫
+      ELSE (PUSH z ⟫ MLOAD ⟫ DUP 2 ⟫ MUL ⟫ PUSH z ⟫ MSTORE) ⟫
+      SWAP 1 ⟫ PUSH 2 ⟫ SWAP 1 ⟫ DIV
+    ) ⟫ POP ⟫ POP ⟫ PUSH z ⟫ MLOAD
 
 -- Section 7: Compiling Sic machine code to EVM assembly
 --
@@ -389,7 +399,7 @@ module Sic→EVM where
   O⁰→Oᴱ +ₒ      = XADD
   O⁰→Oᴱ −ₒ      = XSUB
   O⁰→Oᴱ ×ₒ      = RMUL
-  O⁰→Oᴱ ^ₒ      = RPOW
+  O⁰→Oᴱ ^ₒ      = RPOW′
   O⁰→Oᴱ ≡ₒ      = EQ
   O⁰→Oᴱ ≥ₒ      = SGT ⟫ ISZERO
   O⁰→Oᴱ ≤ₒ      = SLT ⟫ ISZERO
@@ -446,7 +456,7 @@ module Sic→EVM where
   O²→Oᴱ : O² → Oᴱ
   O²→Oᴱ (sigₒ s k) =
     PUSH 224 ⟫ PUSH 2 ⟫ EXP ⟫ PUSH 0 ⟫ CALLDATALOAD ⟫ DIV ⟫
-    PUSHSIG s ⟫ EQ ⟫ ISZERO ⟫ THEN (O¹→Oᴱ (O¹-memory k) k ⟫ STOP)
+    PUSHSIG s ⟫ EQ ⟫ ISZERO ⟫ ELSE (O¹→Oᴱ (O¹-memory k) k ⟫ STOP)
   O²→Oᴱ (seqₒ a b) =
     O²→Oᴱ a ⟫ O²→Oᴱ b
 
@@ -526,7 +536,7 @@ module EVM-Assembly where
   code′ JUMPDEST = , op B1 0x5b
   code′ (JUMP x)  = , op B1 0x61 ⦂ op B2 (+ x) ⦂ op B1 0x56
   code′ (JUMPI x) = , op B1 0x61 ⦂ op B2 (+ x) ⦂ op B1 0x57
-  code′ (THEN x) with code′ x
+  code′ (ELSE x) with code′ x
   ... | i Σ, bs = , op B1 0x61 ⦂ Δ (+ (i +ℕ skip)) ⦂ op B1 0x57 ⦂ bs ⦂ op B1 0x5b
     where skip = 3
   code′ (LOOP p k) with code′ p
