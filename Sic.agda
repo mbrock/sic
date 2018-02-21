@@ -41,7 +41,7 @@ module Sic where
 
 open import Data.String using (String)
 open import Data.Nat using (ℕ; suc; _⊔_)
-  renaming (_+_ to _+ℕ_; _*_ to _×ℕ_)
+  renaming (_+_ to _+ℕ_; _*_ to _*_)
 
 module Sⁿ where
   mutual
@@ -388,7 +388,7 @@ module EVM-Math where
     -- f(0) = 1 + 0 * x; f(1) = 0 + 1 * x
 
   RPOW′ =
-    let z = 2 ×ℕ 32 in
+    let z = 2 * 32 in
     DUP 2 ⟫ PUSH 2 ⟫ SWAP 1 ⟫ MOD ⟫ DUP 1 ⟫ ISZERO ⟫
     SWAP 1 ⟫ DUP 3 ⟫ MUL ⟫ ADD ⟫ PUSH z ⟫ MSTORE ⟫
     SWAP 1 ⟫ PUSH 2 ⟫ SWAP 1 ⟫ DIV ⟫ LOOP (DUP 1) (
@@ -406,17 +406,22 @@ module Sic→EVM where
   open EVM
   open EVM-Math
 
+  wordsize = 32
+
+  -- We use three reserved variables: two for hashing, one for RPOW.
+  m₀ = 2 * wordsize
+
   O⁰→Oᴱ : ∀ {i j} → O⁰ i j → Oᴱ
   O⁰→Oᴱ (#ₒ n)    = PUSH n
   O⁰→Oᴱ timeₒ     = TIMESTAMP
   O⁰→Oᴱ (x₁ ┆ x₂) = O⁰→Oᴱ x₁ ⟫ O⁰→Oᴱ x₂
   O⁰→Oᴱ (callerₒ) = CALLER
-  O⁰→Oᴱ (refₒ x)  = PUSH (x +ℕ 64) ⟫ MLOAD
+  O⁰→Oᴱ (refₒ x)  = PUSH (x +ℕ m₀) ⟫ MLOAD
   O⁰→Oᴱ (getₒ x)  = PUSH x ⟫ SLOAD
-  O⁰→Oᴱ (argₒ x)  = PUSH (x ×ℕ 32) ⟫ CALLDATALOAD
+  O⁰→Oᴱ (argₒ x)  = PUSH (x * wordsize) ⟫ CALLDATALOAD
   O⁰→Oᴱ (getₖₒ)   = SLOAD
   O⁰→Oᴱ (H¹ₒ)     = PUSH 0  ⟫ MSTORE ⟫
-                    PUSH 32 ⟫ PUSH 0 ⟫ KECCAK256
+                    PUSH wordsize ⟫ PUSH 0 ⟫ KECCAK256
   O⁰→Oᴱ +ₒ      = XADD
   O⁰→Oᴱ −ₒ      = XSUB
   O⁰→Oᴱ ×ₒ      = RMUL
@@ -428,7 +433,7 @@ module Sic→EVM where
   O⁰→Oᴱ ∧ₒ      = AND
   O⁰→Oᴱ ∨ₒ      = OR
   O⁰→Oᴱ H²ₒ     = PUSH 0  ⟫ MSTORE ⟫
-                  PUSH 32 ⟫ MSTORE ⟫
+                  PUSH wordsize ⟫ MSTORE ⟫
                   PUSH 64 ⟫ PUSH 0 ⟫ KECCAK256
 
   record Index a : Set where
@@ -450,22 +455,22 @@ module Sic→EVM where
   index⁺ i (x ∷⁺ xs) = x at 0 from i ∷⁺ index 1 i xs
 
   O⁰#→Oᴱ : Index (O⁰ 0 1) → Oᴱ
-  O⁰#→Oᴱ (x at j from i) = O⁰→Oᴱ x ⟫ PUSH (i +ℕ j ×ℕ 32) ⟫ MSTORE
+  O⁰#→Oᴱ (x at j from i) = O⁰→Oᴱ x ⟫ PUSH (i +ℕ j * wordsize) ⟫ MSTORE
 
   fyiₒ→Oᴱ : ℕ → List⁺ (O⁰ 0 1) → Oᴱ
   fyiₒ→Oᴱ i xs = foldr₁ _⟫_ (map O⁰#→Oᴱ (index⁺ i xs)) ⟫ return
     where
       open import Data.List.NonEmpty using (foldr₁; map; length)
-      return = PUSH (32 ×ℕ length xs) ⟫ PUSH i ⟫ RETURN
+      return = PUSH (wordsize * length xs) ⟫ PUSH i ⟫ RETURN
 
   mutual
     O¹→Oᴱ′ : ℕ → O¹ → Oᴱ
     O¹→Oᴱ′ n (iffₒ o)     = O⁰→Oᴱ o ⟫ ISZERO ⟫ JUMPI 3
-    O¹→Oᴱ′ n (defₒ i x)   = O⁰→Oᴱ x ⟫ PUSH (i ×ℕ 32 +ℕ 64) ⟫ MSTORE
+    O¹→Oᴱ′ n (defₒ i x)   = O⁰→Oᴱ x ⟫ PUSH (i * wordsize +ℕ m₀) ⟫ MSTORE
     O¹→Oᴱ′ n (setₒ i x)   = O⁰→Oᴱ x ⟫ PUSH i ⟫ SSTORE
     O¹→Oᴱ′ n (setₖₒ k x)  = O⁰→Oᴱ x ⟫ O⁰→Oᴱ k ⟫ SSTORE
     O¹→Oᴱ′ n (fyiₒ xs)    = fyiₒ→Oᴱ offset xs
-      where offset = suc n ×ℕ 32 +ℕ 64
+      where offset = suc n * wordsize +ℕ m₀
     O¹→Oᴱ′ n (o₁ ∥ o₂)    = O¹→Oᴱ n o₁ ⟫ O¹→Oᴱ n o₂
 
     O¹→Oᴱ : ℕ → O¹ → Oᴱ
@@ -476,7 +481,9 @@ module Sic→EVM where
 
   return : ℕ → ℕ → Oᴱ
   return offset n =
-    PUSH (n ×ℕ 32) ⟫ PUSH (64 +ℕ offset ×ℕ 32) ⟫ RETURN
+    PUSH (n * wordsize) ⟫
+    PUSH (m₀ +ℕ offset * wordsize) ⟫
+    RETURN
 
   O²→Oᴱ : O² → Oᴱ
   O²→Oᴱ (sigₒ s n k) =
@@ -665,6 +672,81 @@ module Dappsys where
 
   infix 19 _↧_↥_
 
+
+-- Section 8: Compiling to Solidity
+--
+-- We define a compiler from S² to Solidity source code.
+--
+
+module Solidity where
+  open Sⁿ
+
+  open import Data.List using (List; _∷_; []; _++_)
+  open import Data.Nat.Show using (showInBase)
+
+  show = showInBase
+
+  mutual
+
+    sequence : ⟨S⁰⟩ → List String
+    sequence (⟨⟩ x) =
+      "keccak256(" ∷ ⟦ x ⟧⁰ ++ ")" ∷ []
+    sequence (x , s) =
+      "keccak256(" ∷ ⟦ x ⟧⁰ ++ ", " ∷ sequence s ++ ")" ∷ []
+
+    ⟦_⟧⁰ : S⁰ → List String
+    ⟦ # x ⟧⁰ = show 10 x ∷ []
+    ⟦ u ⟧⁰ = "msg.sender" ∷ []
+    ⟦ t ⟧⁰ = "block.timestamp" ∷ []
+    ⟦ get x ⟧⁰ = "storage[" ∷ ⟦ x ⟧⁰ ++ "]" ∷ []
+    ⟦ ref x ⟧⁰ = "m" ∷ show 10 x ∷ []
+    ⟦ arg x ⟧⁰ = "p" ∷ show 10 x ∷ []
+    ⟦ ⟨ x ⟧⁰ = sequence x
+    ⟦ x + x₁ ⟧⁰ = "(" ∷ ⟦ x ⟧⁰ ++ " + " ∷ ⟦ x₁ ⟧⁰ ++ ")" ∷ []
+    ⟦ x − x₁ ⟧⁰ = "(" ∷ ⟦ x ⟧⁰ ++ " - " ∷ ⟦ x₁ ⟧⁰ ++ ")" ∷ []
+    ⟦ x × x₁ ⟧⁰ = "(" ∷ ⟦ x ⟧⁰ ++ " * " ∷ ⟦ x₁ ⟧⁰ ++ ")" ∷ []
+    ⟦ x ^ x₁ ⟧⁰ = "(" ∷ ⟦ x ⟧⁰ ++ " ^ " ∷ ⟦ x₁ ⟧⁰ ++ ")" ∷ []
+    ⟦ ¬ x ⟧⁰ = "(!" ∷ ⟦ x ⟧⁰ ++ ")" ∷ []
+    ⟦ - x ⟧⁰ = "(-" ∷ ⟦ x ⟧⁰ ++ ")" ∷ []
+    ⟦ x ∨ x₁ ⟧⁰ = "(" ∷ ⟦ x ⟧⁰ ++ " || " ∷ ⟦ x₁ ⟧⁰ ++ ")" ∷ []
+    ⟦ x ∧ x₁ ⟧⁰ = "(" ∷ ⟦ x ⟧⁰ ++ " && " ∷ ⟦ x₁ ⟧⁰ ++ ")" ∷ []
+    ⟦ x ≥ x₁ ⟧⁰ = "(" ∷ ⟦ x ⟧⁰ ++ " >= " ∷ ⟦ x₁ ⟧⁰ ++ ")" ∷ []
+    ⟦ x ≤ x₁ ⟧⁰ = "(" ∷ ⟦ x ⟧⁰ ++ " <= " ∷ ⟦ x₁ ⟧⁰ ++ ")" ∷ []
+    ⟦ x ≡ x₁ ⟧⁰ = "(" ∷ ⟦ x ⟧⁰ ++ " == " ∷ ⟦ x₁ ⟧⁰ ++ ")" ∷ []
+
+  open import Data.List.NonEmpty using (List⁺; toList; length)
+  open import Data.List using (intersperse; concatMap; zip; upTo)
+  open import Data.Product using () renaming (_×_ to _at_)
+
+  ⟦_⟧ᶠʸⁱ : List⁺ S⁰ → List String
+  ⟦ xs ⟧ᶠʸⁱ = intersperse "\n"
+               (concatMap f (zip (toList xs) ("a" ∷ "b" ∷ "c" ∷ "d" ∷ [])))
+    where
+      f : S⁰ at String → List String
+      f (x Data.Product., k) =  k ∷ " = " ∷ ⟦ x ⟧⁰ ++ ";" ∷ []
+  ⟦_⟧¹ : ∀ {n} → S¹ n → List String
+  ⟦ iff x ⟧¹ = "require(" ∷ ⟦ x ⟧⁰ ++ ");" ∷ []
+  ⟦ i ≜ x ⟧¹ = "uint256 m" ∷ show 10 i ∷ " = " ∷ ⟦ x ⟧⁰ ++ ";" ∷ []
+  ⟦ k ← x ⟧¹ = "storage[" ∷ ⟦ k ⟧⁰ ++ "] = " ∷ ⟦ x ⟧⁰ ++ ";" ∷ []
+  ⟦ fyi xs ⟧¹ = ⟦ xs ⟧ᶠʸⁱ
+  ⟦ x₁ │ x₂ ⟧¹ = ⟦ x₁ ⟧¹ ++ "\n" ∷ ⟦ x₂ ⟧¹
+
+  fyi-returns : ℕ → List String
+  fyi-returns n =
+    Data.List.intersperse ", "
+      (Data.List.map (λ x → Data.String._++_ "int256 " x)
+        (Data.List.take n ("a" ∷ "b" ∷ "c" ∷ "d" ∷ [])))
+
+  ⟦_⟧² : S² → List String
+  ⟦ act sig :: k ⟧² =
+    "function " ∷ sig ∷ "() returns (" ∷
+    fyi-returns (S¹-fyi-size k) ++ ") {\n" ∷
+    ⟦ k ⟧¹ ++ "\n}" ∷ []
+  ⟦ x₁ // x₂ ⟧² =
+    ⟦ x₁ ⟧² ++ "\n" ∷ ⟦ x₂ ⟧²
+
+  S²→Solidity : S² → String
+  S²→Solidity s = Data.List.foldr Data.String._++_ "" ⟦ s ⟧²
 
 open Sⁿ public
 open Sic→EVM public
