@@ -78,12 +78,26 @@ module Sⁿ where
   $ : ℕ → S⁰
   $ i = arg i
 
+  open import Data.List.NonEmpty using (List⁺; [_]; _∷⁺_)
+
   data S¹ : Set where
     iff_ : S⁰ → S¹
     _≜_  : ℕ → S⁰ → S¹
     _←_  : S⁰ → S⁰ → S¹
-    fyi_ : ⟨S⁰⟩ → S¹
+    out  : List⁺ S⁰ → S¹
     _│_  : S¹ → S¹ → S¹
+
+  fyi₁_ : S⁰ → S¹
+  fyi₁_ a = out [ a ]
+
+  fyi₂_ : S⁰ → S⁰ → S¹
+  fyi₂_ a b = out (a ∷⁺ [ b ])
+
+  fyi₃_ : S⁰ → S⁰ → S⁰ → S¹
+  fyi₃_ a b c = out (a ∷⁺ b ∷⁺ [ c ])
+
+  fyi₄_ : S⁰ → S⁰ → S⁰ → S⁰ → S¹
+  fyi₄_ a b c d = out (a ∷⁺ b ∷⁺ c ∷⁺ [ d ])
 
   data S² : Set where
     act_::_ : (sig : String) → S¹ → S²
@@ -94,7 +108,7 @@ module Sⁿ where
   infixr 3 _│_
 
   infix  10 iff_ _≜_ _←_
-  infix  10 fyi_
+  infix  10 fyi₁_ fyi₂_ fyi₃_ fyi₄_
 
   infixl 31 _∨_
   infixl 32 _∧_
@@ -237,11 +251,7 @@ module Sⁿ→Oⁿ where
   S¹→O¹ (i ≜ x)  = defₒ i (S⁰→O⁰ x)
   S¹→O¹ (k ← x)  = setₖₒ (S⁰→O⁰ k) (S⁰→O⁰ x)
   S¹→O¹ (x │ s)  = S¹→O¹ x ∥ S¹→O¹ s
-  S¹→O¹ (fyi x)  = outₒ (map⁺ S⁰→O⁰ (⟨S⁰⟩→List⁺ x))
-    where
-      ⟨S⁰⟩→List⁺ : ⟨S⁰⟩ → List⁺ S⁰
-      ⟨S⁰⟩→List⁺ (⟨⟩ x) = [ x ]
-      ⟨S⁰⟩→List⁺ (x₁ , x₂) = x₁ ∷⁺ ⟨S⁰⟩→List⁺ x₂
+  S¹→O¹ (out x)  = outₒ (map⁺ S⁰→O⁰ x)
 
   -- Compiling signature dispatch sequences
   S²→O² : S² → O²
