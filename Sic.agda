@@ -201,7 +201,7 @@ module Oⁿ where
 -- since our abstract machine is based on Sic semantics.
 --
 
-module Compile where
+module Sⁿ→Oⁿ where
   open Sⁿ
   open Oⁿ
 
@@ -209,52 +209,43 @@ module Compile where
     renaming (map to map⁺)
 
   mutual
-    -- Compiling left-associative hashing of expression sequences
-    ⟨comp⁰⟩ʰ : ∀ {i} → ⟨S⁰⟩ → O⁰ i (suc i)
-    ⟨comp⁰⟩ʰ (⟨⟩ x)   = comp⁰ x ┆ H¹ₒ
-    ⟨comp⁰⟩ʰ (x , xs) = comp⁰ x ┆ ⟨comp⁰⟩ʰ xs ┆ H²ₒ
-
-    -- Compiling left-associative expression sequences
-    ⟨comp⁰⟩ᵒ : ⟨S⁰⟩ → List⁺ (O⁰ 0 1)
-    ⟨comp⁰⟩ᵒ x = map⁺ comp⁰ (⟨S⁰⟩→List⁺ x)
-
-    ⟨S⁰⟩→List⁺ : ⟨S⁰⟩ → List⁺ S⁰
-    ⟨S⁰⟩→List⁺ (⟨⟩ x)    = [ x ]
-    ⟨S⁰⟩→List⁺ (x₁ , x₂) = x₁ ∷⁺ ⟨S⁰⟩→List⁺ x₂
-
     -- Compiling expressions
-    comp⁰ : ∀ {i} → S⁰ → O⁰ i (suc i)
-    comp⁰ (x₁ , x₂) = comp⁰ x₁ ┆ comp⁰ x₂ ┆ H²ₒ
-    comp⁰ (# n)     = #ₒ n
-    comp⁰ u         = callerₒ
-    comp⁰ (get x)   = comp⁰ x ┆ getₖₒ
-    comp⁰ (ref x)   = refₒ x
-    comp⁰ (arg x)   = argₒ x
-    comp⁰ (x + y)   = comp⁰ x ┆ comp⁰ y ┆ +ₒ
-    comp⁰ (x − y)   = comp⁰ x ┆ comp⁰ y ┆ −ₒ
-    comp⁰ (- x)     = comp⁰ x ┆ #ₒ 0    ┆ −ₒ
-    comp⁰ (x × y)   = comp⁰ x ┆ comp⁰ y ┆ ×ₒ
-    comp⁰ (x ^ y)   = comp⁰ x ┆ comp⁰ y ┆ ^ₒ
-    comp⁰ (¬ x)     = comp⁰ x ┆ ¬ₒ
-    comp⁰ (x ∨ y)   = comp⁰ x ┆ comp⁰ y ┆ ∨ₒ
-    comp⁰ (x ∧ y)   = comp⁰ x ┆ comp⁰ y ┆ ∧ₒ
-    comp⁰ (x ≥ y)   = comp⁰ x ┆ comp⁰ y ┆ ≥ₒ
-    comp⁰ (x ≤ y)   = comp⁰ x ┆ comp⁰ y ┆ ≤ₒ
-    comp⁰ (x ≡ y)   = comp⁰ x ┆ comp⁰ y ┆ ≡ₒ
-    comp⁰ t         = timeₒ
+    S⁰→O⁰ : ∀ {i} → S⁰ → O⁰ i (suc i)
+    S⁰→O⁰ (x₁ , x₂) = S⁰→O⁰ x₁ ┆ S⁰→O⁰ x₂ ┆ H²ₒ
+    S⁰→O⁰ (# n)     = #ₒ n
+    S⁰→O⁰ u         = callerₒ
+    S⁰→O⁰ (get x)   = S⁰→O⁰ x ┆ getₖₒ
+    S⁰→O⁰ (ref x)   = refₒ x
+    S⁰→O⁰ (arg x)   = argₒ x
+    S⁰→O⁰ (x + y)   = S⁰→O⁰ x ┆ S⁰→O⁰ y ┆ +ₒ
+    S⁰→O⁰ (x − y)   = S⁰→O⁰ x ┆ S⁰→O⁰ y ┆ −ₒ
+    S⁰→O⁰ (- x)     = S⁰→O⁰ x ┆ #ₒ 0    ┆ −ₒ
+    S⁰→O⁰ (x × y)   = S⁰→O⁰ x ┆ S⁰→O⁰ y ┆ ×ₒ
+    S⁰→O⁰ (x ^ y)   = S⁰→O⁰ x ┆ S⁰→O⁰ y ┆ ^ₒ
+    S⁰→O⁰ (¬ x)     = S⁰→O⁰ x ┆ ¬ₒ
+    S⁰→O⁰ (x ∨ y)   = S⁰→O⁰ x ┆ S⁰→O⁰ y ┆ ∨ₒ
+    S⁰→O⁰ (x ∧ y)   = S⁰→O⁰ x ┆ S⁰→O⁰ y ┆ ∧ₒ
+    S⁰→O⁰ (x ≥ y)   = S⁰→O⁰ x ┆ S⁰→O⁰ y ┆ ≥ₒ
+    S⁰→O⁰ (x ≤ y)   = S⁰→O⁰ x ┆ S⁰→O⁰ y ┆ ≤ₒ
+    S⁰→O⁰ (x ≡ y)   = S⁰→O⁰ x ┆ S⁰→O⁰ y ┆ ≡ₒ
+    S⁰→O⁰ t         = timeₒ
 
   -- Compiling statement sequences
-  comp¹ : S¹ → O¹
-  comp¹ (iff x)  = iffₒ (comp⁰ x)
-  comp¹ (i ≜ x)  = defₒ i (comp⁰ x)
-  comp¹ (k ← x)  = setₖₒ (comp⁰ k) (comp⁰ x)
-  comp¹ (fyi x)  = outₒ (⟨comp⁰⟩ᵒ x)
-  comp¹ (x │ s)  = comp¹ x ∥ comp¹ s
+  S¹→O¹ : S¹ → O¹
+  S¹→O¹ (iff x)  = iffₒ (S⁰→O⁰ x)
+  S¹→O¹ (i ≜ x)  = defₒ i (S⁰→O⁰ x)
+  S¹→O¹ (k ← x)  = setₖₒ (S⁰→O⁰ k) (S⁰→O⁰ x)
+  S¹→O¹ (x │ s)  = S¹→O¹ x ∥ S¹→O¹ s
+  S¹→O¹ (fyi x)  = outₒ (map⁺ S⁰→O⁰ (⟨S⁰⟩→List⁺ x))
+    where
+      ⟨S⁰⟩→List⁺ : ⟨S⁰⟩ → List⁺ S⁰
+      ⟨S⁰⟩→List⁺ (⟨⟩ x) = [ x ]
+      ⟨S⁰⟩→List⁺ (x₁ , x₂) = x₁ ∷⁺ ⟨S⁰⟩→List⁺ x₂
 
   -- Compiling signature dispatch sequences
-  comp² : S² → O²
-  comp² (act s :: k) = sigₒ s (comp¹ k)
-  comp² (a // b) = seqₒ (comp² a) (comp² b)
+  S²→O² : S² → O²
+  S²→O² (act s :: k) = sigₒ s (S¹→O¹ k)
+  S²→O² (a // b) = seqₒ (S²→O² a) (S²→O² b)
 
   -- Some compile-time assertions
   private
@@ -263,7 +254,7 @@ module Compile where
       using (refl) renaming (_≡_ to _≣_)
 
     S¹-memory : S¹ → ℕ
-    S¹-memory s = O¹-memory (comp¹ s)
+    S¹-memory s = O¹-memory (S¹→O¹ s)
 
     example-1 : S¹-memory (# 0 ← # 0) ≣ 0
     example-1 = refl
@@ -459,13 +450,14 @@ module Sic→EVM where
   O²→Oᴱ (seqₒ a b) =
     O²→Oᴱ a ⟫ O²→Oᴱ b
 
-  open Sⁿ using (S²)
+  open Sⁿ    using (S²)
+  open Sⁿ→Oⁿ using (S²→O²)
 
   S²→Oᴱ : S² → Oᴱ
-  S²→Oᴱ s = prelude ⟫ O²→Oᴱ (Compile.comp² s) ⟫ REVERT
+  S²→Oᴱ s = prelude ⟫ O²→Oᴱ (S²→O² s) ⟫ REVERT
 
   compile : S² → Oᴱ
-  compile s = prelude ⟫ O²→Oᴱ (Compile.comp² s) ⟫ REVERT
+  compile = S²→Oᴱ
 
 
 -- Section 8: Assembling EVM assembly
