@@ -441,7 +441,7 @@ module Sic→EVM where
     O¹→Oᴱ′ : ℕ → O¹ → Oᴱ
     O¹→Oᴱ′ n (iffₒ o)     = O⁰→Oᴱ o ⟫ ISZERO ⟫ JUMPI 3
     O¹→Oᴱ′ n (defₒ i x)   = O⁰→Oᴱ x ⟫ PUSH (i ×ℕ 32 +ℕ 64) ⟫ MSTORE
-    O¹→Oᴱ′ n (setₒ i x)   = O⁰→Oᴱ x ⟫ PUSH i         ⟫ SSTORE
+    O¹→Oᴱ′ n (setₒ i x)   = O⁰→Oᴱ x ⟫ PUSH i ⟫ SSTORE
     O¹→Oᴱ′ n (setₖₒ k x)  = O⁰→Oᴱ x ⟫ O⁰→Oᴱ k ⟫ SSTORE
     O¹→Oᴱ′ n (outₒ xs)    = outₒ→Oᴱ offset xs
       where offset = suc n ×ℕ 32 +ℕ 64
@@ -536,14 +536,16 @@ module EVM-Assembly where
   code′ (JUMP x)  = , op B1 0x61 ⦂ op B2 (+ x) ⦂ op B1 0x56
   code′ (JUMPI x) = , op B1 0x61 ⦂ op B2 (+ x) ⦂ op B1 0x57
   code′ (THEN x) with code′ x
-  ... | i Σ, bs = , op B1 0x61 ⦂ Δ (+ (i +ℕ 3)) ⦂ op B1 0x57 ⦂ bs ⦂ op B1 0x5b
+  ... | i Σ, bs = , op B1 0x61 ⦂ Δ (+ (i +ℕ skip)) ⦂ op B1 0x57 ⦂ bs ⦂ op B1 0x5b
+    where skip = 3
   code′ (LOOP p k) with code′ p
   ... | iₚ Σ, bsₚ   with code′ k
   ... | iₖ Σ, bsₖ =
     , op B1 0x5b ⦂ bsₚ ⦂ op B1 0x15 ⦂ op B1 0x61 ⦂ Δ (+ (3 +ℕ iₖ +ℕ 4))
       ⦂ op B1 0x57 ⦂ bsₖ
-      ⦂ op B1 0x61 ⦂ Δ (-ℤ (+ (1 +ℕ iₖ +ℕ 5 +ℕ iₚ +ℕ 1))) ⦂ op B1 0x56
+      ⦂ op B1 0x61 ⦂ Δ (-ℤ (+ skip)) ⦂ op B1 0x56
       ⦂ op B1 0x5b
+    where skip = 1 +ℕ iₖ +ℕ 5 +ℕ iₚ +ℕ 1
   code′ KECCAK256 = , op B1 0x20
   code′ MLOAD = , op B1 0x51
   code′ MSTORE = , op B1 0x52
