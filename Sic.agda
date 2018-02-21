@@ -66,20 +66,17 @@ module Sⁿ where
       ref_  : ℕ → S⁰
       arg_  : ℕ → S⁰
 
-      _,_   : S⁰ → S⁰ → S⁰
+      ⟨_   : ⟨S⁰⟩ → S⁰
 
     data ⟨S⁰⟩ : Set where
       ⟨⟩_  : S⁰ → ⟨S⁰⟩
       _,_  : S⁰ → ⟨S⁰⟩ → ⟨S⁰⟩
 
+    _⟩ : S⁰ → ⟨S⁰⟩
+    x ⟩ = ⟨⟩ x
+
   $ : ℕ → S⁰
   $ i = arg i
-
-  ⟨_ : ⟨S⁰⟩ → ⟨S⁰⟩
-  ⟨ x = x
-
-  _⟩ : S⁰ → ⟨S⁰⟩
-  x ⟩ = ⟨⟩ x
 
   data S¹ : Set where
     iff_ : S⁰ → S¹
@@ -209,9 +206,13 @@ module Sⁿ→Oⁿ where
     renaming (map to map⁺)
 
   mutual
+    ⟨S⁰⟩→O⁰ : ∀ {i} → ⟨S⁰⟩ → O⁰ i (suc i)
+    ⟨S⁰⟩→O⁰ (⟨⟩ x)   =              S⁰→O⁰ x ┆ H¹ₒ
+    ⟨S⁰⟩→O⁰ (x , xs) = ⟨S⁰⟩→O⁰ xs ┆ S⁰→O⁰ x ┆ H²ₒ
+
     -- Compiling expressions
     S⁰→O⁰ : ∀ {i} → S⁰ → O⁰ i (suc i)
-    S⁰→O⁰ (x₁ , x₂) = S⁰→O⁰ x₁ ┆ S⁰→O⁰ x₂ ┆ H²ₒ
+    S⁰→O⁰ (⟨ xs)    = ⟨S⁰⟩→O⁰ xs
     S⁰→O⁰ (# n)     = #ₒ n
     S⁰→O⁰ u         = callerₒ
     S⁰→O⁰ (get x)   = S⁰→O⁰ x ┆ getₖₒ
@@ -622,7 +623,7 @@ module Dappsys where
   x₁ = $ 0; x₂ = $ 1; x₃ = $ 2; x₄ = $ 3; x₅ = $ 4
 
   v = x₁
-  root = get ( ⓪ , u ) ≡ ①
+  root = get ⟨ ⓪ , u ⟩ ≡ ①
 
   _↑_ : S⁰ → S⁰ → S¹
   _↓_ : S⁰ → S⁰ → S¹
