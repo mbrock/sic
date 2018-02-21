@@ -414,7 +414,12 @@ module Sic→EVM where
   wordsize = 32
 
   -- We use three reserved variables: two for hashing, one for RPOW.
-  m₀ = 2 * wordsize
+  %hash¹ = 0 * wordsize
+  %hash² = 1 * wordsize
+  %rpowᶻ = 2 * wordsize
+
+  -- Let mₒ be the first memory address for non-reserved variables.
+  m₀ = %rpowᶻ +ℕ wordsize
 
   O⁰→Oᴱ : ∀ {i j} → O⁰ i j → Oᴱ
   O⁰→Oᴱ (#ₒ n)    = PUSH n
@@ -425,8 +430,11 @@ module Sic→EVM where
   O⁰→Oᴱ (getₒ x)  = PUSH x ⟫ SLOAD
   O⁰→Oᴱ (argₒ x)  = PUSH (x * wordsize) ⟫ CALLDATALOAD
   O⁰→Oᴱ (getₖₒ)   = SLOAD
-  O⁰→Oᴱ (H¹ₒ)     = PUSH 0  ⟫ MSTORE ⟫
+  O⁰→Oᴱ (H¹ₒ)     = PUSH %hash¹ ⟫ MSTORE ⟫
                     PUSH wordsize ⟫ PUSH 0 ⟫ KECCAK256
+  O⁰→Oᴱ H²ₒ     = PUSH %hash¹ ⟫ MSTORE ⟫
+                  PUSH %hash² ⟫ MSTORE ⟫
+                  PUSH (2 * wordsize) ⟫ PUSH 0 ⟫ KECCAK256
   O⁰→Oᴱ +ₒ      = XADD
   O⁰→Oᴱ −ₒ      = XSUB
   O⁰→Oᴱ ×ₒ      = RMUL
@@ -437,9 +445,6 @@ module Sic→EVM where
   O⁰→Oᴱ ¬ₒ      = ISZERO
   O⁰→Oᴱ ∧ₒ      = AND
   O⁰→Oᴱ ∨ₒ      = OR
-  O⁰→Oᴱ H²ₒ     = PUSH 0  ⟫ MSTORE ⟫
-                  PUSH wordsize ⟫ MSTORE ⟫
-                  PUSH 64 ⟫ PUSH 0 ⟫ KECCAK256
 
   record Index a : Set where
     constructor _at_from_
@@ -482,7 +487,12 @@ module Sic→EVM where
     O¹→Oᴱ n o@(_ ∥ _) = O¹→Oᴱ′ n o
     O¹→Oᴱ n o = tag o (O¹→Oᴱ′ n o)
 
+  -- This prelude is inserted into every compiled S².
   prelude = JUMP 6 ⟫ JUMPDEST ⟫ REVERT ⟫ JUMPDEST
+
+  -- This is the PC for jumping to the prelude’s revert.
+  revert-jumpdest : ℕ
+  revert-jumpdest = 4
 
   return : ℕ → ℕ → Oᴱ
   return offset n =
@@ -490,13 +500,17 @@ module Sic→EVM where
     PUSH (m₀ +ℕ offset * wordsize) ⟫
     RETURN
 
-  O²→Oᴱ : O² → Oᴱ
-  O²→Oᴱ (sigₒ s n k) =
+  sig-check : String → ℕ → Oᴱ
+  sig-check s n =
     PUSH 224 ⟫ PUSH 2 ⟫ EXP ⟫ PUSH 0 ⟫ CALLDATALOAD ⟫ DIV ⟫
-    PUSHSIG s ⟫ EQ ⟫ ISZERO ⟫ ELSE (O¹→Oᴱ (O¹-memory k) k ⟫
-    return (O¹-memory k) n)
-  O²→Oᴱ (seqₒ a b) =
-    O²→Oᴱ a ⟫ O²→Oᴱ b
+    PUSHSIG s ⟫ EQ
+
+  O²→Oᴱ : O² → Oᴱ
+  O²→Oᴱ (seqₒ a b)   = O²→Oᴱ a ⟫ O²→Oᴱ b
+  O²→Oᴱ (sigₒ s n k) =
+    sig-check s n ⟫ ISZERO ⟫
+      let m = O¹-memory k in
+        ELSE (O¹→Oᴱ m k ⟫ return m n)
 
   open Sⁿ    using (S²)
   open Sⁿ→Oⁿ using (S²→O²)
@@ -520,6 +534,8 @@ module Sic→EVM where
 --
 
 module EVM-Assembly where
+
+  open Sic→EVM using (revert-jumpdest)
 
   open import Data.Integer using (ℤ; +_)
     renaming (_+_ to _+ℤ_; _-_ to _-ℤ_; -_ to -ℤ_)
@@ -609,7 +625,7 @@ module EVM-Assembly where
   code′ (DUP x) = , op B1 (0x7f +ℕ x)
   code′ (SWAP x) = , op B1 (0x8f +ℕ x)
   code′ REVERT = , op B1 0xfd
-  code′ REVERTIF = , op B1 0x60 ⦂ op B1 0x04 ⦂ op B1 0x57
+  code′ REVERTIF = , op B1 0x60 ⦂ op B1 revert-jumpdest ⦂ op B1 0x57
   code′ RETURN = , op B1 0xf3
   code′ XOR = , op B1 0x18
 
