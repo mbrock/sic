@@ -40,7 +40,7 @@ module Sic where
 --   ● S², the contracts (combinations of named actions).
 
 open import Data.String using (String)
-open import Data.Nat using (ℕ; suc)
+open import Data.Nat using (ℕ; suc; _⊔_)
   renaming (_+_ to _+ℕ_; _*_ to _×ℕ_)
 
 module Sⁿ where
@@ -93,7 +93,10 @@ module Sⁿ where
     _≜_  : ℕ → S⁰ → S¹ 0
     _←_  : S⁰ → S⁰ → S¹ 0
     fyi  : (xs : List⁺ S⁰) → S¹ (length xs)
-    _│_  : ∀ {m n} → S¹ m → S¹ n → {_ : fyi-ok m n} → S¹ n
+    _│_  : ∀ {m n} → S¹ m → S¹ n → {_ : fyi-ok m n} → S¹ (m ⊔ n)
+
+  S¹-fyi-size : ∀ {n} → S¹ n → ℕ
+  S¹-fyi-size {n} _ = n
 
   fyi₁ : S⁰ → S¹ 1
   fyi₁ a = fyi [ a ]
@@ -186,7 +189,7 @@ module Oⁿ where
     fyiₒ  : List⁺ (O⁰ 0 1) → O¹
 
   data O² : Set where
-    sigₒ : String → O¹ → O²
+    sigₒ : String → ℕ → O¹ → O²
     seqₒ : O² → O² → O²
 
   infixr  5 _┆_
@@ -262,7 +265,7 @@ module Sⁿ→Oⁿ where
 
   -- Compiling signature dispatch sequences
   S²→O² : S² → O²
-  S²→O² (act s :: k) = sigₒ s (S¹→O¹ k)
+  S²→O² (act s :: k) = sigₒ s (S¹-fyi-size k) (S¹→O¹ k)
   S²→O² (a // b) = seqₒ (S²→O² a) (S²→O² b)
 
   -- Some compile-time assertions
@@ -471,10 +474,15 @@ module Sic→EVM where
 
   prelude = JUMP 6 ⟫ JUMPDEST ⟫ REVERT ⟫ JUMPDEST
 
+  return : ℕ → ℕ → Oᴱ
+  return offset n =
+    PUSH (n ×ℕ 32) ⟫ PUSH (64 +ℕ offset ×ℕ 32) ⟫ RETURN
+
   O²→Oᴱ : O² → Oᴱ
-  O²→Oᴱ (sigₒ s k) =
+  O²→Oᴱ (sigₒ s n k) =
     PUSH 224 ⟫ PUSH 2 ⟫ EXP ⟫ PUSH 0 ⟫ CALLDATALOAD ⟫ DIV ⟫
-    PUSHSIG s ⟫ EQ ⟫ ISZERO ⟫ ELSE (O¹→Oᴱ (O¹-memory k) k ⟫ STOP)
+    PUSHSIG s ⟫ EQ ⟫ ISZERO ⟫ ELSE (O¹→Oᴱ (O¹-memory k) k ⟫
+    return (O¹-memory k) n)
   O²→Oᴱ (seqₒ a b) =
     O²→Oᴱ a ⟫ O²→Oᴱ b
 
