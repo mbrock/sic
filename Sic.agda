@@ -725,17 +725,17 @@ module Solidity where
   open import Data.Product using () renaming (_×_ to _at_)
 
   ⟦_⟧ᶠʸⁱ : List⁺ S⁰ → List String
-  ⟦ xs ⟧ᶠʸⁱ = intersperse "\n"
+  ⟦ xs ⟧ᶠʸⁱ = intersperse ""
                (concatMap f (zip (toList xs) ("a" ∷ "b" ∷ "c" ∷ "d" ∷ [])))
     where
       f : S⁰ at String → List String
-      f (x Data.Product., k) =  k ∷ " = " ∷ ⟦ x ⟧⁰ ++ ";" ∷ []
+      f (x Data.Product., k) =  k ∷ " = " ∷ ⟦ x ⟧⁰ ++ ";\n" ∷ []
   ⟦_⟧¹ : ∀ {n} → S¹ n → List String
-  ⟦ iff x ⟧¹ = "require(" ∷ ⟦ x ⟧⁰ ++ ");" ∷ []
-  ⟦ i ≜ x ⟧¹ = "uint256 m" ∷ show 10 i ∷ " = " ∷ ⟦ x ⟧⁰ ++ ";" ∷ []
-  ⟦ k ← x ⟧¹ = "storage[" ∷ ⟦ k ⟧⁰ ++ "] = " ∷ ⟦ x ⟧⁰ ++ ";" ∷ []
+  ⟦ iff x ⟧¹ = "require(" ∷ ⟦ x ⟧⁰ ++ ");\n" ∷ []
+  ⟦ i ≜ x ⟧¹ = "uint256 m" ∷ show 10 i ∷ " = " ∷ ⟦ x ⟧⁰ ++ ";\n" ∷ []
+  ⟦ k ← x ⟧¹ = "storage[" ∷ ⟦ k ⟧⁰ ++ "] = " ∷ ⟦ x ⟧⁰ ++ ";\n" ∷ []
   ⟦ fyi xs ⟧¹ = ⟦ xs ⟧ᶠʸⁱ
-  ⟦ x₁ │ x₂ ⟧¹ = ⟦ x₁ ⟧¹ ++ "\n" ∷ ⟦ x₂ ⟧¹
+  ⟦ x₁ │ x₂ ⟧¹ = ⟦ x₁ ⟧¹ ++ "" ∷ ⟦ x₂ ⟧¹
 
   fyi-returns : ℕ → List String
   fyi-returns n =
@@ -747,7 +747,7 @@ module Solidity where
   ⟦ act sig :: k ⟧² =
     "function " ∷ sig ∷ "() returns (" ∷
     fyi-returns (S¹-fyi-size k) ++ ") {\n" ∷
-    ⟦ k ⟧¹ ++ "\n}" ∷ []
+    ⟦ k ⟧¹ ++ "}" ∷ []
   ⟦ x₁ // x₂ ⟧² =
     ⟦ x₁ ⟧² ++ "\n" ∷ ⟦ x₂ ⟧²
 
