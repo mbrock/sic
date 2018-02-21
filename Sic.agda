@@ -46,7 +46,7 @@ open import Data.Nat using (ℕ; suc)
 module Sⁿ where
   mutual
     data S⁰ : Set where
-      # : ℕ → S⁰
+      #_ : ℕ → S⁰
       u : S⁰
       t : S⁰
 
@@ -62,11 +62,11 @@ module Sⁿ where
       _≤_ : S⁰ → S⁰ → S⁰
       _≡_ : S⁰ → S⁰ → S⁰
 
-      get_  : ℕ → S⁰
+      get_  : S⁰ → S⁰
       ref_  : ℕ → S⁰
       arg_  : ℕ → S⁰
-      getₖ_ : ⟨S⁰⟩ → S⁰
-      sha_  : ⟨S⁰⟩ → S⁰
+
+      _,_   : S⁰ → S⁰ → S⁰
 
     data ⟨S⁰⟩ : Set where
       ⟨⟩_  : S⁰ → ⟨S⁰⟩
@@ -84,20 +84,20 @@ module Sⁿ where
   data S¹ : Set where
     iff_ : S⁰ → S¹
     _≜_  : ℕ → S⁰ → S¹
-    _←_  : ℕ → S⁰ → S¹
-    _←ₖ_ : ⟨S⁰⟩ → S⁰ → S¹
+    _←_  : S⁰ → S⁰ → S¹
     fyi_ : ⟨S⁰⟩ → S¹
     _│_  : S¹ → S¹ → S¹
 
   data S² : Set where
-    act_::_ : String → S¹ → S²
+    act_::_ : (sig : String) → S¹ → S²
     _//_ : S² → S² → S²
 
   infixr 1 _//_
   infixr 2 act_::_
   infixr 3 _│_
 
-  infix  10 iff_ _≜_ _←_ _←ₖ_
+  infix  10 iff_ _≜_ _←_
+  infix  10 fyi_
 
   infixl 31 _∨_
   infixl 32 _∧_
@@ -110,12 +110,13 @@ module Sⁿ where
   infixl 41 _×_
   infixl 42 -_
 
-  infix  50 getₖ_ get_ ref_ arg_ sha_
+  infix  50 get_ ref_ arg_
 
   infixr 60 ⟨_
   infixr 61 _,_
   infixr 62 _⟩
 
+  infix  90 #_
 
 -- Section 3: Oⁿ, the “Abstract Contract Machine”
 --
@@ -223,13 +224,12 @@ module Compile where
 
     -- Compiling expressions
     comp⁰ : ∀ {i} → S⁰ → O⁰ i (suc i)
+    comp⁰ (x₁ , x₂) = comp⁰ x₁ ┆ comp⁰ x₂ ┆ H²ₒ
     comp⁰ (# n)     = #ₒ n
     comp⁰ u         = callerₒ
-    comp⁰ (get x)   = getₒ x
+    comp⁰ (get x)   = comp⁰ x ┆ getₖₒ
     comp⁰ (ref x)   = refₒ x
     comp⁰ (arg x)   = argₒ x
-    comp⁰ (getₖ k)  = ⟨comp⁰⟩ʰ k ┆ getₖₒ
-    comp⁰ (sha k)   = ⟨comp⁰⟩ʰ k
     comp⁰ (x + y)   = comp⁰ x ┆ comp⁰ y ┆ +ₒ
     comp⁰ (x − y)   = comp⁰ x ┆ comp⁰ y ┆ −ₒ
     comp⁰ (- x)     = comp⁰ x ┆ #ₒ 0    ┆ −ₒ
@@ -247,8 +247,7 @@ module Compile where
   comp¹ : S¹ → O¹
   comp¹ (iff x)  = iffₒ (comp⁰ x)
   comp¹ (i ≜ x)  = defₒ i (comp⁰ x)
-  comp¹ (i ← x)  = setₒ i (comp⁰ x)
-  comp¹ (k ←ₖ x) = setₖₒ (comp⁰ x) (⟨comp⁰⟩ʰ k)
+  comp¹ (k ← x)  = setₖₒ (comp⁰ k) (comp⁰ x)
   comp¹ (fyi x)  = outₒ (⟨comp⁰⟩ᵒ x)
   comp¹ (x │ s)  = comp¹ x ∥ comp¹ s
 
@@ -266,7 +265,7 @@ module Compile where
     S¹-memory : S¹ → ℕ
     S¹-memory s = O¹-memory (comp¹ s)
 
-    example-1 : S¹-memory (0 ← # 0) ≣ 0
+    example-1 : S¹-memory (# 0 ← # 0) ≣ 0
     example-1 = refl
 
     example-2 : S¹-memory (0 ≜ # 0) ≣ 1
@@ -407,8 +406,8 @@ module Sic→EVM where
   O⁰→Oᴱ ∧ₒ      = AND
   O⁰→Oᴱ ∨ₒ      = OR
   O⁰→Oᴱ H²ₒ     = PUSH 0  ⟫ MSTORE ⟫
-                    PUSH 32 ⟫ MSTORE ⟫
-                    PUSH 64 ⟫ PUSH 0 ⟫ KECCAK256
+                  PUSH 32 ⟫ MSTORE ⟫
+                  PUSH 64 ⟫ PUSH 0 ⟫ KECCAK256
 
   record Index a : Set where
     constructor _at_from_
@@ -621,26 +620,23 @@ module Dappsys where
   x₁ = $ 0; x₂ = $ 1; x₃ = $ 2; x₄ = $ 3; x₅ = $ 4
 
   v = x₁
-  root = getₖ ⟨ ⓪ , u ⟩ ≡ ①
+  root = get ( ⓪ , u ) ≡ ①
 
-  _↑_ : ℕ → S⁰ → S¹
-  _↓_ : ℕ → S⁰ → S¹
-  _↥_ : ℕ → S⁰ → S¹
-  _↧_ : ℕ → S⁰ → S¹
-  _↥ₖ_ : ⟨S⁰⟩ → S⁰ → S¹
-  _↧ₖ_ : ⟨S⁰⟩ → S⁰ → S¹
+  _↑_ : S⁰ → S⁰ → S¹
+  _↓_ : S⁰ → S⁰ → S¹
+  _↥_ : S⁰ → S⁰ → S¹
+  _↧_ : S⁰ → S⁰ → S¹
 
   n ↑  v = n ← get n + v
-  n ↥  v = n ←  get  n + v │ iff get  n ≥ ⓪
-  k ↥ₖ v = k ←ₖ getₖ k + v │ iff getₖ k ≥ ⓪
-  n ↓  v = n ↑  (- v)
-  n ↧  v = n ↥  (- v)
-  k ↧ₖ v = k ↥ₖ (- v)
+  n ↥  v = n ← get n + v │ iff get n ≥ ⓪
+  n ↓  v = n ↑ (- v)
+  n ↧  v = n ↥ (- v)
 
-  _↧ₖ_↥ₖ_ : ⟨S⁰⟩ → ⟨S⁰⟩ → S⁰ → S¹
-  k₁ ↧ₖ k₂ ↥ₖ v = (k₁ ↧ₖ v) │ (k₂ ↥ₖ v)
+  _↧_↥_ : S⁰ → S⁰ → S⁰ → S¹
+  k₁ ↧ k₂ ↥ v = (k₁ ↧ v) │ (k₂ ↥ v)
 
-  infix 19 _↧ₖ_↥ₖ_
+  infix 19 _↧_↥_
+
 
 open Sⁿ public
 open Sic→EVM public

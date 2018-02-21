@@ -1,8 +1,8 @@
 module Example where
 
 open import Sic
+open Dappsys
 
-hello = act "poke" ::
-           iff (get 0) │ 0 ← (# 1)
-      // act "frob" ::
-           1 ← (# 0)
+hello =
+  act "cool" :: iff (get ①) │ ( u , t , ① ) ← u //
+  act "frob" :: ⓪ ← ① │ fyi ⟨ u , t ⟩
