@@ -1,33 +1,33 @@
 {-
-                         ┌────────────────────────────────┐
-                         │ Sic: Symbolic Instruction Code │
-                         └────────────────────────────────┘
+                  ┌────────────────────────────────┐
+                  │ Sic: Symbolic Instruction Code │
+                  └────────────────────────────────┘
 
-        We define Sic, a smart contract definition language, and a compiler.
+ We define Sic, a smart contract definition language, and a compiler.
 
-        Sic has no loops and its only conditional statement is assertion.
-        It is blockchain-agnostic; Sic programs do not depend on EVM details.
+ Sic has no loops and its only conditional statement is assertion.
+ It is blockchain-agnostic; Sic programs do not depend on EVM details.
 
-        We also define an “abstract contract machine” inspired by the EVM.
-        It is agnostic about hashing functions, memory layouts, ABI, etc.
+ We also define an “abstract contract machine” inspired by the EVM.
+ It is agnostic about hashing functions, memory layouts, ABI, etc.
 
-        Sic is compiled via abstract machine code into EVM code.
+ Sic is compiled via abstract machine code into EVM code.
 
-       ╔══════════════════════════════════════════════════════════════════════╗
-       ║ Copyright © 2018  Mikael Brockman, Daniel Brockman, Rain             ║
-       ║                                                                      ║
-       ║ This program is free software: you can redistribute it and/or modify ║
-       ║ it under the terms of the GNU Affero General Public License as       ║
-       ║ published by the Free Software Foundation, either version 3 of the   ║
-       ║ License, or (at your option) any later version.                      ║
-       ║                                                                      ║
-       ║ This program is distributed in the hope that it will be useful,      ║
-       ║ but WITHOUT ANY WARRANTY; without even the implied warranty of       ║
-       ║ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the        ║
-       ║ GNU Affero General Public License for more details.                  ║
-       ╚══════════════════════════════════════════════════════════════════════╝
+╔══════════════════════════════════════════════════════════════════════╗
+║ Copyright © 2018  Mikael Brockman, Daniel Brockman, Rain             ║
+║                                                                      ║
+║ This program is free software: you can redistribute it and/or modify ║
+║ it under the terms of the GNU Affero General Public License as       ║
+║ published by the Free Software Foundation, either version 3 of the   ║
+║ License, or (at your option) any later version.                      ║
+║                                                                      ║
+║ This program is distributed in the hope that it will be useful,      ║
+║ but WITHOUT ANY WARRANTY; without even the implied warranty of       ║
+║ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the        ║
+║ GNU Affero General Public License for more details.                  ║
+╚══════════════════════════════════════════════════════════════════════╝
+
 -}
-
 
 module Sic where
 
@@ -39,34 +39,26 @@ module Sic where
 --   ● S¹, the actions (decisions and updates); and
 --   ● S², the contracts (combinations of named actions).
 
+open import Data.Unit  using (⊤)
+open import Data.Empty using (⊥)
 open import Data.String using (String)
 open import Data.Nat using (ℕ; suc; _⊔_)
   renaming (_+_ to _+ℕ_; _*_ to _*_)
 
 module Sⁿ where
+  data Arg : Set where $ : ℕ → Arg
+  data Ref : Set where # : ℕ → Ref
+
   mutual
     data S⁰ : Set where
-      #_ : ℕ → S⁰
-      u : S⁰
-      t : S⁰
-
-      -_  : S⁰ → S⁰
-      _+_ : S⁰ → S⁰ → S⁰
-      _−_ : S⁰ → S⁰ → S⁰
-      _×_ : S⁰ → S⁰ → S⁰
-      _^_ : S⁰ → S⁰ → S⁰
-      ¬_  : S⁰ → S⁰
-      _∨_ : S⁰ → S⁰ → S⁰
-      _∧_ : S⁰ → S⁰ → S⁰
-      _≥_ : S⁰ → S⁰ → S⁰
-      _≤_ : S⁰ → S⁰ → S⁰
-      _≡_ : S⁰ → S⁰ → S⁰
-
+      _+_ _−_ _×_ _^_ _∨_ _∧_ _≥_ _≤_ _≡_ : S⁰ → S⁰ → S⁰
+      -_ ¬_ : S⁰ → S⁰
+      u t   : S⁰
+      nat_  : ℕ → S⁰
       get_  : S⁰ → S⁰
-      ref_  : ℕ → S⁰
-      arg_  : ℕ → S⁰
-
-      ⟨_   : ⟨S⁰⟩ → S⁰
+      ref_  : Ref → S⁰
+      arg_  : Arg → S⁰
+      ⟨_    : ⟨S⁰⟩ → S⁰
 
     data ⟨S⁰⟩ : Set where
       ⟨⟩_  : S⁰ → ⟨S⁰⟩
@@ -75,13 +67,26 @@ module Sⁿ where
     _⟩ : S⁰ → ⟨S⁰⟩
     x ⟩ = ⟨⟩ x
 
-  $ : ℕ → S⁰
-  $ i = arg i
+  -- We define a “type class” for overloading number literals.
+  record IsNumber {a} (A : Set a) : Set a where
+    field
+      from-ℕ : ℕ → A
+
+  open IsNumber {{...}} public
+
+  instance
+    ℕ-IsNumber   : IsNumber ℕ
+    S⁰-IsNumber  : IsNumber S⁰
+    Ref-IsNumber : IsNumber Ref
+    Arg-IsNumber : IsNumber Arg
+    from-ℕ {{ℕ-IsNumber}}   n = n
+    from-ℕ {{S⁰-IsNumber}}  n = nat n
+    from-ℕ {{Ref-IsNumber}} n = # n
+    from-ℕ {{Arg-IsNumber}} n = $ n
+
+  {-# BUILTIN FROMNAT from-ℕ #-}
 
   open import Data.List.NonEmpty using (List⁺; [_]; _∷⁺_; length)
-
-  data   ⊥ : Set where
-  record ⊤ : Set where
 
   fyi-ok : ℕ → ℕ → Set
   fyi-ok 0       _       = ⊤
@@ -137,7 +142,6 @@ module Sⁿ where
   infixr 61 _,_
   infixr 62 _⟩
 
-  infix  90 #_
 
 -- Section 3: Oⁿ, the “Abstract Contract Machine”
 --
@@ -237,11 +241,11 @@ module Sⁿ→Oⁿ where
     -- Compiling expressions
     S⁰→O⁰ : ∀ {i} → S⁰ → O⁰ i (suc i)
     S⁰→O⁰ (⟨ xs)    = ⟨S⁰⟩→O⁰ xs
-    S⁰→O⁰ (# n)     = #ₒ n
+    S⁰→O⁰ (nat n)     = #ₒ n
     S⁰→O⁰ u         = callerₒ
     S⁰→O⁰ (get x)   = S⁰→O⁰ x ┆ getₖₒ
-    S⁰→O⁰ (ref x)   = refₒ x
-    S⁰→O⁰ (arg x)   = argₒ x
+    S⁰→O⁰ (ref (# x)) = refₒ x
+    S⁰→O⁰ (arg ($ x)) = argₒ x
     S⁰→O⁰ (x + y)   = S⁰→O⁰ y ┆ S⁰→O⁰ x ┆ +ₒ
     S⁰→O⁰ (x − y)   = S⁰→O⁰ y ┆ S⁰→O⁰ x ┆ −ₒ
     S⁰→O⁰ (- x)     = #ₒ 0    ┆ S⁰→O⁰ x ┆ −ₒ
@@ -277,10 +281,10 @@ module Sⁿ→Oⁿ where
     S¹-memory : ∀ {n} → S¹ n → ℕ
     S¹-memory s = O¹-memory (S¹→O¹ s)
 
-    example-1 : S¹-memory {0} (# 0 ← # 0) ≣ 0
+    example-1 : S¹-memory {0} (nat 0 ← nat 0) ≣ 0
     example-1 = refl
 
-    example-2 : S¹-memory {0} (0 ≜ # 0) ≣ 1
+    example-2 : S¹-memory {0} (0 ≜ nat 0) ≣ 1
     example-2 = refl
 
     example-3 : S¹-memory {0} (0 ≜ ref 1 + ref 2) ≣ 3
@@ -406,6 +410,7 @@ module Sic→EVM where
   open EVM
   open EVM-Math
 
+  wordsize : ℕ
   wordsize = 32
 
   -- We use three reserved variables: two for hashing, one for RPOW.
@@ -651,21 +656,22 @@ module Main where
 module Dappsys where
   open Sⁿ
 
-  ⓪ = # 0; ① = # 1; ② = # 2; ③ = # 3; ④ = # 4
-  x₁ = $ 0; x₂ = $ 1; x₃ = $ 2; x₄ = $ 3; x₅ = $ 4
+  root = get ⟨ 0 , u ⟩ ≡ 1
+
+  x₁ x₂ x₃ x₄ x₅ : Arg
+  x₁ = 0; x₂ = 1; x₃ = 2; x₄ = 3; x₅ = 4
 
   v = x₁
-  root = get ⟨ ⓪ , u ⟩ ≡ ①
 
   _↑_ : S⁰ → S⁰ → S¹ 0
   _↓_ : S⁰ → S⁰ → S¹ 0
   _↥_ : S⁰ → S⁰ → S¹ 0
   _↧_ : S⁰ → S⁰ → S¹ 0
 
-  n ↑  v = n ← get n + v
-  n ↥  v = n ← get n + v │ iff get n ≥ ⓪
-  n ↓  v = n ↑ (- v)
-  n ↧  v = n ↥ (- v)
+  n ↑ v = n ← get n + v
+  n ↥ v = n ← get n + v │ iff get n ≥ 0
+  n ↓ v = n ↑ (- v)
+  n ↧ v = n ↥ (- v)
 
   _↧_↥_ : S⁰ → S⁰ → S⁰ → S¹ 0
   k₁ ↧ k₂ ↥ v = (k₁ ↧ v) │ (k₂ ↥ v)
@@ -695,12 +701,12 @@ module Solidity where
       "keccak256(" ∷ ⟦ x ⟧⁰ ++ ", " ∷ sequence s ++ ")" ∷ []
 
     ⟦_⟧⁰ : S⁰ → List String
-    ⟦ # x ⟧⁰ = show 10 x ∷ []
+    ⟦ nat x ⟧⁰ = show 10 x ∷ []
     ⟦ u ⟧⁰ = "msg.sender" ∷ []
     ⟦ t ⟧⁰ = "block.timestamp" ∷ []
     ⟦ get x ⟧⁰ = "storage[" ∷ ⟦ x ⟧⁰ ++ "]" ∷ []
-    ⟦ ref x ⟧⁰ = "m" ∷ show 10 x ∷ []
-    ⟦ arg x ⟧⁰ = "p" ∷ show 10 x ∷ []
+    ⟦ ref (# x) ⟧⁰ = "m" ∷ show 10 x ∷ []
+    ⟦ arg ($ x) ⟧⁰ = "p" ∷ show 10 x ∷ []
     ⟦ ⟨ x ⟧⁰ = sequence x
     ⟦ x + x₁ ⟧⁰ = "(" ∷ ⟦ x ⟧⁰ ++ " + " ∷ ⟦ x₁ ⟧⁰ ++ ")" ∷ []
     ⟦ x − x₁ ⟧⁰ = "(" ∷ ⟦ x ⟧⁰ ++ " - " ∷ ⟦ x₁ ⟧⁰ ++ ")" ∷ []
@@ -747,6 +753,7 @@ module Solidity where
 
   S²→Solidity : S² → String
   S²→Solidity s = Data.List.foldr Data.String._++_ "" ⟦ s ⟧²
+
 
 open Sⁿ public
 open Sic→EVM public
