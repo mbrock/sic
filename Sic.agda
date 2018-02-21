@@ -78,29 +78,37 @@ module Sⁿ where
   $ : ℕ → S⁰
   $ i = arg i
 
-  open import Data.List.NonEmpty using (List⁺; [_]; _∷⁺_)
+  open import Data.List.NonEmpty using (List⁺; [_]; _∷⁺_; length)
 
-  data S¹ : Set where
-    iff_ : S⁰ → S¹
-    _≜_  : ℕ → S⁰ → S¹
-    _←_  : S⁰ → S⁰ → S¹
-    out  : List⁺ S⁰ → S¹
-    _│_  : S¹ → S¹ → S¹
+  data   ⊥ : Set where
+  record ⊤ : Set where
 
-  fyi₁_ : S⁰ → S¹
-  fyi₁_ a = out [ a ]
+  fyi-ok : ℕ → ℕ → Set
+  fyi-ok 0       _       = ⊤
+  fyi-ok (suc _) 0       = ⊤
+  fyi-ok (suc _) (suc _) = ⊥
 
-  fyi₂_ : S⁰ → S⁰ → S¹
-  fyi₂_ a b = out (a ∷⁺ [ b ])
+  data S¹ : ℕ → Set where
+    iff_ : S⁰ → S¹ 0
+    _≜_  : ℕ → S⁰ → S¹ 0
+    _←_  : S⁰ → S⁰ → S¹ 0
+    fyi  : (xs : List⁺ S⁰) → S¹ (length xs)
+    _│_  : ∀ {m n} → S¹ m → S¹ n → {_ : fyi-ok m n} → S¹ n
 
-  fyi₃_ : S⁰ → S⁰ → S⁰ → S¹
-  fyi₃_ a b c = out (a ∷⁺ b ∷⁺ [ c ])
+  fyi₁ : S⁰ → S¹ 1
+  fyi₁ a = fyi [ a ]
 
-  fyi₄_ : S⁰ → S⁰ → S⁰ → S⁰ → S¹
-  fyi₄_ a b c d = out (a ∷⁺ b ∷⁺ c ∷⁺ [ d ])
+  fyi₂ : S⁰ → S⁰ → S¹ 2
+  fyi₂ a b = fyi (a ∷⁺ [ b ])
+
+  fyi₃ : S⁰ → S⁰ → S⁰ → S¹ 3
+  fyi₃ a b c = fyi (a ∷⁺ b ∷⁺ [ c ])
+
+  fyi₄ : S⁰ → S⁰ → S⁰ → S⁰ → S¹ 4
+  fyi₄ a b c d = fyi (a ∷⁺ b ∷⁺ c ∷⁺ [ d ])
 
   data S² : Set where
-    act_::_ : (sig : String) → S¹ → S²
+    act_::_ : ∀ {n} → (sig : String) → S¹ n → S²
     _//_ : S² → S² → S²
 
   infixr 1 _//_
@@ -108,7 +116,6 @@ module Sⁿ where
   infixr 3 _│_
 
   infix  10 iff_ _≜_ _←_
-  infix  10 fyi₁_ fyi₂_ fyi₃_ fyi₄_
 
   infixl 31 _∨_
   infixl 32 _∧_
@@ -176,7 +183,7 @@ module Oⁿ where
     setₖₒ : O⁰ 0 1 → O⁰ 0 1 → O¹
     defₒ  : ℕ → O⁰ 0 1 → O¹
     setₒ  : ℕ → O⁰ 0 1 → O¹
-    outₒ  : List⁺ (O⁰ 0 1) → O¹
+    fyiₒ  : List⁺ (O⁰ 0 1) → O¹
 
   data O² : Set where
     sigₒ : String → O¹ → O²
@@ -197,7 +204,7 @@ module Oⁿ where
 
   O¹-memory : O¹ → ℕ
   O¹-memory (defₒ i x) = suc i ⊔ O⁰-memory x
-  O¹-memory (outₒ xs) = foldr₁ _⊔_ (map⁺ O⁰-memory xs)
+  O¹-memory (fyiₒ xs) = foldr₁ _⊔_ (map⁺ O⁰-memory xs)
     where
       open import Data.List.NonEmpty using (foldr₁)
              renaming (map to map⁺)
@@ -246,12 +253,12 @@ module Sⁿ→Oⁿ where
     S⁰→O⁰ t         = timeₒ
 
   -- Compiling statement sequences
-  S¹→O¹ : S¹ → O¹
+  S¹→O¹ : ∀ {n} → S¹ n → O¹
   S¹→O¹ (iff x)  = iffₒ (S⁰→O⁰ x)
   S¹→O¹ (i ≜ x)  = defₒ i (S⁰→O⁰ x)
   S¹→O¹ (k ← x)  = setₖₒ (S⁰→O⁰ k) (S⁰→O⁰ x)
   S¹→O¹ (x │ s)  = S¹→O¹ x ∥ S¹→O¹ s
-  S¹→O¹ (out x)  = outₒ (map⁺ S⁰→O⁰ x)
+  S¹→O¹ (fyi x)  = fyiₒ (map⁺ S⁰→O⁰ x)
 
   -- Compiling signature dispatch sequences
   S²→O² : S² → O²
@@ -264,16 +271,16 @@ module Sⁿ→Oⁿ where
     open import Relation.Binary.PropositionalEquality
       using (refl) renaming (_≡_ to _≣_)
 
-    S¹-memory : S¹ → ℕ
+    S¹-memory : ∀ {n} → S¹ n → ℕ
     S¹-memory s = O¹-memory (S¹→O¹ s)
 
-    example-1 : S¹-memory (# 0 ← # 0) ≣ 0
+    example-1 : S¹-memory {0} (# 0 ← # 0) ≣ 0
     example-1 = refl
 
-    example-2 : S¹-memory (0 ≜ # 0) ≣ 1
+    example-2 : S¹-memory {0} (0 ≜ # 0) ≣ 1
     example-2 = refl
 
-    example-3 : S¹-memory (0 ≜ ref 1 + ref 2) ≣ 3
+    example-3 : S¹-memory {0} (0 ≜ ref 1 + ref 2) ≣ 3
     example-3 = refl
 
 
@@ -442,8 +449,8 @@ module Sic→EVM where
   O⁰#→Oᴱ : Index (O⁰ 0 1) → Oᴱ
   O⁰#→Oᴱ (x at j from i) = O⁰→Oᴱ x ⟫ PUSH (i +ℕ j ×ℕ 32) ⟫ MSTORE
 
-  outₒ→Oᴱ : ℕ → List⁺ (O⁰ 0 1) → Oᴱ
-  outₒ→Oᴱ i xs = foldr₁ _⟫_ (map O⁰#→Oᴱ (index⁺ i xs)) ⟫ return
+  fyiₒ→Oᴱ : ℕ → List⁺ (O⁰ 0 1) → Oᴱ
+  fyiₒ→Oᴱ i xs = foldr₁ _⟫_ (map O⁰#→Oᴱ (index⁺ i xs)) ⟫ return
     where
       open import Data.List.NonEmpty using (foldr₁; map; length)
       return = PUSH (32 ×ℕ length xs) ⟫ PUSH i ⟫ RETURN
@@ -454,7 +461,7 @@ module Sic→EVM where
     O¹→Oᴱ′ n (defₒ i x)   = O⁰→Oᴱ x ⟫ PUSH (i ×ℕ 32 +ℕ 64) ⟫ MSTORE
     O¹→Oᴱ′ n (setₒ i x)   = O⁰→Oᴱ x ⟫ PUSH i ⟫ SSTORE
     O¹→Oᴱ′ n (setₖₒ k x)  = O⁰→Oᴱ x ⟫ O⁰→Oᴱ k ⟫ SSTORE
-    O¹→Oᴱ′ n (outₒ xs)    = outₒ→Oᴱ offset xs
+    O¹→Oᴱ′ n (fyiₒ xs)    = fyiₒ→Oᴱ offset xs
       where offset = suc n ×ℕ 32 +ℕ 64
     O¹→Oᴱ′ n (o₁ ∥ o₂)    = O¹→Oᴱ n o₁ ⟫ O¹→Oᴱ n o₂
 
@@ -635,17 +642,17 @@ module Dappsys where
   v = x₁
   root = get ⟨ ⓪ , u ⟩ ≡ ①
 
-  _↑_ : S⁰ → S⁰ → S¹
-  _↓_ : S⁰ → S⁰ → S¹
-  _↥_ : S⁰ → S⁰ → S¹
-  _↧_ : S⁰ → S⁰ → S¹
+  _↑_ : S⁰ → S⁰ → S¹ 0
+  _↓_ : S⁰ → S⁰ → S¹ 0
+  _↥_ : S⁰ → S⁰ → S¹ 0
+  _↧_ : S⁰ → S⁰ → S¹ 0
 
   n ↑  v = n ← get n + v
   n ↥  v = n ← get n + v │ iff get n ≥ ⓪
   n ↓  v = n ↑ (- v)
   n ↧  v = n ↥ (- v)
 
-  _↧_↥_ : S⁰ → S⁰ → S⁰ → S¹
+  _↧_↥_ : S⁰ → S⁰ → S⁰ → S¹ 0
   k₁ ↧ k₂ ↥ v = (k₁ ↧ v) │ (k₂ ↥ v)
 
   infix 19 _↧_↥_

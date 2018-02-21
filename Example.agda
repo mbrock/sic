@@ -3,6 +3,4 @@ module Example where
 open import Sic
 open Dappsys
 
-hello =
-  act "cool" :: iff (get ①) │ ( u , t , ① ) ← u //
-  act "frob" :: ⓪ ← ① │ fyi ⟨ u , t ⟩
+pow = act "cool" :: fyi₂ (# 1) (# 2) │ iff (# 0 ≡ # 1)
