@@ -31,6 +31,18 @@
 
 module Sic where
 
+open import Algebra.FunctionProperties
+  using (Op₁; Op₂)
+
+open import Data.Nat
+     using (ℕ; suc; _⊔_; _*_)
+  renaming (_+_ to _+ℕ_)
+
+open import Data.Empty  using (⊥)
+open import Data.Unit   using (⊤)
+open import Data.String using (String)
+
+
 -- Section 1: Sic syntax data types
 --
 -- We define a hierarchy of syntax data types:
@@ -38,70 +50,67 @@ module Sic where
 --   ● S⁰, the expressions (pure formulas);
 --   ● S¹, the actions (decisions and updates); and
 --   ● S², the contracts (combinations of named actions).
-
-open import Data.Unit  using (⊤)
-open import Data.Empty using (⊥)
-open import Data.String using (String)
-open import Data.Nat using (ℕ; suc; _⊔_)
-  renaming (_+_ to _+ℕ_; _*_ to _*_)
+--
+-- Defining S³ for multi-contract systems is an exercise for the reader.
+--
 
 module Sⁿ where
   data Arg : Set where $ : ℕ → Arg
   data Ref : Set where # : ℕ → Ref
 
   mutual
-    data S⁰ : Set where
-      _+_ _−_ _×_ _^_ _∨_ _∧_ _≥_ _≤_ _≡_ : S⁰ → S⁰ → S⁰
-      -_ ¬_ : S⁰ → S⁰
-      u t   : S⁰
-      nat_  : ℕ → S⁰
-      get_  : S⁰ → S⁰
-      ref_  : Ref → S⁰
-      arg_  : Arg → S⁰
-      ⟨_    : ⟨S⁰⟩ → S⁰
 
+    -- S⁰, the set of Sic expressions
+    data S⁰ : Set where
+      -_ ¬_               : Op₁ S⁰   -- Unary negation
+      _+_ _−_ _×_ _^_     : Op₂ S⁰   -- Binary math
+      _∨_ _∧_ _≥_ _≤_ _≡_ : Op₂ S⁰   -- Binary logic
+
+      u     : S⁰            -- The invoking user's ID
+      t     : S⁰            -- The current time
+      nat_  : ℕ → S⁰        -- A natural number literal
+      get_  : S⁰ → S⁰       -- Value of a storage slot
+      ref_  : Ref → S⁰      -- Value of a memory slot
+      arg_  : Arg → S⁰      -- Value of an argument
+      ⟨_    : ⟨S⁰⟩ → S⁰     -- Hash of a sequence of values
+
+    -- A nonempty list of S⁰ terms.
     data ⟨S⁰⟩ : Set where
-      ⟨⟩_  : S⁰ → ⟨S⁰⟩
+      one-S⁰  : S⁰ → ⟨S⁰⟩
       _,_  : S⁰ → ⟨S⁰⟩ → ⟨S⁰⟩
 
+    -- Some trickery to make ⟨ x₁ , x₂ , ... ⟩ work syntactically.
     _⟩ : S⁰ → ⟨S⁰⟩
-    x ⟩ = ⟨⟩ x
-
-  -- We define a “type class” for overloading number literals.
-  record IsNumber {a} (A : Set a) : Set a where
-    field
-      from-ℕ : ℕ → A
-
-  open IsNumber {{...}} public
-
-  instance
-    ℕ-IsNumber   : IsNumber ℕ
-    S⁰-IsNumber  : IsNumber S⁰
-    Ref-IsNumber : IsNumber Ref
-    Arg-IsNumber : IsNumber Arg
-    from-ℕ {{ℕ-IsNumber}}   n = n
-    from-ℕ {{S⁰-IsNumber}}  n = nat n
-    from-ℕ {{Ref-IsNumber}} n = # n
-    from-ℕ {{Arg-IsNumber}} n = $ n
-
-  {-# BUILTIN FROMNAT from-ℕ #-}
+    x ⟩ = one-S⁰ x
 
   open import Data.List.NonEmpty using (List⁺; [_]; _∷⁺_; length)
 
-  fyi-ok : ℕ → ℕ → Set
-  fyi-ok 0       _       = ⊤
-  fyi-ok (suc _) 0       = ⊤
-  fyi-ok (suc _) (suc _) = ⊥
+  mutual
 
-  data S¹ : ℕ → Set where
-    iff_ : S⁰ → S¹ 0
-    _≜_  : ℕ → S⁰ → S¹ 0
-    _←_  : S⁰ → S⁰ → S¹ 0
-    fyi  : (xs : List⁺ S⁰) → S¹ (length xs)
-    _│_  : ∀ {m n} → S¹ m → S¹ n → {_ : fyi-ok m n} → S¹ (m ⊔ n)
+    -- S¹, the set of Sic actions.
+    -- The ℕ type parameter is the number of values returned via “fyi”.
+    data S¹ : ℕ → Set where
+      iff_ :      S⁰ → S¹ 0                    -- Reverting assertion
+      _≜_  : ℕ →  S⁰ → S¹ 0                    -- Local definition
+      _←_  : S⁰ → S⁰ → S¹ 0                    -- Storage save
+      fyi  : (xs : List⁺ S⁰) → S¹ (length xs)  -- Return assignment
+
+      _│_  : ∀ {m n}                           -- Action sequence
+           → S¹ m → S¹ n → {_ : fyi-ok m n}
+           → S¹ (m ⊔ n)
+
+    -- This is for checking that you don’t use “fyi” more than once
+    -- in one action.
+    fyi-ok : ℕ → ℕ → Set
+    fyi-ok 0       _       = ⊤
+    fyi-ok (suc _) 0       = ⊤
+    fyi-ok (suc _) (suc _) = ⊥
 
   S¹-fyi-size : ∀ {n} → S¹ n → ℕ
   S¹-fyi-size {n} _ = n
+
+
+  -- We define helpers for returning up to 4 values.
 
   fyi₁ : S⁰ → S¹ 1
   fyi₁ a = fyi [ a ]
@@ -115,9 +124,14 @@ module Sⁿ where
   fyi₄ : S⁰ → S⁰ → S⁰ → S⁰ → S¹ 4
   fyi₄ a b c d = fyi (a ∷⁺ b ∷⁺ c ∷⁺ [ d ])
 
+
+  -- S², the set of Sic contracts with named actions.
   data S² : Set where
-    act_::_ : ∀ {n} → (sig : String) → S¹ n → S²
-    _//_ : S² → S² → S²
+    act_::_ : ∀ {n} → String → S¹ n → S²
+    _//_    : Op₂ S²
+
+
+  -- Syntax precedence list
 
   infixr 1 _//_
   infixr 2 act_::_
@@ -143,6 +157,29 @@ module Sⁿ where
   infixr 62 _⟩
 
 
+module OverloadedNumbers where
+  open Sⁿ
+
+  -- We define a “type class” for overloading number literals.
+  record IsNumber {a} (A : Set a) : Set a where
+    field
+      from-ℕ : ℕ → A
+
+  open IsNumber {{...}} public
+
+  instance
+    ℕ-IsNumber   : IsNumber ℕ
+    S⁰-IsNumber  : IsNumber S⁰
+    Ref-IsNumber : IsNumber Ref
+    Arg-IsNumber : IsNumber Arg
+    from-ℕ {{ℕ-IsNumber}}   n = n
+    from-ℕ {{S⁰-IsNumber}}  n = nat n
+    from-ℕ {{Ref-IsNumber}} n = # n
+    from-ℕ {{Arg-IsNumber}} n = $ n
+
+  {-# BUILTIN FROMNAT from-ℕ #-}
+
+
 -- Section 3: Oⁿ, the “Abstract Contract Machine”
 --
 -- We define a stack machine that is more general than the EVM.
@@ -162,35 +199,35 @@ module Oⁿ where
 
   data O⁰ : ℕ → ℕ → Set where
     _┆_     : ∀ {i j k} → O⁰ i j → O⁰ j k → O⁰ i k
-    #ₒ      : ∀ {i} → ℕ → O⁰ i (suc i)
-    callerₒ : ∀ {i} → O⁰ i (suc i)
-    timeₒ   : ∀ {i} → O⁰ i (suc i)
-    getₖₒ   : ∀ {i} → O⁰ (suc i) (suc i)
-    H¹ₒ     : ∀ {i} → O⁰ (suc i) (suc i)
-    H²ₒ     : ∀ {i} → O⁰ (suc (suc i)) (suc i)
-    +ₒ      : ∀ {i} → O⁰ (suc (suc i)) (suc i)
-    −ₒ      : ∀ {i} → O⁰ (suc (suc i)) (suc i)
-    ×ₒ      : ∀ {i} → O⁰ (suc (suc i)) (suc i)
-    ^ₒ      : ∀ {i} → O⁰ (suc (suc i)) (suc i)
-    ≡ₒ      : ∀ {i} → O⁰ (suc (suc i)) (suc i)
-    ≥ₒ      : ∀ {i} → O⁰ (suc (suc i)) (suc i)
-    ≤ₒ      : ∀ {i} → O⁰ (suc (suc i)) (suc i)
-    ¬ₒ      : ∀ {i} → O⁰ (suc i) (suc i)
-    ∧ₒ      : ∀ {i} → O⁰ (suc (suc i)) (suc i)
-    ∨ₒ      : ∀ {i} → O⁰ (suc (suc i)) (suc i)
-    refₒ    : ∀ {i} → ℕ → O⁰ i (suc i)
-    getₒ    : ∀ {i} → ℕ → O⁰ i (suc i)
-    argₒ    : ∀ {i} → ℕ → O⁰ i (suc i)
+    #ₒ      : ∀ {i} → ℕ → O⁰           i   (suc i)
+    refₒ    : ∀ {i} → ℕ → O⁰           i   (suc i)
+    getₒ    : ∀ {i} → ℕ → O⁰           i   (suc i)
+    argₒ    : ∀ {i} → ℕ → O⁰           i   (suc i)
+    callerₒ : ∀ {i}     → O⁰           i   (suc i)
+    timeₒ   : ∀ {i}     → O⁰           i   (suc i)
+    getₖₒ   : ∀ {i}     → O⁰      (suc i)  (suc i)
+    H¹ₒ     : ∀ {i}     → O⁰      (suc i)  (suc i)
+    H²ₒ     : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
+    +ₒ      : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
+    −ₒ      : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
+    ×ₒ      : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
+    ^ₒ      : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
+    ≡ₒ      : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
+    ≥ₒ      : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
+    ≤ₒ      : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
+    ¬ₒ      : ∀ {i}     → O⁰      (suc i)  (suc i)
+    ∧ₒ      : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
+    ∨ₒ      : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
 
   open import Data.List.NonEmpty using (List⁺)
 
   data O¹ : Set where
     _∥_   : O¹ → O¹ → O¹
-    iffₒ  : O⁰ 0 1 → O¹
-    setₖₒ : O⁰ 0 1 → O⁰ 0 1 → O¹
-    defₒ  : ℕ → O⁰ 0 1 → O¹
-    setₒ  : ℕ → O⁰ 0 1 → O¹
-    fyiₒ  : List⁺ (O⁰ 0 1) → O¹
+    iffₒ  :          O⁰ 0 1  → O¹
+    setₖₒ : O⁰ 0 1 → O⁰ 0 1  → O¹
+    defₒ  :      ℕ → O⁰ 0 1  → O¹
+    setₒ  :      ℕ → O⁰ 0 1  → O¹
+    fyiₒ  :  List⁺  (O⁰ 0 1) → O¹
 
   data O² : Set where
     sigₒ : String → ℕ → O¹ → O²
@@ -203,22 +240,23 @@ module Oⁿ where
   -- we need to compute the memory requirements of operations.
 
   open Data.Nat using (_⊔_)
+  open import Data.List.NonEmpty
+    using (foldr₁)
+    renaming (map to map⁺)
 
   O⁰-memory : ∀ {m n} → O⁰ m n → ℕ
-  O⁰-memory (refₒ i) = suc i
+  O⁰-memory (refₒ i)  = suc i
   O⁰-memory (o₁ ┆ o₂) = O⁰-memory o₁ ⊔ O⁰-memory o₂
   O⁰-memory x = 0
 
   O¹-memory : O¹ → ℕ
-  O¹-memory (defₒ i x) = suc i ⊔ O⁰-memory x
-  O¹-memory (fyiₒ xs) = foldr₁ _⊔_ (map⁺ O⁰-memory xs)
-    where
-      open import Data.List.NonEmpty using (foldr₁)
-             renaming (map to map⁺)
-  O¹-memory (iffₒ x) = O⁰-memory x
+  O¹-memory (defₒ i x)  = suc i ⊔ O⁰-memory x
+  O¹-memory (fyiₒ xs)   = foldr₁ _⊔_ (map⁺ O⁰-memory xs)
+  O¹-memory (iffₒ x)    = O⁰-memory x
   O¹-memory (setₖₒ k x) = O⁰-memory x
-  O¹-memory (setₒ i x) = O⁰-memory x
-  O¹-memory (o₁ ∥ o₂) = O¹-memory o₁ ⊔ O¹-memory o₂
+  O¹-memory (setₒ i x)  = O⁰-memory x
+  O¹-memory (o₁ ∥ o₂)   = O¹-memory o₁ ⊔ O¹-memory o₂
+
 
 -- Section 4: Compiling Sic to abstract machine code
 --
@@ -235,42 +273,42 @@ module Sⁿ→Oⁿ where
 
   mutual
     ⟨S⁰⟩→O⁰ : ∀ {i} → ⟨S⁰⟩ → O⁰ i (suc i)
-    ⟨S⁰⟩→O⁰ (⟨⟩ x)   =              S⁰→O⁰ x ┆ H¹ₒ
-    ⟨S⁰⟩→O⁰ (x , xs) = ⟨S⁰⟩→O⁰ xs ┆ S⁰→O⁰ x ┆ H²ₒ
+    ⟨S⁰⟩→O⁰ (one-S⁰ x) =              ⟦ x ⟧⁰ ┆ H¹ₒ
+    ⟨S⁰⟩→O⁰ (x , xs)   = ⟨S⁰⟩→O⁰ xs ┆ ⟦ x ⟧⁰ ┆ H²ₒ
 
     -- Compiling expressions
-    S⁰→O⁰ : ∀ {i} → S⁰ → O⁰ i (suc i)
-    S⁰→O⁰ (⟨ xs)    = ⟨S⁰⟩→O⁰ xs
-    S⁰→O⁰ (nat n)     = #ₒ n
-    S⁰→O⁰ u         = callerₒ
-    S⁰→O⁰ (get x)   = S⁰→O⁰ x ┆ getₖₒ
-    S⁰→O⁰ (ref (# x)) = refₒ x
-    S⁰→O⁰ (arg ($ x)) = argₒ x
-    S⁰→O⁰ (x + y)   = S⁰→O⁰ y ┆ S⁰→O⁰ x ┆ +ₒ
-    S⁰→O⁰ (x − y)   = S⁰→O⁰ y ┆ S⁰→O⁰ x ┆ −ₒ
-    S⁰→O⁰ (- x)     = #ₒ 0    ┆ S⁰→O⁰ x ┆ −ₒ
-    S⁰→O⁰ (x × y)   = S⁰→O⁰ y ┆ S⁰→O⁰ x ┆ ×ₒ
-    S⁰→O⁰ (x ^ y)   = S⁰→O⁰ y ┆ S⁰→O⁰ x ┆ ^ₒ
-    S⁰→O⁰ (¬ x)     = S⁰→O⁰ x ┆ ¬ₒ
-    S⁰→O⁰ (x ∨ y)   = S⁰→O⁰ y ┆ S⁰→O⁰ x ┆ ∨ₒ
-    S⁰→O⁰ (x ∧ y)   = S⁰→O⁰ y ┆ S⁰→O⁰ x ┆ ∧ₒ
-    S⁰→O⁰ (x ≥ y)   = S⁰→O⁰ y ┆ S⁰→O⁰ x ┆ ≥ₒ
-    S⁰→O⁰ (x ≤ y)   = S⁰→O⁰ y ┆ S⁰→O⁰ x ┆ ≤ₒ
-    S⁰→O⁰ (x ≡ y)   = S⁰→O⁰ y ┆ S⁰→O⁰ x ┆ ≡ₒ
-    S⁰→O⁰ t         = timeₒ
+    ⟦_⟧⁰ : ∀ {i} → S⁰ → O⁰ i (suc i)
+    ⟦ ⟨ xs ⟧⁰      = ⟨S⁰⟩→O⁰ xs
+    ⟦ nat n ⟧⁰     = #ₒ n
+    ⟦ get x ⟧⁰     = ⟦ x ⟧⁰ ┆ getₖₒ
+    ⟦ ref (# x) ⟧⁰ = refₒ x
+    ⟦ arg ($ x) ⟧⁰ = argₒ x
+    ⟦ u ⟧⁰         = callerₒ
+    ⟦ t ⟧⁰         = timeₒ
+    ⟦ x + y ⟧⁰     = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ +ₒ
+    ⟦ x − y ⟧⁰     = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ −ₒ
+    ⟦ x × y ⟧⁰     = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ ×ₒ
+    ⟦ x ^ y ⟧⁰     = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ ^ₒ
+    ⟦ x ∨ y ⟧⁰     = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ ∨ₒ
+    ⟦ x ∧ y ⟧⁰     = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ ∧ₒ
+    ⟦ x ≥ y ⟧⁰     = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ ≥ₒ
+    ⟦ x ≤ y ⟧⁰     = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ ≤ₒ
+    ⟦ x ≡ y ⟧⁰     = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ ≡ₒ
+    ⟦ ¬ x ⟧⁰       = ⟦ x ⟧⁰ ┆ ¬ₒ
+    ⟦ - x ⟧⁰       = #ₒ 0  ┆ ⟦ x ⟧⁰ ┆ −ₒ
 
   -- Compiling statement sequences
-  S¹→O¹ : ∀ {n} → S¹ n → O¹
-  S¹→O¹ (iff x)  = iffₒ (S⁰→O⁰ x)
-  S¹→O¹ (i ≜ x)  = defₒ i (S⁰→O⁰ x)
-  S¹→O¹ (k ← x)  = setₖₒ (S⁰→O⁰ k) (S⁰→O⁰ x)
-  S¹→O¹ (x │ s)  = S¹→O¹ x ∥ S¹→O¹ s
-  S¹→O¹ (fyi x)  = fyiₒ (map⁺ S⁰→O⁰ x)
+  ⟦_⟧¹ : ∀ {n} → S¹ n → O¹
+  ⟦ iff x ⟧¹  = iffₒ ⟦ x ⟧⁰
+  ⟦ fyi x ⟧¹  = fyiₒ (map⁺ ⟦_⟧⁰ x)
+  ⟦ i ≜ x ⟧¹  = defₒ i ⟦ x ⟧⁰
+  ⟦ k ← x ⟧¹  = setₖₒ ⟦ k ⟧⁰ ⟦ x ⟧⁰
+  ⟦ x │ y ⟧¹  = ⟦ x ⟧¹ ∥ ⟦ y ⟧¹
 
   -- Compiling signature dispatch sequences
-  S²→O² : S² → O²
-  S²→O² (act s :: k) = sigₒ s (S¹-fyi-size k) (S¹→O¹ k)
-  S²→O² (a // b) = seqₒ (S²→O² a) (S²→O² b)
+  ⟦_⟧² : S² → O²
+  ⟦ act s :: k ⟧² = sigₒ s (S¹-fyi-size k) ⟦ k ⟧¹
+  ⟦ a // b     ⟧² = seqₒ ⟦ a ⟧² ⟦ b ⟧²
 
   -- Some compile-time assertions
   private
@@ -279,7 +317,7 @@ module Sⁿ→Oⁿ where
       using (refl) renaming (_≡_ to _≣_)
 
     S¹-memory : ∀ {n} → S¹ n → ℕ
-    S¹-memory s = O¹-memory (S¹→O¹ s)
+    S¹-memory s = O¹-memory ⟦ s ⟧¹
 
     example-1 : S¹-memory {0} (nat 0 ← nat 0) ≣ 0
     example-1 = refl
@@ -401,6 +439,7 @@ module EVM-Math where
       SWAP 1 ⟫ PUSH 2 ⟫ SWAP 1 ⟫ DIV
     ) ⟫ POP ⟫ POP ⟫ PUSH z ⟫ MLOAD
 
+
 -- Section 7: Compiling Sic machine code to EVM assembly
 --
 
@@ -421,30 +460,30 @@ module Sic→EVM where
   -- Let mₒ be the first memory address for non-reserved variables.
   m₀ = %rpowᶻ +ℕ wordsize
 
-  O⁰→Oᴱ : ∀ {i j} → O⁰ i j → Oᴱ
-  O⁰→Oᴱ (#ₒ n)    = PUSH n
-  O⁰→Oᴱ timeₒ     = TIMESTAMP
-  O⁰→Oᴱ (x₁ ┆ x₂) = O⁰→Oᴱ x₁ ⟫ O⁰→Oᴱ x₂
-  O⁰→Oᴱ (callerₒ) = CALLER
-  O⁰→Oᴱ (refₒ x)  = PUSH (x +ℕ m₀) ⟫ MLOAD
-  O⁰→Oᴱ (getₒ x)  = PUSH x ⟫ SLOAD
-  O⁰→Oᴱ (argₒ x)  = PUSH (x * wordsize) ⟫ CALLDATALOAD
-  O⁰→Oᴱ (getₖₒ)   = SLOAD
-  O⁰→Oᴱ (H¹ₒ)     = PUSH %hash¹ ⟫ MSTORE ⟫
+  ⟦_⟧⁰ᵉ : ∀ {i j} → O⁰ i j → Oᴱ
+  ⟦ #ₒ n    ⟧⁰ᵉ  = PUSH n
+  ⟦ timeₒ   ⟧⁰ᵉ  = TIMESTAMP
+  ⟦ x₁ ┆ x₂ ⟧⁰ᵉ  = ⟦ x₁ ⟧⁰ᵉ ⟫ ⟦ x₂ ⟧⁰ᵉ
+  ⟦ callerₒ ⟧⁰ᵉ  = CALLER
+  ⟦ refₒ x  ⟧⁰ᵉ  = PUSH (x +ℕ m₀) ⟫ MLOAD
+  ⟦ getₒ x  ⟧⁰ᵉ  = PUSH x ⟫ SLOAD
+  ⟦ argₒ x  ⟧⁰ᵉ  = PUSH (x * wordsize) ⟫ CALLDATALOAD
+  ⟦ getₖₒ   ⟧⁰ᵉ  = SLOAD
+  ⟦ +ₒ      ⟧⁰ᵉ  = XADD
+  ⟦ −ₒ      ⟧⁰ᵉ  = XSUB
+  ⟦ ×ₒ      ⟧⁰ᵉ  = RMUL
+  ⟦ ^ₒ      ⟧⁰ᵉ  = RPOW′
+  ⟦ ≡ₒ      ⟧⁰ᵉ  = EQ
+  ⟦ ≥ₒ      ⟧⁰ᵉ  = SGT ⟫ ISZERO
+  ⟦ ≤ₒ      ⟧⁰ᵉ  = SLT ⟫ ISZERO
+  ⟦ ¬ₒ      ⟧⁰ᵉ  = ISZERO
+  ⟦ ∧ₒ      ⟧⁰ᵉ  = AND
+  ⟦ ∨ₒ      ⟧⁰ᵉ  = OR
+  ⟦ H¹ₒ     ⟧⁰ᵉ  = PUSH %hash¹ ⟫ MSTORE ⟫
                     PUSH wordsize ⟫ PUSH 0 ⟫ KECCAK256
-  O⁰→Oᴱ H²ₒ     = PUSH %hash¹ ⟫ MSTORE ⟫
-                  PUSH %hash² ⟫ MSTORE ⟫
-                  PUSH (2 * wordsize) ⟫ PUSH 0 ⟫ KECCAK256
-  O⁰→Oᴱ +ₒ      = XADD
-  O⁰→Oᴱ −ₒ      = XSUB
-  O⁰→Oᴱ ×ₒ      = RMUL
-  O⁰→Oᴱ ^ₒ      = RPOW′
-  O⁰→Oᴱ ≡ₒ      = EQ
-  O⁰→Oᴱ ≥ₒ      = SGT ⟫ ISZERO
-  O⁰→Oᴱ ≤ₒ      = SLT ⟫ ISZERO
-  O⁰→Oᴱ ¬ₒ      = ISZERO
-  O⁰→Oᴱ ∧ₒ      = AND
-  O⁰→Oᴱ ∨ₒ      = OR
+  ⟦ H²ₒ     ⟧⁰ᵉ  = PUSH %hash¹ ⟫ MSTORE ⟫
+                    PUSH %hash² ⟫ MSTORE ⟫
+                    PUSH (2 * wordsize) ⟫ PUSH 0 ⟫ KECCAK256
 
   record Index a : Set where
     constructor _at_from_
@@ -465,7 +504,7 @@ module Sic→EVM where
   index⁺ i (x ∷⁺ xs) = x at 0 from i ∷⁺ index 1 i xs
 
   O⁰#→Oᴱ : Index (O⁰ 0 1) → Oᴱ
-  O⁰#→Oᴱ (x at j from i) = O⁰→Oᴱ x ⟫ PUSH (i +ℕ j * wordsize) ⟫ MSTORE
+  O⁰#→Oᴱ (x at j from i) = ⟦ x ⟧⁰ᵉ ⟫ PUSH (i +ℕ j * wordsize) ⟫ MSTORE
 
   fyiₒ→Oᴱ : ℕ → List⁺ (O⁰ 0 1) → Oᴱ
   fyiₒ→Oᴱ i xs = foldr₁ _⟫_ (map O⁰#→Oᴱ (index⁺ i xs)) ⟫ return
@@ -475,17 +514,17 @@ module Sic→EVM where
 
   mutual
     O¹→Oᴱ′ : ℕ → O¹ → Oᴱ
-    O¹→Oᴱ′ n (iffₒ o)     = O⁰→Oᴱ o ⟫ ISZERO ⟫ JUMPI 3
-    O¹→Oᴱ′ n (defₒ i x)   = O⁰→Oᴱ x ⟫ PUSH (i * wordsize +ℕ m₀) ⟫ MSTORE
-    O¹→Oᴱ′ n (setₒ i x)   = O⁰→Oᴱ x ⟫ PUSH i ⟫ SSTORE
-    O¹→Oᴱ′ n (setₖₒ k x)  = O⁰→Oᴱ x ⟫ O⁰→Oᴱ k ⟫ SSTORE
+    O¹→Oᴱ′ n (iffₒ o)     = ⟦ o ⟧⁰ᵉ ⟫ ISZERO ⟫ JUMPI 3
+    O¹→Oᴱ′ n (defₒ i x)   = ⟦ x ⟧⁰ᵉ ⟫ PUSH (i * wordsize +ℕ m₀) ⟫ MSTORE
+    O¹→Oᴱ′ n (setₒ i x)   = ⟦ x ⟧⁰ᵉ ⟫ PUSH i ⟫ SSTORE
+    O¹→Oᴱ′ n (setₖₒ k x)  = ⟦ x ⟧⁰ᵉ ⟫ ⟦ k ⟧⁰ᵉ ⟫ SSTORE
     O¹→Oᴱ′ n (fyiₒ xs)    = fyiₒ→Oᴱ offset xs
       where offset = suc n * wordsize +ℕ m₀
-    O¹→Oᴱ′ n (o₁ ∥ o₂)    = O¹→Oᴱ n o₁ ⟫ O¹→Oᴱ n o₂
+    O¹→Oᴱ′ n (o₁ ∥ o₂)    = ⟦ o₁ giving n ⟧¹ᵉ ⟫ ⟦ o₂ giving n ⟧¹ᵉ
 
-    O¹→Oᴱ : ℕ → O¹ → Oᴱ
-    O¹→Oᴱ n o@(_ ∥ _) = O¹→Oᴱ′ n o
-    O¹→Oᴱ n o = tag o (O¹→Oᴱ′ n o)
+    ⟦_giving_⟧¹ᵉ : O¹ → ℕ → Oᴱ
+    ⟦ o@(_ ∥ _) giving n ⟧¹ᵉ = O¹→Oᴱ′ n o
+    ⟦ o giving n ⟧¹ᵉ = tag o (O¹→Oᴱ′ n o)
 
   -- This prelude is inserted into every compiled S².
   prelude = JUMP 6 ⟫ JUMPDEST ⟫ REVERT ⟫ JUMPDEST
@@ -505,18 +544,18 @@ module Sic→EVM where
     PUSH 224 ⟫ PUSH 2 ⟫ EXP ⟫ PUSH 0 ⟫ CALLDATALOAD ⟫ DIV ⟫
     PUSHSIG s ⟫ EQ
 
-  O²→Oᴱ : O² → Oᴱ
-  O²→Oᴱ (seqₒ a b)   = O²→Oᴱ a ⟫ O²→Oᴱ b
-  O²→Oᴱ (sigₒ s n k) =
+  ⟦_⟧²ᵉ : O² → Oᴱ
+  ⟦ seqₒ a b   ⟧²ᵉ = ⟦ a ⟧²ᵉ ⟫ ⟦ b ⟧²ᵉ
+  ⟦ sigₒ s n k ⟧²ᵉ =
     sig-check s n ⟫ ISZERO ⟫
       let m = O¹-memory k in
-        ELSE (O¹→Oᴱ m k ⟫ return m n)
+        ELSE (⟦ k giving m ⟧¹ᵉ ⟫ return m n)
 
   open Sⁿ    using (S²)
-  open Sⁿ→Oⁿ using (S²→O²)
+  open Sⁿ→Oⁿ using (⟦_⟧²)
 
   S²→Oᴱ : S² → Oᴱ
-  S²→Oᴱ s = prelude ⟫ O²→Oᴱ (S²→O² s) ⟫ REVERT
+  S²→Oᴱ s = prelude ⟫ ⟦ ⟦ s ⟧² ⟧²ᵉ ⟫ REVERT
 
   compile : S² → Oᴱ
   compile = S²→Oᴱ
@@ -689,6 +728,8 @@ module Dappsys where
   n ↓ v = n ↑ (- v)
   n ↧ v = n ↥ (- v)
 
+  -- The “move statement” which subtracts and adds the same quantity
+  -- to different places, failing if either place becomes negative.
   _↧_↥_ : S⁰ → S⁰ → S⁰ → S¹ 0
   k₁ ↧ k₂ ↥ v = (k₁ ↧ v) │ (k₂ ↥ v)
 
@@ -711,30 +752,30 @@ module Solidity where
   mutual
 
     sequence : ⟨S⁰⟩ → List String
-    sequence (⟨⟩ x) =
-      "keccak256(" ∷ ⟦ x ⟧⁰ ++ ")" ∷ []
+    sequence (one-S⁰ x) =
+      "keccak256(" ∷ ⟦ x ⟧ˢ⁰ ++ ")" ∷ []
     sequence (x , s) =
-      "keccak256(" ∷ ⟦ x ⟧⁰ ++ ", " ∷ sequence s ++ ")" ∷ []
+      "keccak256(" ∷ ⟦ x ⟧ˢ⁰ ++ ", " ∷ sequence s ++ ")" ∷ []
 
-    ⟦_⟧⁰ : S⁰ → List String
-    ⟦ nat x ⟧⁰ = show 10 x ∷ []
-    ⟦ u ⟧⁰ = "msg.sender" ∷ []
-    ⟦ t ⟧⁰ = "block.timestamp" ∷ []
-    ⟦ get x ⟧⁰ = "storage[" ∷ ⟦ x ⟧⁰ ++ "]" ∷ []
-    ⟦ ref (# x) ⟧⁰ = "m" ∷ show 10 x ∷ []
-    ⟦ arg ($ x) ⟧⁰ = "p" ∷ show 10 x ∷ []
-    ⟦ ⟨ x ⟧⁰ = sequence x
-    ⟦ x + x₁ ⟧⁰ = "(" ∷ ⟦ x ⟧⁰ ++ " + " ∷ ⟦ x₁ ⟧⁰ ++ ")" ∷ []
-    ⟦ x − x₁ ⟧⁰ = "(" ∷ ⟦ x ⟧⁰ ++ " - " ∷ ⟦ x₁ ⟧⁰ ++ ")" ∷ []
-    ⟦ x × x₁ ⟧⁰ = "(" ∷ ⟦ x ⟧⁰ ++ " * " ∷ ⟦ x₁ ⟧⁰ ++ ")" ∷ []
-    ⟦ x ^ x₁ ⟧⁰ = "(" ∷ ⟦ x ⟧⁰ ++ " ^ " ∷ ⟦ x₁ ⟧⁰ ++ ")" ∷ []
-    ⟦ ¬ x ⟧⁰ = "(!" ∷ ⟦ x ⟧⁰ ++ ")" ∷ []
-    ⟦ - x ⟧⁰ = "(-" ∷ ⟦ x ⟧⁰ ++ ")" ∷ []
-    ⟦ x ∨ x₁ ⟧⁰ = "(" ∷ ⟦ x ⟧⁰ ++ " || " ∷ ⟦ x₁ ⟧⁰ ++ ")" ∷ []
-    ⟦ x ∧ x₁ ⟧⁰ = "(" ∷ ⟦ x ⟧⁰ ++ " && " ∷ ⟦ x₁ ⟧⁰ ++ ")" ∷ []
-    ⟦ x ≥ x₁ ⟧⁰ = "(" ∷ ⟦ x ⟧⁰ ++ " >= " ∷ ⟦ x₁ ⟧⁰ ++ ")" ∷ []
-    ⟦ x ≤ x₁ ⟧⁰ = "(" ∷ ⟦ x ⟧⁰ ++ " <= " ∷ ⟦ x₁ ⟧⁰ ++ ")" ∷ []
-    ⟦ x ≡ x₁ ⟧⁰ = "(" ∷ ⟦ x ⟧⁰ ++ " == " ∷ ⟦ x₁ ⟧⁰ ++ ")" ∷ []
+    ⟦_⟧ˢ⁰ : S⁰ → List String
+    ⟦ nat x ⟧ˢ⁰     = show 10 x ∷ []
+    ⟦ u ⟧ˢ⁰         = "msg.sender" ∷ []
+    ⟦ t ⟧ˢ⁰         = "block.timestamp" ∷ []
+    ⟦ get x ⟧ˢ⁰     = "storage[" ∷ ⟦ x ⟧ˢ⁰ ++ "]" ∷ []
+    ⟦ ref (# x) ⟧ˢ⁰ = "m" ∷ show 10 x ∷ []
+    ⟦ arg ($ x) ⟧ˢ⁰ = "p" ∷ show 10 x ∷ []
+    ⟦ ⟨ x ⟧ˢ⁰       = sequence x
+    ⟦ x + x₁ ⟧ˢ⁰    = "(" ∷ ⟦ x ⟧ˢ⁰ ++ " + " ∷ ⟦ x₁ ⟧ˢ⁰ ++ ")" ∷ []
+    ⟦ x − x₁ ⟧ˢ⁰    = "(" ∷ ⟦ x ⟧ˢ⁰ ++ " - " ∷ ⟦ x₁ ⟧ˢ⁰ ++ ")" ∷ []
+    ⟦ x × x₁ ⟧ˢ⁰    = "(" ∷ ⟦ x ⟧ˢ⁰ ++ " * " ∷ ⟦ x₁ ⟧ˢ⁰ ++ ")" ∷ []
+    ⟦ x ^ x₁ ⟧ˢ⁰    = "(" ∷ ⟦ x ⟧ˢ⁰ ++ " ^ " ∷ ⟦ x₁ ⟧ˢ⁰ ++ ")" ∷ []
+    ⟦ x ∨ x₁ ⟧ˢ⁰    = "(" ∷ ⟦ x ⟧ˢ⁰ ++ " || " ∷ ⟦ x₁ ⟧ˢ⁰ ++ ")" ∷ []
+    ⟦ x ∧ x₁ ⟧ˢ⁰    = "(" ∷ ⟦ x ⟧ˢ⁰ ++ " && " ∷ ⟦ x₁ ⟧ˢ⁰ ++ ")" ∷ []
+    ⟦ x ≥ x₁ ⟧ˢ⁰    = "(" ∷ ⟦ x ⟧ˢ⁰ ++ " >= " ∷ ⟦ x₁ ⟧ˢ⁰ ++ ")" ∷ []
+    ⟦ x ≤ x₁ ⟧ˢ⁰    = "(" ∷ ⟦ x ⟧ˢ⁰ ++ " <= " ∷ ⟦ x₁ ⟧ˢ⁰ ++ ")" ∷ []
+    ⟦ x ≡ x₁ ⟧ˢ⁰    = "(" ∷ ⟦ x ⟧ˢ⁰ ++ " == " ∷ ⟦ x₁ ⟧ˢ⁰ ++ ")" ∷ []
+    ⟦ ¬ x ⟧ˢ⁰       = "(!" ∷ ⟦ x ⟧ˢ⁰ ++ ")" ∷ []
+    ⟦ - x ⟧ˢ⁰       = "(-" ∷ ⟦ x ⟧ˢ⁰ ++ ")" ∷ []
 
   open import Data.List.NonEmpty using (List⁺; toList; length)
   open import Data.List using (intersperse; concatMap; zip; upTo)
@@ -745,32 +786,35 @@ module Solidity where
                (concatMap f (zip (toList xs) ("a" ∷ "b" ∷ "c" ∷ "d" ∷ [])))
     where
       f : S⁰ at String → List String
-      f (x Data.Product., k) =  k ∷ " = " ∷ ⟦ x ⟧⁰ ++ ";\n" ∷ []
-  ⟦_⟧¹ : ∀ {n} → S¹ n → List String
-  ⟦ iff x ⟧¹ = "require(" ∷ ⟦ x ⟧⁰ ++ ");\n" ∷ []
-  ⟦ i ≜ x ⟧¹ = "uint256 m" ∷ show 10 i ∷ " = " ∷ ⟦ x ⟧⁰ ++ ";\n" ∷ []
-  ⟦ k ← x ⟧¹ = "storage[" ∷ ⟦ k ⟧⁰ ++ "] = " ∷ ⟦ x ⟧⁰ ++ ";\n" ∷ []
-  ⟦ fyi xs ⟧¹ = ⟦ xs ⟧ᶠʸⁱ
-  ⟦ x₁ │ x₂ ⟧¹ = ⟦ x₁ ⟧¹ ++ "" ∷ ⟦ x₂ ⟧¹
+      f (x Data.Product., k) =  k ∷ " = " ∷ ⟦ x ⟧ˢ⁰ ++ ";\n" ∷ []
+
+  ⟦_⟧ˢ¹ : ∀ {n} → S¹ n → List String
+  ⟦ iff x ⟧ˢ¹   = "require(" ∷ ⟦ x ⟧ˢ⁰ ++ ");\n" ∷ []
+  ⟦ i ≜ x ⟧ˢ¹   = "uint256 m" ∷ show 10 i ∷ " = " ∷ ⟦ x ⟧ˢ⁰ ++ ";\n" ∷ []
+  ⟦ k ← x ⟧ˢ¹   = "storage["  ∷ ⟦ k ⟧ˢ⁰ ++ "] = " ∷ ⟦ x ⟧ˢ⁰ ++ ";\n" ∷ []
+  ⟦ fyi xs ⟧ˢ¹  = ⟦ xs ⟧ᶠʸⁱ
+  ⟦ x₁ │ x₂ ⟧ˢ¹ = ⟦ x₁ ⟧ˢ¹ ++ "" ∷ ⟦ x₂ ⟧ˢ¹
 
   fyi-returns : ℕ → List String
-  fyi-returns n =
-    Data.List.intersperse ", "
-      (Data.List.map (λ x → Data.String._++_ "int256 " x)
-        (Data.List.take n ("a" ∷ "b" ∷ "c" ∷ "d" ∷ [])))
+  fyi-returns n = intersperse ", "
+                   (map (λ x → Data.String._++_ "int256 " x)
+                    (take n ("a" ∷ "b" ∷ "c" ∷ "d" ∷ [])))
+    where open import Data.List
+            using (intersperse; map; take)
 
-  ⟦_⟧² : S² → List String
-  ⟦ act sig :: k ⟧² =
+  ⟦_⟧ˢ² : S² → List String
+  ⟦ act sig :: k ⟧ˢ² =
     "function " ∷ sig ∷ "() returns (" ∷
     fyi-returns (S¹-fyi-size k) ++ ") {\n" ∷
-    ⟦ k ⟧¹ ++ "}" ∷ []
-  ⟦ x₁ // x₂ ⟧² =
-    ⟦ x₁ ⟧² ++ "\n" ∷ ⟦ x₂ ⟧²
+    ⟦ k ⟧ˢ¹ ++ "}" ∷ []
+  ⟦ x₁ // x₂ ⟧ˢ² =
+    ⟦ x₁ ⟧ˢ² ++ "\n" ∷ ⟦ x₂ ⟧ˢ²
 
   S²→Solidity : S² → String
-  S²→Solidity s = Data.List.foldr Data.String._++_ "" ⟦ s ⟧²
+  S²→Solidity s = Data.List.foldr Data.String._++_ "" ⟦ s ⟧ˢ²
 
 
 open Sⁿ public
 open Sic→EVM public
 open Main public
+open OverloadedNumbers public
