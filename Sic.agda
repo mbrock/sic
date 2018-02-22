@@ -94,7 +94,8 @@ module Sⁿ where
       _≜_  : ℕ →  S⁰ → S¹ 0                    -- Local definition
       _←_  : S⁰ → S⁰ → S¹ 0                    -- Storage save
       fyi  : (xs : List⁺ S⁰) → S¹ (length xs)  -- Return assignment
-
+      -- ext_ : String → (xs : List⁺ S⁰) → S¹ (length xs)  -- TODO multi arg
+      ext  : String → S⁰ → S¹ 0  -- e.g. `ext "frob()" ilk`
       _│_  : ∀ {m n}                           -- Action sequence
            → S¹ m → S¹ n → {_ : fyi-ok m n}
            → S¹ (m ⊔ n)
@@ -226,6 +227,7 @@ module Oⁿ where
     iffₒ  :          O⁰ 0 1  → O¹
     setₖₒ : O⁰ 0 1 → O⁰ 0 1  → O¹
     defₒ  :      ℕ → O⁰ 0 1  → O¹
+    extₒ  : String → O⁰ 0 1  → O¹
     setₒ  :      ℕ → O⁰ 0 1  → O¹
     fyiₒ  :  List⁺  (O⁰ 0 1) → O¹
 
@@ -253,6 +255,7 @@ module Oⁿ where
   O¹-memory (defₒ i x)  = suc i ⊔ O⁰-memory x
   O¹-memory (fyiₒ xs)   = foldr₁ _⊔_ (map⁺ O⁰-memory xs)
   O¹-memory (iffₒ x)    = O⁰-memory x
+  O¹-memory (extₒ s x)  = O⁰-memory x
   O¹-memory (setₖₒ k x) = O⁰-memory x
   O¹-memory (setₒ i x)  = O⁰-memory x
   O¹-memory (o₁ ∥ o₂)   = O¹-memory o₁ ⊔ O¹-memory o₂
@@ -301,6 +304,7 @@ module Sⁿ→Oⁿ where
   ⟦_⟧¹ : ∀ {n} → S¹ n → O¹
   ⟦ iff x ⟧¹  = iffₒ ⟦ x ⟧⁰
   ⟦ fyi x ⟧¹  = fyiₒ (map⁺ ⟦_⟧⁰ x)
+  ⟦ ext s x ⟧¹ = extₒ s (⟦_⟧⁰ x)  -- TODO: sigₒ
   ⟦ i ≜ x ⟧¹  = defₒ i ⟦ x ⟧⁰
   ⟦ k ← x ⟧¹  = setₖₒ ⟦ k ⟧⁰ ⟦ x ⟧⁰
   ⟦ x │ y ⟧¹  = ⟦ x ⟧¹ ∥ ⟦ y ⟧¹
@@ -345,11 +349,13 @@ module EVM where
     ADDRESS      : Oᴱ
     AND          : Oᴱ
     CALLDATALOAD : Oᴱ
+    CALL         : Oᴱ
     CALLER       : Oᴱ
     DIV          : Oᴱ
     DUP          : ℕ → Oᴱ
     EQ           : Oᴱ
     EXP          : Oᴱ
+    GAS          : Oᴱ
     ISZERO       : Oᴱ
     JUMP         : ℕ → Oᴱ
     JUMPDEST     : Oᴱ
@@ -456,9 +462,10 @@ module Sic→EVM where
   %hash¹ = 0 * wordsize
   %hash² = 1 * wordsize
   %rpowᶻ = 2 * wordsize
+  %call¹ = 3 * wordsize
 
   -- Let mₒ be the first memory address for non-reserved variables.
-  m₀ = %rpowᶻ +ℕ wordsize
+  m₀ = %call¹ +ℕ wordsize
 
   ⟦_⟧⁰ᵉ : ∀ {i j} → O⁰ i j → Oᴱ
   ⟦ #ₒ n    ⟧⁰ᵉ  = PUSH n
@@ -515,6 +522,9 @@ module Sic→EVM where
   mutual
     O¹→Oᴱ′ : ℕ → O¹ → Oᴱ
     O¹→Oᴱ′ n (iffₒ o)     = ⟦ o ⟧⁰ᵉ ⟫ ISZERO ⟫ JUMPI 3
+    O¹→Oᴱ′ n (extₒ s a)   = PUSHSIG s ⟫ PUSH %call¹ ⟫ MSTORE ⟫ PUSH 0 ⟫ PUSH 0
+                            ⟫ PUSH 32 ⟫ PUSH %call¹ ⟫ PUSH 0 ⟫ ⟦ a ⟧⁰ᵉ
+                            ⟫ GAS ⟫ CALL ⟫ ISZERO ⟫ REVERTIF
     O¹→Oᴱ′ n (defₒ i x)   = ⟦ x ⟧⁰ᵉ ⟫ PUSH (i * wordsize +ℕ m₀) ⟫ MSTORE
     O¹→Oᴱ′ n (setₒ i x)   = ⟦ x ⟧⁰ᵉ ⟫ PUSH i ⟫ SSTORE
     O¹→Oᴱ′ n (setₖₒ k x)  = ⟦ x ⟧⁰ᵉ ⟫ ⟦ k ⟧⁰ᵉ ⟫ SSTORE
@@ -624,8 +634,10 @@ module EVM-Assembly where
   code′ ADDRESS = , op B1 0x30
   code′ AND = , op B1 0x16
   code′ CALLDATALOAD = , op B1 0x35
+  code′ CALL = , op B1 0xf1
   code′ CALLER = , op B1 0x33
   code′ EQ = , op B1 0x14
+  code′ GAS = , op B1 0x5a
   code′ JUMPDEST = , op B1 0x5b
   code′ (JUMP x)  = , op B1 0x61 ⦂ op B2 (+ x) ⦂ op B1 0x56
   code′ (JUMPI x) = , op B1 0x61 ⦂ op B2 (+ x) ⦂ op B1 0x57
@@ -790,6 +802,7 @@ module Solidity where
 
   ⟦_⟧ˢ¹ : ∀ {n} → S¹ n → List String
   ⟦ iff x ⟧ˢ¹   = "require(" ∷ ⟦ x ⟧ˢ⁰ ++ ");\n" ∷ []
+  ⟦ ext s x ⟧ˢ¹   = "call(FIXME);\n" ∷ []
   ⟦ i ≜ x ⟧ˢ¹   = "uint256 m" ∷ show 10 i ∷ " = " ∷ ⟦ x ⟧ˢ⁰ ++ ";\n" ∷ []
   ⟦ k ← x ⟧ˢ¹   = "storage["  ∷ ⟦ k ⟧ˢ⁰ ++ "] = " ∷ ⟦ x ⟧ˢ⁰ ++ ";\n" ∷ []
   ⟦ fyi xs ⟧ˢ¹  = ⟦ xs ⟧ᶠʸⁱ

@@ -18,3 +18,15 @@ hello =
   act "look" :: fyi₂ (get 0 ) (get 1 ) //
   act "feel" :: fyi₁ (get 0 ) //
   act "test" :: fyi₁ (1)
+
+caller =
+  act "good" :: ext "poke" u //
+  act "evil" :: ext "quit" u
+
+callee =
+  act "gaze" :: fyi₁ (get 0 ) //
+  act "poke" :: 0 ← (1) //
+  act "fail" :: iff 0
+
+-- TODO: test `caller` with ds-test
+-- TODO: add `this` as resource, maybe as `&`
