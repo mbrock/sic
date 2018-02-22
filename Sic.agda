@@ -801,30 +801,36 @@ module Solidity where
       f (x Data.Product., k) =  k ∷ " = " ∷ ⟦ x ⟧ˢ⁰ ++ ";\n" ∷ []
 
   ⟦_⟧ˢ¹ : ∀ {n} → S¹ n → List String
-  ⟦ iff x ⟧ˢ¹   = "require(" ∷ ⟦ x ⟧ˢ⁰ ++ ");\n" ∷ []
-  ⟦ ext s x ⟧ˢ¹   = "call(FIXME);\n" ∷ []
+  ⟦ iff x ⟧ˢ¹   = "require(" ∷ ⟦ x ⟧ˢ⁰ ++ " != 0);\n" ∷ []
+  ⟦ ext s x ⟧ˢ¹ = "require(" ∷ ⟦ x ⟧ˢ⁰ ++ ".call(bytes4(keccak256(\""
+                  ∷ s ∷ "\"))));\n" ∷ []
   ⟦ i ≜ x ⟧ˢ¹   = "uint256 m" ∷ show 10 i ∷ " = " ∷ ⟦ x ⟧ˢ⁰ ++ ";\n" ∷ []
-  ⟦ k ← x ⟧ˢ¹   = "storage["  ∷ ⟦ k ⟧ˢ⁰ ++ "] = " ∷ ⟦ x ⟧ˢ⁰ ++ ";\n" ∷ []
+  ⟦ k ← x ⟧ˢ¹   = "store["  ∷ ⟦ k ⟧ˢ⁰ ++ "] = " ∷ ⟦ x ⟧ˢ⁰ ++ ";\n" ∷ []
   ⟦ fyi xs ⟧ˢ¹  = ⟦ xs ⟧ᶠʸⁱ
   ⟦ x₁ │ x₂ ⟧ˢ¹ = ⟦ x₁ ⟧ˢ¹ ++ "" ∷ ⟦ x₂ ⟧ˢ¹
 
   fyi-returns : ℕ → List String
-  fyi-returns n = intersperse ", "
+  fyi-returns 0 = "() public" ∷ []
+  fyi-returns n = "() public returns (" ∷ intersperse ", "
                    (map (λ x → Data.String._++_ "int256 " x)
-                    (take n ("a" ∷ "b" ∷ "c" ∷ "d" ∷ [])))
+                    (take n ("a" ∷ "b" ∷ "c" ∷ "d" ∷ []))) ++ ")" ∷ []
     where open import Data.List
             using (intersperse; map; take)
 
   ⟦_⟧ˢ² : S² → List String
   ⟦ act sig :: k ⟧ˢ² =
-    "function " ∷ sig ∷ "() returns (" ∷
-    fyi-returns (S¹-fyi-size k) ++ ") {\n" ∷
+    "function " ∷ sig ∷
+    fyi-returns (S¹-fyi-size k) ++ " {\n" ∷
     ⟦ k ⟧ˢ¹ ++ "}" ∷ []
   ⟦ x₁ // x₂ ⟧ˢ² =
     ⟦ x₁ ⟧ˢ² ++ "\n" ∷ ⟦ x₂ ⟧ˢ²
 
   S²→Solidity : S² → String
-  S²→Solidity s = Data.List.foldr Data.String._++_ "" ⟦ s ⟧ˢ²
+  S²→Solidity s = "contract Anon {\n"
+                  +++ "mapping (uint => uint) store;\n"
+                  +++ (Data.List.foldr _+++_ "" ⟦ s ⟧ˢ²)
+                  +++ "\n}"
+      where open import Data.String renaming (_++_ to _+++_)
 
 
 open Sⁿ public
