@@ -522,7 +522,8 @@ module Sic→EVM where
   mutual
     O¹→Oᴱ′ : ℕ → O¹ → Oᴱ
     O¹→Oᴱ′ n (iffₒ o)     = ⟦ o ⟧⁰ᵉ ⟫ ISZERO ⟫ JUMPI 3
-    O¹→Oᴱ′ n (extₒ s a)   = PUSHSIG s ⟫ PUSH %call¹ ⟫ MSTORE ⟫ PUSH 0 ⟫ PUSH 0
+    O¹→Oᴱ′ n (extₒ s a)   = PUSHSIG s ⟫ PUSH 224 ⟫ PUSH 2 ⟫ EXP ⟫ MUL
+                            ⟫ PUSH %call¹ ⟫ MSTORE ⟫ PUSH 0 ⟫ PUSH 0
                             ⟫ PUSH 32 ⟫ PUSH %call¹ ⟫ PUSH 0 ⟫ ⟦ a ⟧⁰ᵉ
                             ⟫ GAS ⟫ CALL ⟫ ISZERO ⟫ REVERTIF
     O¹→Oᴱ′ n (defₒ i x)   = ⟦ x ⟧⁰ᵉ ⟫ PUSH (i * wordsize +ℕ m₀) ⟫ MSTORE
