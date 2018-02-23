@@ -96,8 +96,7 @@ module Sⁿ where
       _≜_  : ℕ →  S⁰ → S¹ 0                    -- Local definition
       _←_  : S⁰ → S⁰ → S¹ 0                    -- Storage save
       fyi  : (xs : List⁺ S⁰) → S¹ (length⁺ xs) -- Return assignment
-      ext  : String → S⁰ → (xs : List S⁰)      -- Calldata
-                         → S¹ (length xs)
+      ext  : String → S⁰ → List S⁰ → S¹ 0      -- Calldata
       _│_  : ∀ {m n}                           -- Action sequence
            → S¹ m → S¹ n → {_ : fyi-ok m n}
            → S¹ (m ⊔ n)
@@ -132,16 +131,16 @@ module Sⁿ where
   ext₀ : String → S⁰ → S¹ 0
   ext₀ s x = ext s x [] -- wtf empty list??
 
-  ext₁ : String → S⁰ → S⁰ → S¹ 1
+  ext₁ : String → S⁰ → S⁰ → S¹ 0
   ext₁ s x a = ext s x [ a ]
 
-  ext₂ : String → S⁰ → S⁰ → S⁰ → S¹ 2
+  ext₂ : String → S⁰ → S⁰ → S⁰ → S¹ 0
   ext₂ s x a b = ext s x ( a ∷ [ b ] )
 
-  ext₃ : String → S⁰ → S⁰ → S⁰ → S⁰ → S¹ 3
+  ext₃ : String → S⁰ → S⁰ → S⁰ → S⁰ → S¹ 0
   ext₃ s x a b c = ext s x ( a ∷ b ∷ [ c ] )
 
-  ext₄ : String → S⁰ → S⁰ → S⁰ → S⁰ → S⁰ → S¹ 4
+  ext₄ : String → S⁰ → S⁰ → S⁰ → S⁰ → S⁰ → S¹ 0
   ext₄ s x a b c d = ext s x ( a ∷ b ∷ c ∷ [ d ] )
 
 
@@ -503,7 +502,7 @@ module Sic→EVM where
   ⟦ timeₒ   ⟧⁰ᵉ  = TIMESTAMP
   ⟦ x₁ ┆ x₂ ⟧⁰ᵉ  = ⟦ x₁ ⟧⁰ᵉ ⟫ ⟦ x₂ ⟧⁰ᵉ
   ⟦ callerₒ ⟧⁰ᵉ  = CALLER
-  ⟦ refₒ x  ⟧⁰ᵉ  = PUSH (x +ℕ m₀) ⟫ MLOAD
+  ⟦ refₒ x  ⟧⁰ᵉ  = PUSH (x * wordsize +ℕ m₀) ⟫ MLOAD
   ⟦ getₒ x  ⟧⁰ᵉ  = PUSH x ⟫ SLOAD
   ⟦ argₒ x  ⟧⁰ᵉ  = PUSH (x * wordsize) ⟫ CALLDATALOAD
   ⟦ getₖₒ   ⟧⁰ᵉ  = SLOAD
@@ -545,10 +544,9 @@ module Sic→EVM where
   O⁰#→Oᴱ (x at j from i) = ⟦ x ⟧⁰ᵉ ⟫ PUSH (i +ℕ j * wordsize) ⟫ MSTORE
 
   fyiₒ→Oᴱ : ℕ → List⁺ (O⁰ 0 1) → Oᴱ
-  fyiₒ→Oᴱ i xs = foldr₁ _⟫_ (map O⁰#→Oᴱ (index⁺ i xs)) ⟫ return
+  fyiₒ→Oᴱ i xs = foldr₁ _⟫_ (map O⁰#→Oᴱ (index⁺ i xs))
     where
       open import Data.List.NonEmpty using (foldr₁; map; length)
-      return = PUSH (wordsize * length xs) ⟫ PUSH i ⟫ RETURN
 
   -- this is some crazy bs ^^^^ :/
   push-sig : String → Oᴱ
@@ -558,18 +556,18 @@ module Sic→EVM where
   extₒ→Oᴱ : ℕ → String → O⁰ 0 1 → List (O⁰ 0 1) → Oᴱ
   extₒ→Oᴱ i s c [] = push-sig s ⟫ PUSH instart ⟫ MSTORE ⟫ call
                    where
-                     insize = wordsize
+                     insize = 4
                      instart = i
                      call = PUSH 0 ⟫ PUSH 0 ⟫ PUSH insize
                             ⟫ PUSH instart ⟫ PUSH 0 ⟫ ⟦ c ⟧⁰ᵉ
                             ⟫ GAS ⟫ CALL ⟫ ISZERO ⟫ REVERTIF
   extₒ→Oᴱ i s c (x ∷ xs) = push-sig s ⟫ PUSH instart ⟫ MSTORE ⟫
                          -- push each of xs to instart++
-                          foldr₁ _⟫_ (map O⁰#→Oᴱ (index⁺ (instart +ℕ 1) ys)) ⟫ call
+                          foldr₁ _⟫_ (map O⁰#→Oᴱ (index⁺ (instart +ℕ 4) ys)) ⟫ call
                           where
                             open import Data.List.NonEmpty using (foldr₁; map; length)
                             ys = (x ∷⁺ xs)
-                            insize = (wordsize * (length ys +ℕ 1))
+                            insize = 4 +ℕ wordsize * length ys
                             instart = i
                             call = PUSH 0 ⟫ PUSH 0 ⟫ PUSH insize
                                    ⟫ PUSH instart ⟫ PUSH 0 ⟫ ⟦ c ⟧⁰ᵉ
@@ -577,20 +575,21 @@ module Sic→EVM where
 
 
   mutual
-    O¹→Oᴱ′ : ℕ → O¹ → Oᴱ
-    O¹→Oᴱ′ n (iffₒ o)      = ⟦ o ⟧⁰ᵉ ⟫ ISZERO ⟫ JUMPI 3
-    O¹→Oᴱ′ n (defₒ i x)    = ⟦ x ⟧⁰ᵉ ⟫ PUSH (i * wordsize +ℕ m₀) ⟫ MSTORE
-    O¹→Oᴱ′ n (setₒ i x)    = ⟦ x ⟧⁰ᵉ ⟫ PUSH i ⟫ SSTORE
-    O¹→Oᴱ′ n (setₖₒ k x)   = ⟦ x ⟧⁰ᵉ ⟫ ⟦ k ⟧⁰ᵉ ⟫ SSTORE
-    O¹→Oᴱ′ n (fyiₒ xs)     = fyiₒ→Oᴱ offset xs  -- wtf n, offset??
-      where offset = suc n * wordsize +ℕ m₀
-    O¹→Oᴱ′ n (extₒ s c xs) = extₒ→Oᴱ offset s c xs
-      where offset = suc n * wordsize +ℕ m₀     -- TODO: correct?? overlap? maybe ok cos overlap doesnτ matter
-    O¹→Oᴱ′ n (o₁ ∥ o₂)     = ⟦ o₁ giving n ⟧¹ᵉ ⟫ ⟦ o₂ giving n ⟧¹ᵉ
+    O¹→Oᴱ′ : ℕ → ℕ → O¹ → Oᴱ
+    O¹→Oᴱ′ m₁ m₂ (iffₒ o)      = ⟦ o ⟧⁰ᵉ ⟫ ISZERO ⟫ JUMPI 3
+    O¹→Oᴱ′ m₁ m₂ (defₒ i x)    = ⟦ x ⟧⁰ᵉ ⟫ PUSH (i * wordsize +ℕ m₀) ⟫ MSTORE
+    O¹→Oᴱ′ m₁ m₂ (setₒ i x)    = ⟦ x ⟧⁰ᵉ ⟫ PUSH i ⟫ SSTORE
+    O¹→Oᴱ′ m₁ m₂ (setₖₒ k x)   = ⟦ x ⟧⁰ᵉ ⟫ ⟦ k ⟧⁰ᵉ ⟫ SSTORE
+    O¹→Oᴱ′ m₁ m₂ (fyiₒ xs)     = fyiₒ→Oᴱ offset xs
+      where offset = m₁ * wordsize +ℕ m₀
+    O¹→Oᴱ′ m₁ m₂ (extₒ s c xs) = extₒ→Oᴱ offset s c xs
+      where offset = m₂ * wordsize +ℕ m₀
+    O¹→Oᴱ′ m₁ m₂ (o₁ ∥ o₂)     = ⟦ o₁ with-var m₁ with-fyi m₂ ⟧¹ᵉ ⟫
+                                 ⟦ o₂ with-var m₁ with-fyi m₂ ⟧¹ᵉ
 
-    ⟦_giving_⟧¹ᵉ : O¹ → ℕ → Oᴱ
-    ⟦ o@(_ ∥ _) giving n ⟧¹ᵉ = O¹→Oᴱ′ n o
-    ⟦ o giving n ⟧¹ᵉ = tag o (O¹→Oᴱ′ n o)
+    ⟦_with-var_with-fyi_⟧¹ᵉ : O¹ → ℕ → ℕ → Oᴱ
+    ⟦ o@(_ ∥ _) with-var m₁ with-fyi m₂ ⟧¹ᵉ = O¹→Oᴱ′ m₁ m₂ o
+    ⟦ o with-var m₁ with-fyi m₂ ⟧¹ᵉ = tag o (O¹→Oᴱ′ m₁ m₂ o)
 
   -- This prelude is inserted into every compiled S².
   prelude = JUMP 6 ⟫ JUMPDEST ⟫ REVERT ⟫ JUMPDEST
@@ -614,8 +613,10 @@ module Sic→EVM where
   ⟦ seqₒ a b   ⟧²ᵉ = ⟦ a ⟧²ᵉ ⟫ ⟦ b ⟧²ᵉ
   ⟦ sigₒ s n k ⟧²ᵉ =
     sig-check s n ⟫ ISZERO ⟫
-      let m = O¹-var-memory k in
-        ELSE (⟦ k giving m ⟧¹ᵉ ⟫ return m n)
+      let m₁ = O¹-var-memory k
+          m₂ = m₁ +ℕ (O¹-fyi-memory k)
+      in
+        ELSE (⟦ k with-var m₁ with-fyi m₂ ⟧¹ᵉ ⟫ return m₁ n)
 
   open Sⁿ    using (S²)
   open Sⁿ→Oⁿ using (⟦_⟧²)
