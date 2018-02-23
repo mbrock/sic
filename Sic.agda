@@ -97,7 +97,7 @@ module Sⁿ where
       _←_  : S⁰ → S⁰ → S¹ 0                    -- Storage save
       fyi  : (xs : List⁺ S⁰) → S¹ (length⁺ xs) -- Return assignment
       ext  : String → S⁰ → (xs : List S⁰)      -- Calldata
-                              → S¹ (length xs)
+                         → S¹ (length xs)
       _│_  : ∀ {m n}                           -- Action sequence
            → S¹ m → S¹ n → {_ : fyi-ok m n}
            → S¹ (m ⊔ n)
@@ -146,9 +146,9 @@ module Sⁿ where
 
 
   -- S², the set of Sic contracts with named actions.
-  data S² : Set where
-    act_::_ : ∀ {n} → String → S¹ n → S²
-    _//_    : Op₂ S²
+  data S² (sig : Set) : Set where
+    act_::_ : ∀ {n} → sig → S¹ n → S² sig
+    _//_    : Op₂ (S² sig)
 
 
   -- Syntax precedence list
@@ -251,9 +251,13 @@ module Oⁿ where
     fyiₒ  :  List⁺  (O⁰ 0 1) → O¹
     extₒ  : String → O⁰ 0 1 → List (O⁰ 0 1) → O¹
 
-  data O² : Set where
-    sigₒ : String → ℕ → O¹ → O²
-    seqₒ : O² → O² → O²
+  data O² (sig : Set) : Set where
+    sigₒ : sig → ℕ → O¹ → O² sig
+    seqₒ : O² sig → O² sig → O² sig
+
+  map-O²-sig : ∀ {sig₁ sig₂} → (sig₁ → sig₂) → O² sig₁ → O² sig₂
+  map-O²-sig f (sigₒ s x₁ x₂) = sigₒ (f s) x₁ x₂
+  map-O²-sig f (seqₒ x y) = seqₒ (map-O²-sig f x) (map-O²-sig f y)
 
   infixr  5 _┆_
   infixr 10 _∥_
@@ -264,22 +268,29 @@ module Oⁿ where
   open Data.Nat using (_⊔_)
   open import Data.List using (foldr; map)
   open import Data.List.NonEmpty
-    using (foldr₁) renaming (map to map⁺)
+    using (foldr₁)
+    renaming (map to map⁺; length to length⁺)
+
+  -- %%%M...R...X...
 
   O⁰-memory : ∀ {m n} → O⁰ m n → ℕ
   O⁰-memory (refₒ i)  = suc i
   O⁰-memory (o₁ ┆ o₂) = O⁰-memory o₁ ⊔ O⁰-memory o₂
   O⁰-memory x = 0
 
-  O¹-memory : O¹ → ℕ
-  O¹-memory (defₒ i x)    = suc i ⊔ O⁰-memory x
-  O¹-memory (iffₒ x)      = O⁰-memory x
-  O¹-memory (fyiₒ xs)     = foldr₁ _⊔_   (map⁺ O⁰-memory xs)
-  O¹-memory (extₒ s c xs) = foldr  _⊔_ 0 (map  O⁰-memory xs)  -- TODO: 0 is fake
-  O¹-memory (setₖₒ k x)   = O⁰-memory x
-  O¹-memory (setₒ i x)    = O⁰-memory x
-  O¹-memory (o₁ ∥ o₂)     = O¹-memory o₁ ⊔ O¹-memory o₂
+  O¹-var-memory : O¹ → ℕ
+  O¹-var-memory (defₒ i x)    = suc i ⊔ O⁰-memory x
+  O¹-var-memory (fyiₒ xs)     = foldr₁ _⊔_ (map⁺ O⁰-memory xs)
+  O¹-var-memory (extₒ s c xs) = foldr  _⊔_ 0 (map O⁰-memory xs)  -- TODO: 0 is fake
+  O¹-var-memory (iffₒ x)      = O⁰-memory x
+  O¹-var-memory (setₖₒ k x)   = O⁰-memory x
+  O¹-var-memory (setₒ i x)    = O⁰-memory x
+  O¹-var-memory (o₁ ∥ o₂)     = O¹-var-memory o₁ ⊔ O¹-var-memory o₂
 
+  O¹-fyi-memory : O¹ → ℕ
+  O¹-fyi-memory (fyiₒ xs) = length⁺ xs
+  O¹-fyi-memory (o₁ ∥ o₂) = O¹-fyi-memory o₁ ⊔ O¹-fyi-memory o₂
+  O¹-fyi-memory _         = 0
 
 -- Section 4: Compiling Sic to abstract machine code
 --
@@ -331,7 +342,7 @@ module Sⁿ→Oⁿ where
   ⟦ x │ y ⟧¹  = ⟦ x ⟧¹ ∥ ⟦ y ⟧¹
 
   -- Compiling signature dispatch sequences
-  ⟦_⟧² : S² → O²
+  ⟦_⟧² : ∀ {sig} → S² sig → O² sig
   ⟦ act s :: k ⟧² = sigₒ s (S¹-fyi-size k) ⟦ k ⟧¹
   ⟦ a // b     ⟧² = seqₒ ⟦ a ⟧² ⟦ b ⟧²
 
@@ -342,7 +353,7 @@ module Sⁿ→Oⁿ where
       using (refl) renaming (_≡_ to _≣_)
 
     S¹-memory : ∀ {n} → S¹ n → ℕ
-    S¹-memory s = O¹-memory ⟦ s ⟧¹
+    S¹-memory s = O¹-var-memory ⟦ s ⟧¹
 
     example-1 : S¹-memory {0} (nat 0 ← nat 0) ≣ 0
     example-1 = refl
@@ -599,21 +610,21 @@ module Sic→EVM where
     PUSH 224 ⟫ PUSH 2 ⟫ EXP ⟫ PUSH 0 ⟫ CALLDATALOAD ⟫ DIV ⟫
     PUSHSIG s ⟫ EQ
 
-  ⟦_⟧²ᵉ : O² → Oᴱ
+  ⟦_⟧²ᵉ : O² String → Oᴱ
   ⟦ seqₒ a b   ⟧²ᵉ = ⟦ a ⟧²ᵉ ⟫ ⟦ b ⟧²ᵉ
   ⟦ sigₒ s n k ⟧²ᵉ =
     sig-check s n ⟫ ISZERO ⟫
-      let m = O¹-memory k in
+      let m = O¹-var-memory k in
         ELSE (⟦ k giving m ⟧¹ᵉ ⟫ return m n)
 
   open Sⁿ    using (S²)
   open Sⁿ→Oⁿ using (⟦_⟧²)
 
-  S²→Oᴱ : S² → Oᴱ
-  S²→Oᴱ s = prelude ⟫ ⟦ ⟦ s ⟧² ⟧²ᵉ ⟫ REVERT
+  S²→Oᴱ : ∀ {sig} → (sig → String) → S² sig → Oᴱ
+  S²→Oᴱ f s = prelude ⟫ ⟦ map-O²-sig f ⟦ s ⟧² ⟧²ᵉ ⟫ REVERT
 
-  compile : S² → Oᴱ
-  compile = S²→Oᴱ
+  compile : S² String → Oᴱ
+  compile = S²→Oᴱ (λ x → x)
 
 
 -- Section 8: Assembling EVM assembly
@@ -753,8 +764,8 @@ module Main where
   open EVM-Assembly
   open Sic→EVM
 
-  compile-and-assemble : S² → String
-  compile-and-assemble s² = B⁰⋆→String (⋆ (code (S²→Oᴱ s²)))
+  compile-and-assemble : S² String → String
+  compile-and-assemble s² = B⁰⋆→String (⋆ (code (compile s²)))
 
   assemble : Oᴱ → B⁰⋆
   assemble oᴱ = ⋆ (code (prelude ⟫ oᴱ ⟫ STOP))
@@ -863,7 +874,7 @@ module Solidity where
     where open import Data.List
             using (intersperse; map; take)
 
-  ⟦_⟧ˢ² : S² → List String
+  ⟦_⟧ˢ² : S² String → List String
   ⟦ act sig :: k ⟧ˢ² =
     "function " ∷ sig ∷
     fyi-returns (S¹-fyi-size k) ++ " {\n" ∷
@@ -871,7 +882,7 @@ module Solidity where
   ⟦ x₁ // x₂ ⟧ˢ² =
     ⟦ x₁ ⟧ˢ² ++ "\n" ∷ ⟦ x₂ ⟧ˢ²
 
-  S²→Solidity : S² → String
+  S²→Solidity : S² String → String
   S²→Solidity s = "contract Anon {\n"
                   +++ "mapping (uint => uint) store;\n"
                   +++ (Data.List.foldr _+++_ "" ⟦ s ⟧ˢ²)
