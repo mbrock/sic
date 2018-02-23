@@ -14,7 +14,7 @@
  Sic is compiled via abstract machine code into EVM code.
 
 ╔══════════════════════════════════════════════════════════════════════╗
-║ Copyright © 2018  Mikael Brockman, Daniel Brockman, Rain             ║
+║ Copyright © 2018  Mikael Brockman, Daniel Brockman, Rainy McRainface ║
 ║                                                                      ║
 ║ This program is free software: you can redistribute it and/or modify ║
 ║ it under the terms of the GNU Affero General Public License as       ║
