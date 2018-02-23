@@ -83,7 +83,9 @@ module Sⁿ where
     _⟩ : S⁰ → ⟨S⁰⟩
     x ⟩ = one-S⁰ x
 
-  open import Data.List.NonEmpty using (List⁺; [_]; _∷⁺_; length)
+  open import Data.List using (List; []; [_]; _∷_; length)
+  open import Data.List.NonEmpty
+    using (List⁺; _∷⁺_) renaming ([_] to [_]⁺; length to length⁺)
 
   mutual
 
@@ -93,9 +95,9 @@ module Sⁿ where
       iff_ :      S⁰ → S¹ 0                    -- Reverting assertion
       _≜_  : ℕ →  S⁰ → S¹ 0                    -- Local definition
       _←_  : S⁰ → S⁰ → S¹ 0                    -- Storage save
-      fyi  : (xs : List⁺ S⁰) → S¹ (length xs)  -- Return assignment
-      -- ext_ : String → (xs : List⁺ S⁰) → S¹ (length xs)  -- TODO multi arg
-      ext  : String → S⁰ → S¹ 0  -- e.g. `ext "frob()" ilk`
+      fyi  : (xs : List⁺ S⁰) → S¹ (length⁺ xs) -- Return assignment
+      ext  : String → S⁰ → (xs : List S⁰)      -- Calldata
+                              → S¹ (length xs)
       _│_  : ∀ {m n}                           -- Action sequence
            → S¹ m → S¹ n → {_ : fyi-ok m n}
            → S¹ (m ⊔ n)
@@ -111,19 +113,36 @@ module Sⁿ where
   S¹-fyi-size {n} _ = n
 
 
-  -- We define helpers for returning up to 4 values.
+  -- We define helpers for returning up to 4 values,
 
   fyi₁ : S⁰ → S¹ 1
-  fyi₁ a = fyi [ a ]
+  fyi₁ a = fyi [ a ]⁺
 
   fyi₂ : S⁰ → S⁰ → S¹ 2
-  fyi₂ a b = fyi (a ∷⁺ [ b ])
+  fyi₂ a b = fyi (a ∷⁺ [ b ]⁺)
 
   fyi₃ : S⁰ → S⁰ → S⁰ → S¹ 3
-  fyi₃ a b c = fyi (a ∷⁺ b ∷⁺ [ c ])
+  fyi₃ a b c = fyi (a ∷⁺ b ∷⁺ [ c ]⁺)
 
   fyi₄ : S⁰ → S⁰ → S⁰ → S⁰ → S¹ 4
-  fyi₄ a b c d = fyi (a ∷⁺ b ∷⁺ c ∷⁺ [ d ])
+  fyi₄ a b c d = fyi (a ∷⁺ b ∷⁺ c ∷⁺ [ d ]⁺)
+
+  -- and for calling with up to 4 values
+
+  ext₀ : String → S⁰ → S¹ 0
+  ext₀ s x = ext s x [] -- wtf empty list??
+
+  ext₁ : String → S⁰ → S⁰ → S¹ 1
+  ext₁ s x a = ext s x [ a ]
+
+  ext₂ : String → S⁰ → S⁰ → S⁰ → S¹ 2
+  ext₂ s x a b = ext s x ( a ∷ [ b ] )
+
+  ext₃ : String → S⁰ → S⁰ → S⁰ → S⁰ → S¹ 3
+  ext₃ s x a b c = ext s x ( a ∷ b ∷ [ c ] )
+
+  ext₄ : String → S⁰ → S⁰ → S⁰ → S⁰ → S⁰ → S¹ 4
+  ext₄ s x a b c d = ext s x ( a ∷ b ∷ c ∷ [ d ] )
 
 
   -- S², the set of Sic contracts with named actions.
@@ -220,6 +239,7 @@ module Oⁿ where
     ∧ₒ      : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
     ∨ₒ      : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
 
+  open import Data.List using (List)
   open import Data.List.NonEmpty using (List⁺)
 
   data O¹ : Set where
@@ -227,9 +247,9 @@ module Oⁿ where
     iffₒ  :          O⁰ 0 1  → O¹
     setₖₒ : O⁰ 0 1 → O⁰ 0 1  → O¹
     defₒ  :      ℕ → O⁰ 0 1  → O¹
-    extₒ  : String → O⁰ 0 1  → O¹
     setₒ  :      ℕ → O⁰ 0 1  → O¹
     fyiₒ  :  List⁺  (O⁰ 0 1) → O¹
+    extₒ  : String → O⁰ 0 1 → List (O⁰ 0 1) → O¹
 
   data O² : Set where
     sigₒ : String → ℕ → O¹ → O²
@@ -242,9 +262,9 @@ module Oⁿ where
   -- we need to compute the memory requirements of operations.
 
   open Data.Nat using (_⊔_)
+  open import Data.List using (foldr; map)
   open import Data.List.NonEmpty
-    using (foldr₁)
-    renaming (map to map⁺)
+    using (foldr₁) renaming (map to map⁺)
 
   O⁰-memory : ∀ {m n} → O⁰ m n → ℕ
   O⁰-memory (refₒ i)  = suc i
@@ -252,13 +272,13 @@ module Oⁿ where
   O⁰-memory x = 0
 
   O¹-memory : O¹ → ℕ
-  O¹-memory (defₒ i x)  = suc i ⊔ O⁰-memory x
-  O¹-memory (fyiₒ xs)   = foldr₁ _⊔_ (map⁺ O⁰-memory xs)
-  O¹-memory (iffₒ x)    = O⁰-memory x
-  O¹-memory (extₒ s x)  = O⁰-memory x
-  O¹-memory (setₖₒ k x) = O⁰-memory x
-  O¹-memory (setₒ i x)  = O⁰-memory x
-  O¹-memory (o₁ ∥ o₂)   = O¹-memory o₁ ⊔ O¹-memory o₂
+  O¹-memory (defₒ i x)    = suc i ⊔ O⁰-memory x
+  O¹-memory (iffₒ x)      = O⁰-memory x
+  O¹-memory (fyiₒ xs)     = foldr₁ _⊔_   (map⁺ O⁰-memory xs)
+  O¹-memory (extₒ s c xs) = foldr  _⊔_ 0 (map  O⁰-memory xs)  -- TODO: 0 is fake
+  O¹-memory (setₖₒ k x)   = O⁰-memory x
+  O¹-memory (setₒ i x)    = O⁰-memory x
+  O¹-memory (o₁ ∥ o₂)     = O¹-memory o₁ ⊔ O¹-memory o₂
 
 
 -- Section 4: Compiling Sic to abstract machine code
@@ -271,8 +291,9 @@ module Sⁿ→Oⁿ where
   open Sⁿ
   open Oⁿ
 
-  open import Data.List.NonEmpty using (List⁺; [_]; _∷⁺_)
-    renaming (map to map⁺)
+  open import Data.List using (map)
+  open import Data.List.NonEmpty
+    using (List⁺; _∷⁺_) renaming ([_] to [_]⁺; map to map⁺)
 
   mutual
     ⟨S⁰⟩→O⁰ : ∀ {i} → ⟨S⁰⟩ → O⁰ i (suc i)
@@ -304,7 +325,7 @@ module Sⁿ→Oⁿ where
   ⟦_⟧¹ : ∀ {n} → S¹ n → O¹
   ⟦ iff x ⟧¹  = iffₒ ⟦ x ⟧⁰
   ⟦ fyi x ⟧¹  = fyiₒ (map⁺ ⟦_⟧⁰ x)
-  ⟦ ext s x ⟧¹ = extₒ s (⟦_⟧⁰ x)  -- TODO: sigₒ
+  ⟦ ext s c a ⟧¹ = extₒ s (⟦_⟧⁰ c) (map ⟦_⟧⁰ a)
   ⟦ i ≜ x ⟧¹  = defₒ i ⟦ x ⟧⁰
   ⟦ k ← x ⟧¹  = setₖₒ ⟦ k ⟧⁰ ⟦ x ⟧⁰
   ⟦ x │ y ⟧¹  = ⟦ x ⟧¹ ∥ ⟦ y ⟧¹
@@ -462,10 +483,9 @@ module Sic→EVM where
   %hash¹ = 0 * wordsize
   %hash² = 1 * wordsize
   %rpowᶻ = 2 * wordsize
-  %call¹ = 3 * wordsize
 
   -- Let mₒ be the first memory address for non-reserved variables.
-  m₀ = %call¹ +ℕ wordsize
+  m₀ = %rpowᶻ +ℕ wordsize
 
   ⟦_⟧⁰ᵉ : ∀ {i j} → O⁰ i j → Oᴱ
   ⟦ #ₒ n    ⟧⁰ᵉ  = PUSH n
@@ -519,19 +539,43 @@ module Sic→EVM where
       open import Data.List.NonEmpty using (foldr₁; map; length)
       return = PUSH (wordsize * length xs) ⟫ PUSH i ⟫ RETURN
 
+  -- this is some crazy bs ^^^^ :/
+  push-sig : String → Oᴱ
+  push-sig s = PUSHSIG s ⟫ PUSH 224 ⟫ PUSH 2 ⟫ EXP ⟫ MUL
+
+  -- need to push the sig, convert the sig, mstore, push and mstore each arg
+  extₒ→Oᴱ : ℕ → String → O⁰ 0 1 → List (O⁰ 0 1) → Oᴱ
+  extₒ→Oᴱ i s c [] = push-sig s ⟫ PUSH instart ⟫ MSTORE ⟫ call
+                   where
+                     insize = wordsize
+                     instart = i
+                     call = PUSH 0 ⟫ PUSH 0 ⟫ PUSH insize
+                            ⟫ PUSH instart ⟫ PUSH 0 ⟫ ⟦ c ⟧⁰ᵉ
+                            ⟫ GAS ⟫ CALL ⟫ ISZERO ⟫ REVERTIF
+  extₒ→Oᴱ i s c (x ∷ xs) = push-sig s ⟫ PUSH instart ⟫ MSTORE ⟫
+                         -- push each of xs to instart++
+                          foldr₁ _⟫_ (map O⁰#→Oᴱ (index⁺ (instart +ℕ 1) ys)) ⟫ call
+                          where
+                            open import Data.List.NonEmpty using (foldr₁; map; length)
+                            ys = (x ∷⁺ xs)
+                            insize = (wordsize * (length ys +ℕ 1))
+                            instart = i
+                            call = PUSH 0 ⟫ PUSH 0 ⟫ PUSH insize
+                                   ⟫ PUSH instart ⟫ PUSH 0 ⟫ ⟦ c ⟧⁰ᵉ
+                                   ⟫ GAS ⟫ CALL ⟫ ISZERO ⟫ REVERTIF
+
+
   mutual
     O¹→Oᴱ′ : ℕ → O¹ → Oᴱ
-    O¹→Oᴱ′ n (iffₒ o)     = ⟦ o ⟧⁰ᵉ ⟫ ISZERO ⟫ JUMPI 3
-    O¹→Oᴱ′ n (extₒ s a)   = PUSHSIG s ⟫ PUSH 224 ⟫ PUSH 2 ⟫ EXP ⟫ MUL
-                            ⟫ PUSH %call¹ ⟫ MSTORE ⟫ PUSH 0 ⟫ PUSH 0
-                            ⟫ PUSH 32 ⟫ PUSH %call¹ ⟫ PUSH 0 ⟫ ⟦ a ⟧⁰ᵉ
-                            ⟫ GAS ⟫ CALL ⟫ ISZERO ⟫ REVERTIF
-    O¹→Oᴱ′ n (defₒ i x)   = ⟦ x ⟧⁰ᵉ ⟫ PUSH (i * wordsize +ℕ m₀) ⟫ MSTORE
-    O¹→Oᴱ′ n (setₒ i x)   = ⟦ x ⟧⁰ᵉ ⟫ PUSH i ⟫ SSTORE
-    O¹→Oᴱ′ n (setₖₒ k x)  = ⟦ x ⟧⁰ᵉ ⟫ ⟦ k ⟧⁰ᵉ ⟫ SSTORE
-    O¹→Oᴱ′ n (fyiₒ xs)    = fyiₒ→Oᴱ offset xs
+    O¹→Oᴱ′ n (iffₒ o)      = ⟦ o ⟧⁰ᵉ ⟫ ISZERO ⟫ JUMPI 3
+    O¹→Oᴱ′ n (defₒ i x)    = ⟦ x ⟧⁰ᵉ ⟫ PUSH (i * wordsize +ℕ m₀) ⟫ MSTORE
+    O¹→Oᴱ′ n (setₒ i x)    = ⟦ x ⟧⁰ᵉ ⟫ PUSH i ⟫ SSTORE
+    O¹→Oᴱ′ n (setₖₒ k x)   = ⟦ x ⟧⁰ᵉ ⟫ ⟦ k ⟧⁰ᵉ ⟫ SSTORE
+    O¹→Oᴱ′ n (fyiₒ xs)     = fyiₒ→Oᴱ offset xs  -- wtf n, offset??
       where offset = suc n * wordsize +ℕ m₀
-    O¹→Oᴱ′ n (o₁ ∥ o₂)    = ⟦ o₁ giving n ⟧¹ᵉ ⟫ ⟦ o₂ giving n ⟧¹ᵉ
+    O¹→Oᴱ′ n (extₒ s c xs) = extₒ→Oᴱ offset s c xs
+      where offset = suc n * wordsize +ℕ m₀     -- TODO: correct?? overlap? maybe ok cos overlap doesnτ matter
+    O¹→Oᴱ′ n (o₁ ∥ o₂)     = ⟦ o₁ giving n ⟧¹ᵉ ⟫ ⟦ o₂ giving n ⟧¹ᵉ
 
     ⟦_giving_⟧¹ᵉ : O¹ → ℕ → Oᴱ
     ⟦ o@(_ ∥ _) giving n ⟧¹ᵉ = O¹→Oᴱ′ n o
@@ -802,13 +846,14 @@ module Solidity where
       f (x Data.Product., k) =  k ∷ " = " ∷ ⟦ x ⟧ˢ⁰ ++ ";\n" ∷ []
 
   ⟦_⟧ˢ¹ : ∀ {n} → S¹ n → List String
-  ⟦ iff x ⟧ˢ¹   = "require(" ∷ ⟦ x ⟧ˢ⁰ ++ " != 0);\n" ∷ []
-  ⟦ ext s x ⟧ˢ¹ = "require(" ∷ ⟦ x ⟧ˢ⁰ ++ ".call(bytes4(keccak256(\""
-                  ∷ s ∷ "\"))));\n" ∷ []
-  ⟦ i ≜ x ⟧ˢ¹   = "uint256 m" ∷ show 10 i ∷ " = " ∷ ⟦ x ⟧ˢ⁰ ++ ";\n" ∷ []
-  ⟦ k ← x ⟧ˢ¹   = "store["  ∷ ⟦ k ⟧ˢ⁰ ++ "] = " ∷ ⟦ x ⟧ˢ⁰ ++ ";\n" ∷ []
-  ⟦ fyi xs ⟧ˢ¹  = ⟦ xs ⟧ᶠʸⁱ
-  ⟦ x₁ │ x₂ ⟧ˢ¹ = ⟦ x₁ ⟧ˢ¹ ++ "" ∷ ⟦ x₂ ⟧ˢ¹
+  ⟦ iff x ⟧ˢ¹      = "require(" ∷ ⟦ x ⟧ˢ⁰ ++ " != 0);\n" ∷ []
+  ⟦ ext x x₁ xs ⟧ˢ¹ = "" ∷ [] -- TODO
+  -- ⟦ ext s c xs ⟧ˢ¹ = "require(" ∷ ⟦ x ⟧ˢ⁰ ++ ".call(bytes4(keccak256(\""
+  --                    ∷ s ∷ "\"))));\n" ∷ []
+  ⟦ i ≜ x ⟧ˢ¹      = "uint256 m" ∷ show 10 i ∷ " = " ∷ ⟦ x ⟧ˢ⁰ ++ ";\n" ∷ []
+  ⟦ k ← x ⟧ˢ¹      = "store["  ∷ ⟦ k ⟧ˢ⁰ ++ "] = " ∷ ⟦ x ⟧ˢ⁰ ++ ";\n" ∷ []
+  ⟦ fyi xs ⟧ˢ¹     = ⟦ xs ⟧ᶠʸⁱ
+  ⟦ x₁ │ x₂ ⟧ˢ¹    = ⟦ x₁ ⟧ˢ¹ ++ "" ∷ ⟦ x₂ ⟧ˢ¹
 
   fyi-returns : ℕ → List String
   fyi-returns 0 = "() public" ∷ []
