@@ -20,8 +20,8 @@ hello =
   act "test" :: fyi₁ (1)
 
 caller =
-  act "good" :: ext "poke" u //
-  act "evil" :: ext "quit" u
+  act "good" :: ext₀ "poke" u //
+  act "evil" :: ext₀ "quit" u
 
 callee =
   act "gaze" :: fyi₁ (get 0 ) //
