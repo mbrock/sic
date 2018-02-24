@@ -13,23 +13,24 @@ simple =
   act "str" :: fyi₁ (get 0)
 
 hello =
-  act "poke" :: 0 ← 1 //
-  act "frob" :: iff (get 0) │ 1 ← 2 //
-  act "look" :: fyi₂ (get 0) (get 1) //
-  act "feel" :: fyi₁ (get 0) //
-  act "test" :: fyi₁ 1
+  act "poke()" :: 0 ← 1 //
+  act "frob()" :: iff (get 0) │ 1 ← 2 //
+  act "look()" :: fyi₂ (get 0) (get 1) //
+  act "feel()" :: fyi₁ (get 0) //
+  act "test()" :: fyi₁ 1
 
 fyi&ext =
-  act "foo" :: 0 ≜ (ref 1) │ fyi₂ (get 0) (get 1) │ ext₂ "quit" u (get 0) (get 1)
+  act "foo()" :: 0 ≜ (ref 1) │ fyi₂ (get 0) (get 1) │ ext₂ "quit()" u (get 0) (get 1)
 
 caller =
-  act "good" :: ext₀ "poke" u //
-  act "evil" :: ext₀ "quit" u
+  act "good()" :: ext₀ "poke()" u //
+  act "evil()" :: ext₀ "quit()" u //
+  act "push()" :: ext₁ "push(uint256)" u 1 //
+  act "punt()" :: ext₂ "punt(uint256,uint256)" u 1 2
 
 callee =
-  act "gaze" :: fyi₁ (get 0) //
-  act "poke" :: 0 ← 1 //
-  act "fail" :: iff 0
+  act "gaze()" :: fyi₁ (get 0) //
+  act "poke()" :: 0 ← 1 //
+  act "fail()" :: iff 0
 
--- TODO: test `caller` with ds-test
 -- TODO: add `this` as resource, maybe as `&`

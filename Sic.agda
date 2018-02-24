@@ -129,7 +129,7 @@ module Sⁿ where
   -- and for calling with up to 4 values
 
   ext₀ : String → S⁰ → S¹ 0
-  ext₀ s x = ext s x [] -- wtf empty list??
+  ext₀ s x = ext s x []
 
   ext₁ : String → S⁰ → S⁰ → S¹ 0
   ext₁ s x a = ext s x [ a ]
@@ -280,7 +280,7 @@ module Oⁿ where
   O¹-var-memory : O¹ → ℕ
   O¹-var-memory (defₒ i x)    = suc i ⊔ O⁰-memory x
   O¹-var-memory (fyiₒ xs)     = foldr₁ _⊔_ (map⁺ O⁰-memory xs)
-  O¹-var-memory (extₒ s c xs) = foldr  _⊔_ 0 (map O⁰-memory xs)  -- TODO: 0 is fake
+  O¹-var-memory (extₒ s c xs) = foldr  _⊔_ 0 (map O⁰-memory xs)
   O¹-var-memory (iffₒ x)      = O⁰-memory x
   O¹-var-memory (setₖₒ k x)   = O⁰-memory x
   O¹-var-memory (setₒ i x)    = O⁰-memory x
@@ -548,11 +548,9 @@ module Sic→EVM where
     where
       open import Data.List.NonEmpty using (foldr₁; map; length)
 
-  -- this is some crazy bs ^^^^ :/
   push-sig : String → Oᴱ
   push-sig s = PUSHSIG s ⟫ PUSH 224 ⟫ PUSH 2 ⟫ EXP ⟫ MUL
 
-  -- need to push the sig, convert the sig, mstore, push and mstore each arg
   extₒ→Oᴱ : ℕ → String → O⁰ 0 1 → List (O⁰ 0 1) → Oᴱ
   extₒ→Oᴱ i s c [] = push-sig s ⟫ PUSH instart ⟫ MSTORE ⟫ call
                    where
@@ -561,11 +559,12 @@ module Sic→EVM where
                      call = PUSH 0 ⟫ PUSH 0 ⟫ PUSH insize
                             ⟫ PUSH instart ⟫ PUSH 0 ⟫ ⟦ c ⟧⁰ᵉ
                             ⟫ GAS ⟫ CALL ⟫ ISZERO ⟫ REVERTIF
-  extₒ→Oᴱ i s c (x ∷ xs) = push-sig s ⟫ PUSH instart ⟫ MSTORE ⟫
-                         -- push each of xs to instart++
-                          foldr₁ _⟫_ (map O⁰#→Oᴱ (index⁺ (instart +ℕ 4) ys)) ⟫ call
+  extₒ→Oᴱ i s c (x ∷ xs) = push-sig s ⟫ PUSH instart ⟫ MSTORE
+                           ⟫ foldr₁ _⟫_ (map O⁰#→Oᴱ (index⁺ (instart +ℕ 4) ys))
+                           ⟫ call
                           where
-                            open import Data.List.NonEmpty using (foldr₁; map; length)
+                            open import Data.List.NonEmpty
+                              using (foldr₁; map; length)
                             ys = (x ∷⁺ xs)
                             insize = 4 +ℕ wordsize * length ys
                             instart = i
