@@ -30,40 +30,81 @@
 
 module Sic where
 
-open import Algebra.FunctionProperties
-  using (Op₁; Op₂)
 
-open import Data.Nat
-     using (ℕ; suc; _⊔_; _*_)
-  renaming (_+_ to _+ℕ_)
+-- Section 0: External dependencies
+--
+-- We use a bunch of definitions from the standard library.
+-- For clarity, we divide our imports into custom bundles,
+-- which we can then easily open as needed.
+--
 
-open import Data.Empty  using (⊥)
-open import Data.Unit   using (⊤)
-open import Data.Bool   using (Bool; not; T)
-open import Data.String using (String)
-  renaming (_≟_ to _string≟_)
-open import Data.Vec
-  using (Vec)
-  renaming ( map to mapᵛ
-           ; foldr₁ to foldr₁ᵛ
-           ; foldr to foldrᵛ
-           ; toList to toListᵛ
-           ; fromList to fromListᵛ
-           ; [] to []ᵛ
-           ; _∷_ to _∷ᵛ_
-           ; allFin to allFinᵛ
-           ; zip to zipᵛ
-           )
-open import Data.List
-  using (List; []; [_]; _∷_; length; _++_)
-open import Data.List.NonEmpty
-  using (List⁺; _∷⁺_)
-  renaming ([_] to [_]⁺; length to length⁺)
-open import Data.Fin
-  using (Fin; toℕ)
-open import Relation.Nullary.Decidable using (⌊_⌋)
-open import Relation.Binary.PropositionalEquality
-  using (refl) renaming (_≡_ to _≣_)
+module Naturals where
+  open import Data.Nat
+    using (ℕ; suc; _⊔_; _*_)
+    renaming (_+_ to _+ℕ_)
+    public
+
+module Integers where
+  open import Data.Integer
+    using (ℤ; +_)
+    renaming (_+_ to _+ℤ_; _-_ to _-ℤ_; -_ to -ℤ_)
+    public
+
+module Basics where
+  open import Data.Empty using (⊥) public
+  open import Data.Unit  using (⊤) public
+  open import Data.Bool  using (Bool; not; T) public
+  open import Algebra.FunctionProperties
+    using (Op₁; Op₂)
+    public
+
+module Relations where
+  open import Relation.Nullary.Decidable
+    using (⌊_⌋) public
+  open import Relation.Binary.PropositionalEquality
+    using (refl)
+    renaming (_≡_ to _≣_)
+    public
+
+module Strings where
+  open import Data.String
+    using (String)
+    renaming (_≟_ to _string≟_; _++_ to _string++_)
+    public
+
+module Products where
+  open import Data.Product
+    using (_×_; _,_; ,_; Σ; proj₁; proj₂)
+    public
+
+module FiniteSets where
+  open import Data.Fin using (Fin; toℕ) public
+
+module Vectors where
+  open import Data.Vec
+    using (Vec)
+    renaming ( map       to mapᵛ
+             ; foldr₁    to foldr₁ᵛ
+             ; foldr     to foldrᵛ
+             ; toList    to toListᵛ
+             ; fromList  to fromListᵛ
+             ; []        to []ᵛ
+             ; _∷_       to _∷ᵛ_
+             ; allFin    to allFinᵛ
+             ; zip       to zipᵛ
+             )
+    public
+
+module Lists where
+  open import Data.List
+    using (List; []; [_]; _∷_; length; _++_;
+           all; any; map; concatMap; intersperse; take;
+           foldr; zip)
+    public
+  open import Data.List.NonEmpty
+    using (List⁺; _∷⁺_)
+    renaming ([_] to [_]⁺; length to length⁺)
+    public
 
 
 -- Section 1: Sic syntax data types
@@ -78,6 +119,13 @@ open import Relation.Binary.PropositionalEquality
 --
 
 module Sⁿ where
+  open Basics
+  open Relations
+  open Naturals
+  open Vectors
+  open Lists
+  open Strings
+
   data Arg : Set where $ : ℕ → Arg
   data Ref : Set where # : ℕ → Ref
 
@@ -86,7 +134,7 @@ module Sⁿ where
     -- S⁰, the set of Sic expressions
     data S⁰ : Set where
       -_ ¬_               : Op₁ S⁰   -- Unary negation
-      _+_ _−_ _×_ _^_     : Op₂ S⁰   -- Binary math
+      _+_ _−_ _∙_ _^_     : Op₂ S⁰   -- Binary math
       _∨_ _∧_ _≥_ _≤_ _≡_ : Op₂ S⁰   -- Binary logic
 
       u     : S⁰            -- The invoking user's ID
@@ -111,12 +159,12 @@ module Sⁿ where
     -- S¹, the set of Sic actions.
     -- The ℕ type parameter is the number of values returned via “fyi”.
     data S¹ : ℕ → Set where
-      iff_ :      S⁰ → S¹ 0                    -- Reverting assertion
-      _≜_  : ℕ →  S⁰ → S¹ 0                    -- Local definition
-      _←_  : S⁰ → S⁰ → S¹ 0                    -- Storage save
-      fyi  : ∀ {n} → (xs : Vec S⁰ (suc n)) → S¹ (suc n)    -- Return assignment
-      ext  : ∀ {n} → String → S⁰ → Vec S⁰ n → S¹ 0      -- Calldata
-      _│_  : ∀ {m n}                           -- Action sequence
+      iff_ :      S⁰ → S¹ 0
+      _≜_  : ℕ →  S⁰ → S¹ 0
+      _←_  : S⁰ → S⁰ → S¹ 0
+      fyi  : ∀ {n} → (xs : Vec S⁰ (suc n)) → S¹ (suc n)
+      ext  : ∀ {n} → String → S⁰ → Vec S⁰ n → S¹ 0
+      _│_  : ∀ {m n}
            → S¹ m → S¹ n → {_ : fyi-ok m n}
            → S¹ (m ⊔ n)
 
@@ -147,8 +195,7 @@ module Sⁿ where
 
   open fyi-helpers public
 
-  -- ...and for calling with up to 4 values.
-
+  -- ...and for calling externally with up to 4 values.
   module ext-helpers where
     extⁿ : String → S⁰ → List S⁰ → S¹ 0
     extⁿ s x xs = ext s x (fromListᵛ xs)
@@ -185,8 +232,8 @@ module Sⁿ where
 
     disjoint-sigs : S² → S² → Bool
     disjoint-sigs x y =
-      Data.List.all
-        (λ s₁ → not (Data.List.any (λ s₂ → ⌊ s₁ string≟ s₂ ⌋)
+      all
+        (λ s₁ → not (any (λ s₂ → ⌊ s₁ string≟ s₂ ⌋)
                        (all-sigs y)))
         (all-sigs x)
 
@@ -206,7 +253,7 @@ module Sⁿ where
   infixl 36 _≥_
 
   infixl 40 _+_ _−_
-  infixl 41 _×_
+  infixl 41 _∙_
   infixl 42 -_
 
   infix  50 get_ ref_ arg_
@@ -218,6 +265,7 @@ module Sⁿ where
 open Sⁿ using (sig)
 
 module OverloadedNumbers where
+  open Naturals
   open Sⁿ
 
   -- We define a “type class” for overloading number literals.
@@ -252,6 +300,10 @@ module OverloadedNumbers where
 --
 
 module Oⁿ where
+  open Naturals
+  open Vectors
+  open Lists
+  open Strings
 
   -- The O⁰ operations have stack effects, which we encode in the types.
   -- For example, the type of +ₒ denotes taking two items and leaving one.
@@ -270,7 +322,7 @@ module Oⁿ where
     H²ₒ     : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
     +ₒ      : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
     −ₒ      : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
-    ×ₒ      : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
+    ∙ₒ      : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
     ^ₒ      : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
     ≡ₒ      : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
     ≥ₒ      : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
@@ -278,9 +330,6 @@ module Oⁿ where
     ¬ₒ      : ∀ {i}     → O⁰      (suc i)  (suc i)
     ∧ₒ      : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
     ∨ₒ      : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
-
-  open import Data.List using (List)
-  open import Data.List.NonEmpty using (List⁺)
 
   data O¹ : Set where
     _∥_   : O¹ → O¹ → O¹
@@ -304,12 +353,6 @@ module Oⁿ where
 
   -- In order to allocate memory (say, for EVM return values),
   -- we need to compute the memory requirements of operations.
-
-  open Data.Nat using (_⊔_)
-  open import Data.List using (foldr; map)
-  open import Data.List.NonEmpty
-    using (foldr₁)
-    renaming (map to map⁺; length to length⁺)
 
   -- %%%M...R...X...
 
@@ -342,9 +385,8 @@ module Sⁿ→Oⁿ where
   open Sⁿ
   open Oⁿ
 
-  open import Data.List using (map)
-  open import Data.List.NonEmpty
-    using (List⁺; _∷⁺_) renaming ([_] to [_]⁺; map to map⁺)
+  open Naturals
+  open Vectors
 
   mutual
     ⟨S⁰⟩→O⁰ : ∀ {i} → ⟨S⁰⟩ → O⁰ i (suc i)
@@ -362,7 +404,7 @@ module Sⁿ→Oⁿ where
     ⟦ t ⟧⁰         = timeₒ
     ⟦ x + y ⟧⁰     = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ +ₒ
     ⟦ x − y ⟧⁰     = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ −ₒ
-    ⟦ x × y ⟧⁰     = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ ×ₒ
+    ⟦ x ∙ y ⟧⁰     = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ ∙ₒ
     ⟦ x ^ y ⟧⁰     = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ ^ₒ
     ⟦ x ∨ y ⟧⁰     = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ ∨ₒ
     ⟦ x ∧ y ⟧⁰     = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ ∧ₒ
@@ -389,6 +431,7 @@ module Sⁿ→Oⁿ where
   -- Some compile-time assertions
   private
     open Sⁿ
+    open Relations
 
     S¹-memory : ∀ {n} → S¹ n → ℕ
     S¹-memory s = O¹-var-memory ⟦ s ⟧¹
@@ -413,6 +456,8 @@ module Sⁿ→Oⁿ where
 
 module EVM where
   open Oⁿ
+  open Naturals
+  open Strings
 
   data Oᴱ : Set where
     ADD          : Oᴱ
@@ -475,6 +520,7 @@ module EVM where
 
 module EVM-Math where
   open EVM
+  open Naturals
 
   XADD = DUP 2 ⟫ DUP 2 ⟫ XOR ⟫ NOT ⟫ SWAP 2 ⟫ DUP 2 ⟫ ADD ⟫ DUP 1 ⟫ SWAP 2 ⟫
     XOR ⟫ SWAP 1 ⟫ SWAP 2 ⟫ AND ⟫ PUSH 255 ⟫ PUSH 2 ⟫ EXP ⟫ AND ⟫ REVERTIF
@@ -520,10 +566,14 @@ module EVM-Math where
 --
 
 module Sic→EVM where
-
   open Oⁿ
   open EVM
   open EVM-Math
+
+  open Naturals
+  open FiniteSets
+  open Vectors
+  open Strings
 
   wordsize : ℕ
   wordsize = 32
@@ -547,7 +597,7 @@ module Sic→EVM where
   ⟦ getₖₒ   ⟧⁰ᵉ  = SLOAD
   ⟦ +ₒ      ⟧⁰ᵉ  = XADD
   ⟦ −ₒ      ⟧⁰ᵉ  = XSUB
-  ⟦ ×ₒ      ⟧⁰ᵉ  = RMUL
+  ⟦ ∙ₒ      ⟧⁰ᵉ  = RMUL
   ⟦ ^ₒ      ⟧⁰ᵉ  = RPOW′
   ⟦ ≡ₒ      ⟧⁰ᵉ  = EQ
   ⟦ ≥ₒ      ⟧⁰ᵉ  = SGT ⟫ ISZERO
@@ -561,9 +611,7 @@ module Sic→EVM where
                     PUSH %hash² ⟫ MSTORE ⟫
                     PUSH (2 * wordsize) ⟫ PUSH 0 ⟫ KECCAK256
 
-  open import Data.List using (List; _∷_; [])
-  open import Data.List.NonEmpty using (List⁺; [_]) renaming (_∷_ to _∷⁺_)
-  open import Data.Product using (_×_; _,_)
+  open Products
 
   O⁰#→Oᴱ : ∀ {n} → ℕ → (Fin n × O⁰ 0 1) → Oᴱ
   O⁰#→Oᴱ i (j , x) = ⟦ x ⟧⁰ᵉ ⟫ PUSH (i +ℕ (toℕ j) * wordsize) ⟫ MSTORE
@@ -571,8 +619,6 @@ module Sic→EVM where
   fyiₒ→Oᴱ : ∀ {n} → ℕ → Vec (O⁰ 0 1) (suc n) → Oᴱ
   fyiₒ→Oᴱ {n} i xs =
     foldr₁ᵛ _⟫_ (mapᵛ (O⁰#→Oᴱ i) (zipᵛ (allFinᵛ (suc n)) xs))
-    where
-      open import Data.List.NonEmpty using (foldr₁; map; length)
 
   push-sig : String → Oᴱ
   push-sig s = PUSHSIG s ⟫ PUSH 224 ⟫ PUSH 2 ⟫ EXP ⟫ MUL
@@ -665,11 +711,12 @@ module Sic→EVM where
 --
 
 module EVM-Assembly where
-
   open Sic→EVM using (revert-jumpdest)
 
-  open import Data.Integer using (ℤ; +_)
-    renaming (_+_ to _+ℤ_; _-_ to _-ℤ_; -_ to -ℤ_)
+  open Naturals
+  open Integers
+  open Strings
+  open Products
 
   data B⁰ : ℕ → Set where
     B1   : ℕ      → B⁰ 1
@@ -685,9 +732,6 @@ module EVM-Assembly where
 
   bytesize : ∀ {m} → B¹ m → ℕ
   bytesize {m} _ = m
-
-  open import Data.Product using (Σ; ,_; proj₁; proj₂)
-    renaming (_,_ to _Σ,_)
 
   data B⁰⋆ : Set where
     _⟩_ : ∀ {m} → B⁰ m → B⁰⋆ → B⁰⋆
@@ -724,11 +768,11 @@ module EVM-Assembly where
   code′ (JUMP x)  = , op B1 0x61 ⦂ op B2 (+ x) ⦂ op B1 0x56
   code′ (JUMPI x) = , op B1 0x61 ⦂ op B2 (+ x) ⦂ op B1 0x57
   code′ (ELSE x) with code′ x
-  ... | i Σ, bs = , op B1 0x61 ⦂ Δ (+ (i +ℕ skip)) ⦂ op B1 0x57 ⦂ bs ⦂ op B1 0x5b
+  ... | i , bs = , op B1 0x61 ⦂ Δ (+ (i +ℕ skip)) ⦂ op B1 0x57 ⦂ bs ⦂ op B1 0x5b
     where skip = 3
   code′ (LOOP p k) with code′ p
-  ... | iₚ Σ, bsₚ   with code′ k
-  ... | iₖ Σ, bsₖ =
+  ... | iₚ , bsₚ   with code′ k
+  ... | iₖ , bsₖ =
     , op B1 0x5b ⦂ bsₚ ⦂ op B1 0x15 ⦂ op B1 0x61 ⦂ Δ (+ (3 +ℕ iₖ +ℕ 4))
       ⦂ op B1 0x57 ⦂ bsₖ
       ⦂ op B1 0x61 ⦂ Δ (-ℤ (+ skip)) ⦂ op B1 0x56
@@ -793,6 +837,8 @@ module Main where
   open EVM-Assembly
   open Sic→EVM
 
+  open Strings
+
   compile-and-assemble : S² → String
   compile-and-assemble s² = B⁰⋆→String (⋆ (code (compile s²)))
 
@@ -839,19 +885,21 @@ module Dappsys where
 --
 
 module Solidity where
-  open Sⁿ
+  open Sⁿ renaming (_,_ to _,,_)
+  open Products
+  open Naturals
+  open Vectors
+  open Lists
+  open Strings
 
-  open import Data.List using (List; _∷_; []; _++_)
-  open import Data.Nat.Show using (showInBase)
-
-  show = showInBase
+  open import Data.Nat.Show using () renaming (showInBase to show)
 
   mutual
 
     sequence : ⟨S⁰⟩ → List String
     sequence (one-S⁰ x) =
       "keccak256(" ∷ ⟦ x ⟧ˢ⁰ ++ ")" ∷ []
-    sequence (x , s) =
+    sequence (x ,, s) =
       "keccak256(" ∷ ⟦ x ⟧ˢ⁰ ++ ", " ∷ sequence s ++ ")" ∷ []
 
     ⟦_⟧ˢ⁰ : S⁰ → List String
@@ -864,7 +912,7 @@ module Solidity where
     ⟦ ⟨ x ⟧ˢ⁰       = sequence x
     ⟦ x + x₁ ⟧ˢ⁰    = "(" ∷ ⟦ x ⟧ˢ⁰ ++ " + " ∷ ⟦ x₁ ⟧ˢ⁰ ++ ")" ∷ []
     ⟦ x − x₁ ⟧ˢ⁰    = "(" ∷ ⟦ x ⟧ˢ⁰ ++ " - " ∷ ⟦ x₁ ⟧ˢ⁰ ++ ")" ∷ []
-    ⟦ x × x₁ ⟧ˢ⁰    = "(" ∷ ⟦ x ⟧ˢ⁰ ++ " * " ∷ ⟦ x₁ ⟧ˢ⁰ ++ ")" ∷ []
+    ⟦ x ∙ x₁ ⟧ˢ⁰    = "(" ∷ ⟦ x ⟧ˢ⁰ ++ " * " ∷ ⟦ x₁ ⟧ˢ⁰ ++ ")" ∷ []
     ⟦ x ^ x₁ ⟧ˢ⁰    = "(" ∷ ⟦ x ⟧ˢ⁰ ++ " ^ " ∷ ⟦ x₁ ⟧ˢ⁰ ++ ")" ∷ []
     ⟦ x ∨ x₁ ⟧ˢ⁰    = "(" ∷ ⟦ x ⟧ˢ⁰ ++ " || " ∷ ⟦ x₁ ⟧ˢ⁰ ++ ")" ∷ []
     ⟦ x ∧ x₁ ⟧ˢ⁰    = "(" ∷ ⟦ x ⟧ˢ⁰ ++ " && " ∷ ⟦ x₁ ⟧ˢ⁰ ++ ")" ∷ []
@@ -874,16 +922,13 @@ module Solidity where
     ⟦ ¬ x ⟧ˢ⁰       = "(!" ∷ ⟦ x ⟧ˢ⁰ ++ ")" ∷ []
     ⟦ - x ⟧ˢ⁰       = "(-" ∷ ⟦ x ⟧ˢ⁰ ++ ")" ∷ []
 
-  open import Data.List.NonEmpty using (List⁺; toList; length)
-  open import Data.List using (intersperse; concatMap; zip; upTo)
-  open import Data.Product using () renaming (_×_ to _at_)
-
   ⟦_⟧ᶠʸⁱ : ∀ {n} → Vec S⁰ (suc n) → List String
   ⟦ xs ⟧ᶠʸⁱ = intersperse ""
                (concatMap f (zip (toListᵛ xs) ("a" ∷ "b" ∷ "c" ∷ "d" ∷ [])))
     where
-      f : S⁰ at String → List String
-      f (x Data.Product., k) =  k ∷ " = " ∷ ⟦ x ⟧ˢ⁰ ++ ";\n" ∷ []
+      open Products
+      f : S⁰ × String → List String
+      f (x , k) =  k ∷ " = " ∷ ⟦ x ⟧ˢ⁰ ++ ";\n" ∷ []
 
   ⟦_⟧ˢ¹ : ∀ {n} → S¹ n → List String
   ⟦ iff x ⟧ˢ¹      = "require(" ∷ ⟦ x ⟧ˢ⁰ ++ " != 0);\n" ∷ []
@@ -898,10 +943,8 @@ module Solidity where
   fyi-returns : ℕ → List String
   fyi-returns 0 = "() public" ∷ []
   fyi-returns n = "() public returns (" ∷ intersperse ", "
-                   (map (λ x → Data.String._++_ "int256 " x)
+                   (map (λ x → "int256 " string++ x)
                     (take n ("a" ∷ "b" ∷ "c" ∷ "d" ∷ []))) ++ ")" ∷ []
-    where open import Data.List
-            using (intersperse; map; take)
 
   ⟦_⟧ˢ² : S² → List String
   ⟦ act sig :: k ⟧ˢ² =
@@ -914,7 +957,7 @@ module Solidity where
   S²→Solidity : S² → String
   S²→Solidity s = "contract Anon {\n"
                   +++ "mapping (uint => uint) store;\n"
-                  +++ (Data.List.foldr _+++_ "" ⟦ s ⟧ˢ²)
+                  +++ (foldr _+++_ "" ⟦ s ⟧ˢ²)
                   +++ "\n}"
       where open import Data.String renaming (_++_ to _+++_)
 
@@ -924,16 +967,19 @@ module Solidity where
 
 module Combinatronics where
   open Sⁿ
-  open import Data.List using (List; _∷_; []; _++_; all; any)
-  open import Data.List.NonEmpty renaming (map to map⁺)
-  open import Data.String using (_≟_)
+  open Basics
+  open Naturals
+  open Vectors
+
+  -- The “zone” functions change the storage access of Sⁿ terms
+  -- by hashing them together with a given ℕ.
 
   zone⁰ : ℕ → Op₁ S⁰
   zone⁰ n (- s) = - (zone⁰ n s)
   zone⁰ n (¬ s) = ¬ (zone⁰ n s)
   zone⁰ n (x₁ + x₂) = zone⁰ n x₁ + zone⁰ n x₂
   zone⁰ n (x₁ − x₂) = zone⁰ n x₁ − zone⁰ n x₂
-  zone⁰ n (x₁ × x₂) = zone⁰ n x₁ × zone⁰ n x₂
+  zone⁰ n (x₁ ∙ x₂) = zone⁰ n x₁ ∙ zone⁰ n x₂
   zone⁰ n (x₁ ^ x₂) = zone⁰ n x₁ ^ zone⁰ n x₂
   zone⁰ n (x₁ ∨ x₂) = zone⁰ n x₁ ∨ zone⁰ n x₂
   zone⁰ n (x₁ ∧ x₂) = zone⁰ n x₁ ∧ zone⁰ n x₂
@@ -961,14 +1007,20 @@ module Combinatronics where
   zone² n (act x :: x₁) = act x :: zone¹ n x₁
   zone² n (s₁ // s₂) = zone² n s₁ // zone² n s₂
 
+  -- If we distinctly zone two S² terms, we can merge them
+  -- without storage interference.
   _⊗_ : Op₂ S²
   x ⊗ y = zone² 0 x // zone² 1 y
 
   private
+    open Relations
+
     ex-1 : (zone² 5 (act "foo" ::       0   ← get       1 )) ≣
                     (act "foo" :: ⟨ 5 , 0 ⟩ ← get ⟨ 5 , 1 ⟩)
     ex-1 = refl
 
+
+-- Now we open up our modules to users of the language.
 open Sⁿ public
 open Sic→EVM public
 open Main public

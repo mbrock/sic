@@ -22,7 +22,10 @@ hello =
 simple&hello = simple ⊗ hello
 
 fyi&ext =
-  act "foo()" :: 0 ≜ (ref 1) │ fyi₂ (get 0) (get 1) │ ext₂ "quit()" u (get 0) (get 1)
+  act "foo()" ::
+      0 ≜ (ref 1)
+    │ fyi₂ (get 0) (get 1)
+    │ ext₂ "quit()" u (get 0) (get 1)
 
 caller =
   act "good()" :: ext₀ "poke()" u //
