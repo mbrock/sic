@@ -182,15 +182,12 @@ module Sⁿ where
   -- We define helpers for returning up to 4 values...
   module fyi-helpers where
     fyi₁ : S⁰ → S¹ 1
-    fyi₁ a = fyi (a ∷ᵛ []ᵛ)
-
     fyi₂ : S⁰ → S⁰ → S¹ 2
-    fyi₂ a b = fyi (a ∷ᵛ b ∷ᵛ []ᵛ)
-
     fyi₃ : S⁰ → S⁰ → S⁰ → S¹ 3
-    fyi₃ a b c = fyi (a ∷ᵛ b ∷ᵛ c ∷ᵛ []ᵛ)
-
     fyi₄ : S⁰ → S⁰ → S⁰ → S⁰ → S¹ 4
+    fyi₁ a = fyi (a ∷ᵛ []ᵛ)
+    fyi₂ a b = fyi (a ∷ᵛ b ∷ᵛ []ᵛ)
+    fyi₃ a b c = fyi (a ∷ᵛ b ∷ᵛ c ∷ᵛ []ᵛ)
     fyi₄ a b c d = fyi (a ∷ᵛ b ∷ᵛ c ∷ᵛ d ∷ᵛ []ᵛ)
 
   open fyi-helpers public
@@ -201,18 +198,14 @@ module Sⁿ where
     extⁿ s x xs = ext s x (fromListᵛ xs)
 
     ext₀ : String → S⁰ → S¹ 0
-    ext₀ s x = extⁿ s x []
-
     ext₁ : String → S⁰ → S⁰ → S¹ 0
-    ext₁ s x a = extⁿ s x [ a ]
-
     ext₂ : String → S⁰ → S⁰ → S⁰ → S¹ 0
-    ext₂ s x a b = extⁿ s x ( a ∷ [ b ] )
-
     ext₃ : String → S⁰ → S⁰ → S⁰ → S⁰ → S¹ 0
-    ext₃ s x a b c = extⁿ s x ( a ∷ b ∷ [ c ] )
-
     ext₄ : String → S⁰ → S⁰ → S⁰ → S⁰ → S⁰ → S¹ 0
+    ext₀ s x = extⁿ s x []
+    ext₁ s x a = extⁿ s x [ a ]
+    ext₂ s x a b = extⁿ s x ( a ∷ [ b ] )
+    ext₃ s x a b c = extⁿ s x ( a ∷ b ∷ [ c ] )
     ext₄ s x a b c d = extⁿ s x ( a ∷ b ∷ c ∷ [ d ] )
 
   open ext-helpers public
