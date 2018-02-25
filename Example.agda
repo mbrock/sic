@@ -19,6 +19,8 @@ hello =
   act "feel()" :: fyi₁ (get 0) //
   act "test()" :: fyi₁ 1
 
+simple&hello = simple ⊗ hello
+
 fyi&ext =
   act "foo()" :: 0 ≜ (ref 1) │ fyi₂ (get 0) (get 1) │ ext₂ "quit()" u (get 0) (get 1)
 

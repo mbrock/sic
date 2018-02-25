@@ -39,7 +39,31 @@ open import Data.Nat
 
 open import Data.Empty  using (⊥)
 open import Data.Unit   using (⊤)
+open import Data.Bool   using (Bool; not; T)
 open import Data.String using (String)
+  renaming (_≟_ to _string≟_)
+open import Data.Vec
+  using (Vec)
+  renaming ( map to mapᵛ
+           ; foldr₁ to foldr₁ᵛ
+           ; foldr to foldrᵛ
+           ; toList to toListᵛ
+           ; fromList to fromListᵛ
+           ; [] to []ᵛ
+           ; _∷_ to _∷ᵛ_
+           ; allFin to allFinᵛ
+           ; zip to zipᵛ
+           )
+open import Data.List
+  using (List; []; [_]; _∷_; length; _++_)
+open import Data.List.NonEmpty
+  using (List⁺; _∷⁺_)
+  renaming ([_] to [_]⁺; length to length⁺)
+open import Data.Fin
+  using (Fin; toℕ)
+open import Relation.Nullary.Decidable using (⌊_⌋)
+open import Relation.Binary.PropositionalEquality
+  using (refl) renaming (_≡_ to _≣_)
 
 
 -- Section 1: Sic syntax data types
@@ -82,10 +106,6 @@ module Sⁿ where
     _⟩ : S⁰ → ⟨S⁰⟩
     x ⟩ = one-S⁰ x
 
-  open import Data.List using (List; []; [_]; _∷_; length)
-  open import Data.List.NonEmpty
-    using (List⁺; _∷⁺_) renaming ([_] to [_]⁺; length to length⁺)
-
   mutual
 
     -- S¹, the set of Sic actions.
@@ -94,8 +114,8 @@ module Sⁿ where
       iff_ :      S⁰ → S¹ 0                    -- Reverting assertion
       _≜_  : ℕ →  S⁰ → S¹ 0                    -- Local definition
       _←_  : S⁰ → S⁰ → S¹ 0                    -- Storage save
-      fyi  : (xs : List⁺ S⁰) → S¹ (length⁺ xs) -- Return assignment
-      ext  : String → S⁰ → List S⁰ → S¹ 0      -- Calldata
+      fyi  : ∀ {n} → (xs : Vec S⁰ (suc n)) → S¹ (suc n)    -- Return assignment
+      ext  : ∀ {n} → String → S⁰ → Vec S⁰ n → S¹ 0      -- Calldata
       _│_  : ∀ {m n}                           -- Action sequence
            → S¹ m → S¹ n → {_ : fyi-ok m n}
            → S¹ (m ⊔ n)
@@ -111,43 +131,64 @@ module Sⁿ where
   S¹-fyi-size {n} _ = n
 
 
-  -- We define helpers for returning up to 4 values,
+  -- We define helpers for returning up to 4 values...
+  module fyi-helpers where
+    fyi₁ : S⁰ → S¹ 1
+    fyi₁ a = fyi (a ∷ᵛ []ᵛ)
 
-  fyi₁ : S⁰ → S¹ 1
-  fyi₁ a = fyi [ a ]⁺
+    fyi₂ : S⁰ → S⁰ → S¹ 2
+    fyi₂ a b = fyi (a ∷ᵛ b ∷ᵛ []ᵛ)
 
-  fyi₂ : S⁰ → S⁰ → S¹ 2
-  fyi₂ a b = fyi (a ∷⁺ [ b ]⁺)
+    fyi₃ : S⁰ → S⁰ → S⁰ → S¹ 3
+    fyi₃ a b c = fyi (a ∷ᵛ b ∷ᵛ c ∷ᵛ []ᵛ)
 
-  fyi₃ : S⁰ → S⁰ → S⁰ → S¹ 3
-  fyi₃ a b c = fyi (a ∷⁺ b ∷⁺ [ c ]⁺)
+    fyi₄ : S⁰ → S⁰ → S⁰ → S⁰ → S¹ 4
+    fyi₄ a b c d = fyi (a ∷ᵛ b ∷ᵛ c ∷ᵛ d ∷ᵛ []ᵛ)
 
-  fyi₄ : S⁰ → S⁰ → S⁰ → S⁰ → S¹ 4
-  fyi₄ a b c d = fyi (a ∷⁺ b ∷⁺ c ∷⁺ [ d ]⁺)
+  open fyi-helpers public
 
-  -- and for calling with up to 4 values
+  -- ...and for calling with up to 4 values.
 
-  ext₀ : String → S⁰ → S¹ 0
-  ext₀ s x = ext s x []
+  module ext-helpers where
+    extⁿ : String → S⁰ → List S⁰ → S¹ 0
+    extⁿ s x xs = ext s x (fromListᵛ xs)
 
-  ext₁ : String → S⁰ → S⁰ → S¹ 0
-  ext₁ s x a = ext s x [ a ]
+    ext₀ : String → S⁰ → S¹ 0
+    ext₀ s x = extⁿ s x []
 
-  ext₂ : String → S⁰ → S⁰ → S⁰ → S¹ 0
-  ext₂ s x a b = ext s x ( a ∷ [ b ] )
+    ext₁ : String → S⁰ → S⁰ → S¹ 0
+    ext₁ s x a = extⁿ s x [ a ]
 
-  ext₃ : String → S⁰ → S⁰ → S⁰ → S⁰ → S¹ 0
-  ext₃ s x a b c = ext s x ( a ∷ b ∷ [ c ] )
+    ext₂ : String → S⁰ → S⁰ → S⁰ → S¹ 0
+    ext₂ s x a b = extⁿ s x ( a ∷ [ b ] )
 
-  ext₄ : String → S⁰ → S⁰ → S⁰ → S⁰ → S⁰ → S¹ 0
-  ext₄ s x a b c d = ext s x ( a ∷ b ∷ c ∷ [ d ] )
+    ext₃ : String → S⁰ → S⁰ → S⁰ → S⁰ → S¹ 0
+    ext₃ s x a b c = extⁿ s x ( a ∷ b ∷ [ c ] )
 
+    ext₄ : String → S⁰ → S⁰ → S⁰ → S⁰ → S⁰ → S¹ 0
+    ext₄ s x a b c d = extⁿ s x ( a ∷ b ∷ c ∷ [ d ] )
+
+  open ext-helpers public
+
+  sig : Set
+  sig = String
 
   -- S², the set of Sic contracts with named actions.
-  data S² (sig : Set) : Set where
-    act_::_ : ∀ {n} → sig → S¹ n → S² sig
-    _//_    : Op₂ (S² sig)
+  mutual
+    data S² : Set where
+      act_::_ : ∀ {n} → sig → S¹ n → S²
+      _//_    : Op₂ S²
 
+    all-sigs : S² → List sig
+    all-sigs (act s :: _) = s ∷ []
+    all-sigs (x₁ // x₂) = all-sigs x₁ ++ all-sigs x₂
+
+    disjoint-sigs : S² → S² → Bool
+    disjoint-sigs x y =
+      Data.List.all
+        (λ s₁ → not (Data.List.any (λ s₂ → ⌊ s₁ string≟ s₂ ⌋)
+                       (all-sigs y)))
+        (all-sigs x)
 
   -- Syntax precedence list
 
@@ -174,6 +215,7 @@ module Sⁿ where
   infixr 61 _,_
   infixr 62 _⟩
 
+open Sⁿ using (sig)
 
 module OverloadedNumbers where
   open Sⁿ
@@ -246,8 +288,8 @@ module Oⁿ where
     setₖₒ : O⁰ 0 1 → O⁰ 0 1  → O¹
     defₒ  :      ℕ → O⁰ 0 1  → O¹
     setₒ  :      ℕ → O⁰ 0 1  → O¹
-    fyiₒ  :  List⁺  (O⁰ 0 1) → O¹
-    extₒ  : String → O⁰ 0 1 → List (O⁰ 0 1) → O¹
+    fyiₒ  : ∀ {n} → Vec (O⁰ 0 1) (suc n) → O¹
+    extₒ  : ∀ {n} → String → O⁰ 0 1 → Vec (O⁰ 0 1) n → O¹
 
   data O² (sig : Set) : Set where
     sigₒ : sig → ℕ → O¹ → O² sig
@@ -278,15 +320,15 @@ module Oⁿ where
 
   O¹-var-memory : O¹ → ℕ
   O¹-var-memory (defₒ i x)    = suc i ⊔ O⁰-memory x
-  O¹-var-memory (fyiₒ xs)     = foldr₁ _⊔_ (map⁺ O⁰-memory xs)
-  O¹-var-memory (extₒ s c xs) = foldr  _⊔_ 0 (map O⁰-memory xs)
+  O¹-var-memory (fyiₒ xs)     = foldr₁ᵛ _⊔_ (mapᵛ O⁰-memory xs)
+  O¹-var-memory (extₒ s c xs) = foldrᵛ (λ _ → ℕ) _⊔_ 0 (mapᵛ O⁰-memory xs)
   O¹-var-memory (iffₒ x)      = O⁰-memory x
   O¹-var-memory (setₖₒ k x)   = O⁰-memory x
   O¹-var-memory (setₒ i x)    = O⁰-memory x
   O¹-var-memory (o₁ ∥ o₂)     = O¹-var-memory o₁ ⊔ O¹-var-memory o₂
 
   O¹-fyi-memory : O¹ → ℕ
-  O¹-fyi-memory (fyiₒ xs) = length⁺ xs
+  O¹-fyi-memory (fyiₒ {n} xs) = suc n
   O¹-fyi-memory (o₁ ∥ o₂) = O¹-fyi-memory o₁ ⊔ O¹-fyi-memory o₂
   O¹-fyi-memory _         = 0
 
@@ -333,22 +375,20 @@ module Sⁿ→Oⁿ where
   -- Compiling statement sequences
   ⟦_⟧¹ : ∀ {n} → S¹ n → O¹
   ⟦ iff x ⟧¹  = iffₒ ⟦ x ⟧⁰
-  ⟦ fyi x ⟧¹  = fyiₒ (map⁺ ⟦_⟧⁰ x)
-  ⟦ ext s c a ⟧¹ = extₒ s (⟦_⟧⁰ c) (map ⟦_⟧⁰ a)
+  ⟦ fyi x ⟧¹  = fyiₒ (mapᵛ ⟦_⟧⁰ x)
+  ⟦ ext s c a ⟧¹ = extₒ s (⟦_⟧⁰ c) (mapᵛ ⟦_⟧⁰ a)
   ⟦ i ≜ x ⟧¹  = defₒ i ⟦ x ⟧⁰
   ⟦ k ← x ⟧¹  = setₖₒ ⟦ k ⟧⁰ ⟦ x ⟧⁰
   ⟦ x │ y ⟧¹  = ⟦ x ⟧¹ ∥ ⟦ y ⟧¹
 
   -- Compiling signature dispatch sequences
-  ⟦_⟧² : ∀ {sig} → S² sig → O² sig
+  ⟦_⟧² : S² → O² sig
   ⟦ act s :: k ⟧² = sigₒ s (S¹-fyi-size k) ⟦ k ⟧¹
   ⟦ a // b     ⟧² = seqₒ ⟦ a ⟧² ⟦ b ⟧²
 
   -- Some compile-time assertions
   private
     open Sⁿ
-    open import Relation.Binary.PropositionalEquality
-      using (refl) renaming (_≡_ to _≣_)
 
     S¹-memory : ∀ {n} → S¹ n → ℕ
     S¹-memory s = O¹-var-memory ⟦ s ⟧¹
@@ -521,55 +561,42 @@ module Sic→EVM where
                     PUSH %hash² ⟫ MSTORE ⟫
                     PUSH (2 * wordsize) ⟫ PUSH 0 ⟫ KECCAK256
 
-  record Index a : Set where
-    constructor _at_from_
-    field
-      thing : a
-      index : ℕ
-      base  : ℕ
-
   open import Data.List using (List; _∷_; [])
   open import Data.List.NonEmpty using (List⁺; [_]) renaming (_∷_ to _∷⁺_)
+  open import Data.Product using (_×_; _,_)
 
-  index : ∀ {t} → ℕ → ℕ → List t → List (Index t)
-  index j i [] = []
-  index j i (x ∷ xs) = x at j from i ∷ index (suc j) i xs
+  O⁰#→Oᴱ : ∀ {n} → ℕ → (Fin n × O⁰ 0 1) → Oᴱ
+  O⁰#→Oᴱ i (j , x) = ⟦ x ⟧⁰ᵉ ⟫ PUSH (i +ℕ (toℕ j) * wordsize) ⟫ MSTORE
 
-  index⁺ : ∀ {t} → ℕ → List⁺ t → List⁺ (Index t)
-  index⁺ i (x ∷⁺ []) = [ x at 0 from i ]
-  index⁺ i (x ∷⁺ xs) = x at 0 from i ∷⁺ index 1 i xs
-
-  O⁰#→Oᴱ : Index (O⁰ 0 1) → Oᴱ
-  O⁰#→Oᴱ (x at j from i) = ⟦ x ⟧⁰ᵉ ⟫ PUSH (i +ℕ j * wordsize) ⟫ MSTORE
-
-  fyiₒ→Oᴱ : ℕ → List⁺ (O⁰ 0 1) → Oᴱ
-  fyiₒ→Oᴱ i xs = foldr₁ _⟫_ (map O⁰#→Oᴱ (index⁺ i xs))
+  fyiₒ→Oᴱ : ∀ {n} → ℕ → Vec (O⁰ 0 1) (suc n) → Oᴱ
+  fyiₒ→Oᴱ {n} i xs =
+    foldr₁ᵛ _⟫_ (mapᵛ (O⁰#→Oᴱ i) (zipᵛ (allFinᵛ (suc n)) xs))
     where
       open import Data.List.NonEmpty using (foldr₁; map; length)
 
   push-sig : String → Oᴱ
   push-sig s = PUSHSIG s ⟫ PUSH 224 ⟫ PUSH 2 ⟫ EXP ⟫ MUL
 
-  extₒ→Oᴱ : ℕ → String → O⁰ 0 1 → List (O⁰ 0 1) → Oᴱ
-  extₒ→Oᴱ i s c [] = push-sig s ⟫ PUSH instart ⟫ MSTORE ⟫ call
+  extₒ→Oᴱ : ∀ {n} → ℕ → String → O⁰ 0 1 → Vec (O⁰ 0 1) n → Oᴱ
+  extₒ→Oᴱ i s c []ᵛ = push-sig s ⟫ PUSH instart ⟫ MSTORE ⟫ call
                    where
                      insize = 4
                      instart = i
                      call = PUSH 0 ⟫ PUSH 0 ⟫ PUSH insize
                             ⟫ PUSH instart ⟫ PUSH 0 ⟫ ⟦ c ⟧⁰ᵉ
                             ⟫ GAS ⟫ CALL ⟫ ISZERO ⟫ REVERTIF
-  extₒ→Oᴱ i s c (x ∷ xs) = push-sig s ⟫ PUSH instart ⟫ MSTORE
-                           ⟫ foldr₁ _⟫_ (map O⁰#→Oᴱ (index⁺ (instart +ℕ 4) ys))
-                           ⟫ call
-                          where
-                            open import Data.List.NonEmpty
-                              using (foldr₁; map; length)
-                            ys = (x ∷⁺ xs)
-                            insize = 4 +ℕ wordsize * length ys
-                            instart = i
-                            call = PUSH 0 ⟫ PUSH 0 ⟫ PUSH insize
-                                   ⟫ PUSH instart ⟫ PUSH 0 ⟫ ⟦ c ⟧⁰ᵉ
-                                   ⟫ GAS ⟫ CALL ⟫ ISZERO ⟫ REVERTIF
+  extₒ→Oᴱ {n} i s c (x ∷ᵛ xs) = push-sig s ⟫ PUSH instart ⟫ MSTORE ⟫
+   foldr₁ᵛ _⟫_
+       (mapᵛ (O⁰#→Oᴱ (instart +ℕ 4)) (zipᵛ (allFinᵛ n) (x ∷ᵛ xs)))
+     ⟫ call
+   where
+     open import Data.List.NonEmpty using (foldr₁; map; length)
+     ys = (x ∷ᵛ xs)
+     insize = 4 +ℕ wordsize * n
+     instart = i
+     call = PUSH 0 ⟫ PUSH 0 ⟫ PUSH insize
+            ⟫ PUSH instart ⟫ PUSH 0 ⟫ ⟦ c ⟧⁰ᵉ
+            ⟫ GAS ⟫ CALL ⟫ ISZERO ⟫ REVERTIF
 
 
   mutual
@@ -619,10 +646,10 @@ module Sic→EVM where
   open Sⁿ    using (S²)
   open Sⁿ→Oⁿ using (⟦_⟧²)
 
-  S²→Oᴱ : ∀ {sig} → (sig → String) → S² sig → Oᴱ
+  S²→Oᴱ : (sig → String) → S² → Oᴱ
   S²→Oᴱ f s = prelude ⟫ ⟦ map-O²-sig f ⟦ s ⟧² ⟧²ᵉ ⟫ REVERT
 
-  compile : S² String → Oᴱ
+  compile : S² → Oᴱ
   compile = S²→Oᴱ (λ x → x)
 
 
@@ -738,12 +765,14 @@ module EVM-Assembly where
   code : (o : Oᴱ) → B¹ (proj₁ (code′ o))
   code o = proj₂ (code′ o)
 
-  open import Data.String using (String; _++_; toList; fromList)
+  open import Data.String
+    using (String; toList; fromList)
+    renaming (_++_ to _string++_)
   open import Data.List using (length; replicate)
 
   0-pad : ℕ → String → String
   0-pad n s with (+ n) -ℤ (+ length (toList s))
-  0-pad n s | +_ i = fromList (replicate i '0') ++ s
+  0-pad n s | +_ i = fromList (replicate i '0') string++ s
   0-pad n s | ℤ.negsuc n₁ = "{erroneously-huge}"
 
   ℤ→hex : ℕ → ℤ → String
@@ -752,9 +781,10 @@ module EVM-Assembly where
   ℤ→hex _ (ℤ.negsuc n) = "{erroneously-negative}"
 
   B⁰⋆→String : B⁰⋆ → String
-  B⁰⋆→String (B1   x ⟩ x₁) = ℤ→hex 2 (+ x) ++ B⁰⋆→String x₁
-  B⁰⋆→String (B2   x ⟩ x₁) = ℤ→hex 4 x ++ B⁰⋆→String x₁
-  B⁰⋆→String (BSig x ⟩ x₁) = "[" ++ x ++ "]" ++ B⁰⋆→String x₁
+  B⁰⋆→String (B1   x ⟩ x₁) = ℤ→hex 2 (+ x) string++ B⁰⋆→String x₁
+  B⁰⋆→String (B2   x ⟩ x₁) = ℤ→hex 4 x string++ B⁰⋆→String x₁
+  B⁰⋆→String (BSig x ⟩ x₁) =
+    "[" string++ x string++ "]" string++ B⁰⋆→String x₁
   B⁰⋆→String fin = ""
 
 module Main where
@@ -763,7 +793,7 @@ module Main where
   open EVM-Assembly
   open Sic→EVM
 
-  compile-and-assemble : S² String → String
+  compile-and-assemble : S² → String
   compile-and-assemble s² = B⁰⋆→String (⋆ (code (compile s²)))
 
   assemble : Oᴱ → B⁰⋆
@@ -848,9 +878,9 @@ module Solidity where
   open import Data.List using (intersperse; concatMap; zip; upTo)
   open import Data.Product using () renaming (_×_ to _at_)
 
-  ⟦_⟧ᶠʸⁱ : List⁺ S⁰ → List String
+  ⟦_⟧ᶠʸⁱ : ∀ {n} → Vec S⁰ (suc n) → List String
   ⟦ xs ⟧ᶠʸⁱ = intersperse ""
-               (concatMap f (zip (toList xs) ("a" ∷ "b" ∷ "c" ∷ "d" ∷ [])))
+               (concatMap f (zip (toListᵛ xs) ("a" ∷ "b" ∷ "c" ∷ "d" ∷ [])))
     where
       f : S⁰ at String → List String
       f (x Data.Product., k) =  k ∷ " = " ∷ ⟦ x ⟧ˢ⁰ ++ ";\n" ∷ []
@@ -873,7 +903,7 @@ module Solidity where
     where open import Data.List
             using (intersperse; map; take)
 
-  ⟦_⟧ˢ² : S² String → List String
+  ⟦_⟧ˢ² : S² → List String
   ⟦ act sig :: k ⟧ˢ² =
     "function " ∷ sig ∷
     fyi-returns (S¹-fyi-size k) ++ " {\n" ∷
@@ -881,7 +911,7 @@ module Solidity where
   ⟦ x₁ // x₂ ⟧ˢ² =
     ⟦ x₁ ⟧ˢ² ++ "\n" ∷ ⟦ x₂ ⟧ˢ²
 
-  S²→Solidity : S² String → String
+  S²→Solidity : S² → String
   S²→Solidity s = "contract Anon {\n"
                   +++ "mapping (uint => uint) store;\n"
                   +++ (Data.List.foldr _+++_ "" ⟦ s ⟧ˢ²)
@@ -889,7 +919,58 @@ module Solidity where
       where open import Data.String renaming (_++_ to _+++_)
 
 
+-- Section 9: Experimental Sⁿ modifiers and combinators
+--
+
+module Combinatronics where
+  open Sⁿ
+  open import Data.List using (List; _∷_; []; _++_; all; any)
+  open import Data.List.NonEmpty renaming (map to map⁺)
+  open import Data.String using (_≟_)
+
+  zone⁰ : ℕ → Op₁ S⁰
+  zone⁰ n (- s) = - (zone⁰ n s)
+  zone⁰ n (¬ s) = ¬ (zone⁰ n s)
+  zone⁰ n (x₁ + x₂) = zone⁰ n x₁ + zone⁰ n x₂
+  zone⁰ n (x₁ − x₂) = zone⁰ n x₁ − zone⁰ n x₂
+  zone⁰ n (x₁ × x₂) = zone⁰ n x₁ × zone⁰ n x₂
+  zone⁰ n (x₁ ^ x₂) = zone⁰ n x₁ ^ zone⁰ n x₂
+  zone⁰ n (x₁ ∨ x₂) = zone⁰ n x₁ ∨ zone⁰ n x₂
+  zone⁰ n (x₁ ∧ x₂) = zone⁰ n x₁ ∧ zone⁰ n x₂
+  zone⁰ n (x₁ ≥ x₂) = zone⁰ n x₁ ≥ zone⁰ n x₂
+  zone⁰ n (x₁ ≤ x₂) = zone⁰ n x₁ ≤ zone⁰ n x₂
+  zone⁰ n (x₁ ≡ x₂) = zone⁰ n x₁ ≡ zone⁰ n x₂
+  zone⁰ n u = u
+  zone⁰ n t = t
+  zone⁰ n (nat i) = nat i
+  zone⁰ n (get s) = get ⟨ (nat n) , zone⁰ n s ⟩
+  zone⁰ n (ref x) = ref x
+  zone⁰ n (arg x) = arg x
+  zone⁰ n (⟨ x) = ⟨ x
+
+  zone¹ : ∀ {n} → ℕ → Op₁ (S¹ n)
+  zone¹ n (iff x) = iff (zone⁰ n x)
+  zone¹ n (x ≜ x₁) = x ≜ zone⁰ n x₁
+  zone¹ n (x ← x₁) = ⟨ (nat n) , zone⁰ n x ⟩ ← zone⁰ n x₁
+  zone¹ n (fyi {m} xs) = fyi (mapᵛ (zone⁰ n) xs)
+  zone¹ n (ext x x₁ x₂) = ext x (zone⁰ n x₁) (mapᵛ (zone⁰ n) x₂)
+  zone¹ n (_│_ {m₁} {m₂} s₁ s₂ {ok}) =
+    _│_ {m₁} {m₂} (zone¹ n s₁) (zone¹ n s₂) {ok}
+
+  zone² : ℕ → Op₁ S²
+  zone² n (act x :: x₁) = act x :: zone¹ n x₁
+  zone² n (s₁ // s₂) = zone² n s₁ // zone² n s₂
+
+  _⊗_ : Op₂ S²
+  x ⊗ y = zone² 0 x // zone² 1 y
+
+  private
+    ex-1 : (zone² 5 (act "foo" ::       0   ← get       1 )) ≣
+                    (act "foo" :: ⟨ 5 , 0 ⟩ ← get ⟨ 5 , 1 ⟩)
+    ex-1 = refl
+
 open Sⁿ public
 open Sic→EVM public
 open Main public
 open OverloadedNumbers public
+open Combinatronics public
