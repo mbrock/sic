@@ -1,1 +1,1 @@
-html:; agda --html --html-dir=docs -i agda-stdlib/src Sic.agda
+default:; nix-build shell.nix -o out

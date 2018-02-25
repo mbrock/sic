@@ -46,3 +46,5 @@ stoppable =
        else act "peek()" :: fyi₁ (get counter)
 
 -- TODO: add `this` as resource, maybe as `&`
+
+main = sic²evm stoppable

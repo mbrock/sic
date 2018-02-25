@@ -850,8 +850,12 @@ module Main where
 
   open Strings
 
+  open import IO
+
   compile-and-assemble : S² → String
   compile-and-assemble s² = B⁰⋆→String (⋆ (code (compile s²)))
+
+  sic²evm = λ x → run (putStrLn (compile-and-assemble x))
 
   assemble : Oᴱ → B⁰⋆
   assemble oᴱ = ⋆ (code (prelude ⟫ oᴱ ⟫ STOP))
