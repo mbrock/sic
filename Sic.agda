@@ -218,10 +218,14 @@ module Sⁿ where
     data S² : Set where
       act_::_ : ∀ {n} → sig → S¹ n → S²
       _//_    : Op₂ S²
+      case_then_else_ : S⁰ → Op₂ S²
 
     all-sigs : S² → List sig
     all-sigs (act s :: _) = s ∷ []
-    all-sigs (x₁ // x₂) = all-sigs x₁ ++ all-sigs x₂
+    all-sigs (x₁ // x₂) =
+      all-sigs x₁ ++ all-sigs x₂
+    all-sigs (case p then x₁ else x₂) =
+      all-sigs x₁ ++ all-sigs x₂
 
     disjoint-sigs : S² → S² → Bool
     disjoint-sigs x y =
@@ -232,9 +236,10 @@ module Sⁿ where
 
   -- Syntax precedence list
 
-  infixr 1 _//_
-  infixr 2 act_::_
-  infixr 3 _│_
+  infix  1 case_then_else_
+  infixr 2 _//_
+  infixr 3 act_::_
+  infixr 4 _│_
 
   infix  10 iff_ _≜_ _←_
 
@@ -293,6 +298,7 @@ module OverloadedNumbers where
 --
 
 module Oⁿ where
+  open Basics
   open Naturals
   open Vectors
   open Lists
@@ -334,12 +340,17 @@ module Oⁿ where
     extₒ  : ∀ {n} → String → O⁰ 0 1 → Vec (O⁰ 0 1) n → O¹
 
   data O² (sig : Set) : Set where
-    sigₒ : sig → ℕ → O¹ → O² sig
-    seqₒ : O² sig → O² sig → O² sig
+    sigₒ  : sig → ℕ → O¹ → O² sig
+    seqₒ  : Op₂ (O² sig)
+    caseₒ : O⁰ 0 1 → Op₂ (O² sig)
 
   map-O²-sig : ∀ {sig₁ sig₂} → (sig₁ → sig₂) → O² sig₁ → O² sig₂
-  map-O²-sig f (sigₒ s x₁ x₂) = sigₒ (f s) x₁ x₂
-  map-O²-sig f (seqₒ x y) = seqₒ (map-O²-sig f x) (map-O²-sig f y)
+  map-O²-sig f (sigₒ s x₁ x₂) =
+    sigₒ (f s) x₁ x₂
+  map-O²-sig f (seqₒ x y) =
+    seqₒ (map-O²-sig f x) (map-O²-sig f y)
+  map-O²-sig f (caseₒ p x y) =
+    caseₒ p (map-O²-sig f x) (map-O²-sig f y)
 
   infixr  5 _┆_
   infixr 10 _∥_
@@ -418,8 +429,13 @@ module Sⁿ→Oⁿ where
 
   -- Compiling signature dispatch sequences
   ⟦_⟧² : S² → O² sig
-  ⟦ act s :: k ⟧² = sigₒ s (S¹-fyi-size k) ⟦ k ⟧¹
-  ⟦ a // b     ⟧² = seqₒ ⟦ a ⟧² ⟦ b ⟧²
+  ⟦ act s :: k ⟧² =
+    sigₒ s (S¹-fyi-size k) ⟦ k ⟧¹
+  ⟦ a // b     ⟧² =
+    seqₒ ⟦ a ⟧² ⟦ b ⟧²
+  ⟦ case p then a else b ⟧² =
+    caseₒ ⟦ p ⟧⁰ ⟦ a ⟧² ⟦ b ⟧²
+
 
   -- Some compile-time assertions
   private
@@ -681,6 +697,8 @@ module Sic→EVM where
           m₂ = m₁ +ℕ (O¹-fyi-memory k)
       in
         ELSE (⟦ k with-var m₁ with-fyi m₂ ⟧¹ᵉ ⟫ return m₁ n)
+  ⟦ caseₒ p a b ⟧²ᵉ =
+    ⟦ p ⟧⁰ᵉ ⟫ ELSE ⟦ a ⟧²ᵉ ⟫ ⟦ b ⟧²ᵉ
 
   open Sⁿ    using (S²)
   open Sⁿ→Oⁿ using (⟦_⟧²)
@@ -946,6 +964,8 @@ module Solidity where
     ⟦ k ⟧ˢ¹ ++ "}" ∷ []
   ⟦ x₁ // x₂ ⟧ˢ² =
     ⟦ x₁ ⟧ˢ² ++ "\n" ∷ ⟦ x₂ ⟧ˢ²
+  ⟦ case _ then _ else _ ⟧ˢ² =
+    "S²-case-not-implemented;" ∷ []
 
   S²→Solidity : S² → String
   S²→Solidity s = "contract Anon {\n"
@@ -997,8 +1017,13 @@ module Combinatronics where
     _│_ {m₁} {m₂} (zone¹ n s₁) (zone¹ n s₂) {ok}
 
   zone² : ℕ → Op₁ S²
-  zone² n (act x :: x₁) = act x :: zone¹ n x₁
-  zone² n (s₁ // s₂) = zone² n s₁ // zone² n s₂
+  zone² n (act x :: x₁) =
+    act x :: zone¹ n x₁
+  zone² n (s₁ // s₂) =
+    zone² n s₁ // zone² n s₂
+  zone² n (case p then s₁ else s₂) =
+    case (zone⁰ n p) then (zone² n s₁)
+                     else (zone² n s₂)
 
   -- If we distinctly zone two S² terms, we can merge them
   -- without storage interference.

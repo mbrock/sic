@@ -38,4 +38,11 @@ callee =
   act "poke()" :: 0 ← 1 //
   act "fail()" :: iff 0
 
+stoppable =
+  let stopped = 0 ; counter = 1
+  in case (get stopped)
+       then act "poke()" :: counter ← 1 + get counter
+         // act "stop()" :: stopped ← 1
+       else act "peek()" :: fyi₁ (get counter)
+
 -- TODO: add `this` as resource, maybe as `&`
