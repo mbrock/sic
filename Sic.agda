@@ -921,7 +921,7 @@ module Solidity where
     ⟦ nat x ⟧ˢ⁰     = show 10 x ∷ []
     ⟦ u ⟧ˢ⁰         = "msg.sender" ∷ []
     ⟦ t ⟧ˢ⁰         = "block.timestamp" ∷ []
-    ⟦ get x ⟧ˢ⁰     = "storage[" ∷ ⟦ x ⟧ˢ⁰ ++ "]" ∷ []
+    ⟦ get x ⟧ˢ⁰     = "store[" ∷ ⟦ x ⟧ˢ⁰ ++ "]" ∷ []
     ⟦ ref (# x) ⟧ˢ⁰ = "m" ∷ show 10 x ∷ []
     ⟦ arg ($ x) ⟧ˢ⁰ = "p" ∷ show 10 x ∷ []
     ⟦ ⟨ x ⟧ˢ⁰       = sequence x
@@ -945,19 +945,24 @@ module Solidity where
       f : S⁰ × String → List String
       f (x , k) =  k ∷ " = " ∷ ⟦ x ⟧ˢ⁰ ++ ";\n" ∷ []
 
+  ⟦_⟧ᵉˣᵗ : ∀ {n} → Vec S⁰ n → List String
+  ⟦ xs ⟧ᵉˣᵗ = concatMap f (toListᵛ xs)
+    where
+      f : S⁰ → List String
+      f x =  ", " ∷ ⟦ x ⟧ˢ⁰
+
   ⟦_⟧ˢ¹ : ∀ {n} → S¹ n → List String
   ⟦ iff x ⟧ˢ¹      = "require(" ∷ ⟦ x ⟧ˢ⁰ ++ " != 0);\n" ∷ []
-  ⟦ ext x x₁ xs ⟧ˢ¹ = "" ∷ [] -- TODO
-  -- ⟦ ext s c xs ⟧ˢ¹ = "require(" ∷ ⟦ x ⟧ˢ⁰ ++ ".call(bytes4(keccak256(\""
-  --                    ∷ s ∷ "\"))));\n" ∷ []
+  ⟦ ext s c xs ⟧ˢ¹ = "require(" ∷ ⟦ c ⟧ˢ⁰ ++ ".call(bytes4(keccak256(\""
+                     ∷ s ∷ "\"))" ∷ ⟦ xs ⟧ᵉˣᵗ ++ "));\n" ∷ []
   ⟦ i ≜ x ⟧ˢ¹      = "uint256 m" ∷ show 10 i ∷ " = " ∷ ⟦ x ⟧ˢ⁰ ++ ";\n" ∷ []
   ⟦ k ← x ⟧ˢ¹      = "store["  ∷ ⟦ k ⟧ˢ⁰ ++ "] = " ∷ ⟦ x ⟧ˢ⁰ ++ ";\n" ∷ []
   ⟦ fyi xs ⟧ˢ¹     = ⟦ xs ⟧ᶠʸⁱ
   ⟦ x₁ │ x₂ ⟧ˢ¹    = ⟦ x₁ ⟧ˢ¹ ++ "" ∷ ⟦ x₂ ⟧ˢ¹
 
   fyi-returns : ℕ → List String
-  fyi-returns 0 = "() public" ∷ []
-  fyi-returns n = "() public returns (" ∷ intersperse ", "
+  fyi-returns 0 = " public" ∷ []
+  fyi-returns n = " public returns (" ∷ intersperse ", "
                    (map (λ x → "int256 " string++ x)
                     (take n ("a" ∷ "b" ∷ "c" ∷ "d" ∷ []))) ++ ")" ∷ []
 
