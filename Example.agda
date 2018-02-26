@@ -45,6 +45,30 @@ stoppable =
          // act "stop()" :: stopped ← 1
        else act "peek()" :: fyi₁ (get counter)
 
+module Token-S³ where
+  open Strings
+  open Sums
+  open S³
+
+  DSToken =
+       (act "give" :: u ↧ arg 0 ↥ arg 1)
+    // (act "flex" :: arg 0 ↥ arg 1)
+
+  data Box : Set where
+    sai : Box
+
+  data Guy : Set where
+    lad dad : Guy
+
+  -- system1 : S³ 3
+  -- system1 = s³ Box Guy String auth-1 code-1
+  --   where
+  --     auth-1 : DAG (Box ⊎ Guy) String 3
+  --     auth-1 = {!!}
+
+  --     code-1 : Box → S²
+  --     code-1 = {!!}
+
 -- TODO: add `this` as resource, maybe as `&`
 
 main = sic²evm stoppable

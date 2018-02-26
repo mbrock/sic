@@ -77,6 +77,11 @@ module Products where
     using (_×_; _,_; ,_; Σ; proj₁; proj₂)
     public
 
+module Sums where
+  open import Data.Sum
+    using (_⊎_; inj₁; inj₂)
+    public
+
 module FiniteSets where
   open import Data.Fin using (Fin; toℕ) public
 
@@ -92,6 +97,7 @@ module Vectors where
              ; _∷_       to _∷ᵛ_
              ; allFin    to allFinᵛ
              ; zip       to zipᵛ
+             ; reverse   to reverseᵛ
              )
     public
 
@@ -114,8 +120,6 @@ module Lists where
 --   ● S⁰, the expressions (pure formulas);
 --   ● S¹, the actions (decisions and updates); and
 --   ● S², the contracts (combinations of named actions).
---
--- Defining S³ for multi-contract systems is an exercise for the reader.
 --
 
 module Sⁿ where
@@ -1047,9 +1051,122 @@ module Combinatronics where
     ex-1 = refl
 
 
+-- Section 10: S³, the “contract systems”, graphs of related contracts
+--
+-- Observing smart contract systems in the wild, you see a forest of
+-- interacting entities.
+--
+-- An S² term is a schema that can be realized as a contract instance.
+-- An S³ term describes how to realize a network of S² instances.
+--
+-- We try to model a useful kind of “topology” for contract instances,
+-- which is also simple and easy to analyze.
+--
+-- It seems reasonable to assume an acyclic dependence structure,
+-- so that instances can be deployed in order by topological order,
+-- like a Makefile.
+--
+-- To describe a system as an S³ term, you specify its call graph
+-- as a DAG with labelled edges being call signatures.
+--
+-- The result of an S³ compiler will be a “deploy script.”
+--
+-- A method in an S³ system is either “public” or “private.”
+-- A public method can be called by anyone.
+-- A private method can only be called by specific other entities.
+--
+-- This is under construction!
+--
+
+module S³-System where
+
+  open import Data.Graph.Acyclic
+    hiding (map) renaming (Graph to DAG) public
+
+  open Basics
+  open Products
+  open Relations
+  open Naturals
+  open FiniteSets
+  open Vectors
+  open Lists hiding ([_])
+  open Strings
+
+  open import Data.Sum
+    using (_⊎_; inj₁; inj₂)
+  open import Relation.Unary
+    using (Pred; _∈_)
+
+  open Sⁿ renaming (_,_ to _,,_)
+
+  record S³ (n : ℕ) : Set₁ where
+    constructor s³
+    field
+      -- The set of internal S² instances
+      Nⁱ  : Set
+      -- The set of external addresses
+      Nᵉ  : Set
+      -- The set of all internal and external signatures
+      Sig : Set
+      -- The instance network's control flow graph
+      auth : DAG (Nⁱ ⊎ Nᵉ) Sig n
+      -- The S² code for each internal instance
+      code : Nⁱ → S²
+
+  open S³
+
+  Nⁱᵉ : ∀ {n} → S³ n → Set
+  Nⁱᵉ x = Nⁱ x ⊎ Nᵉ x
+
+  _⇾_ : ∀ {N E n} → N → List (E × Fin n) → Context N E n
+  x ⇾ y = context x y
+
+  infix 5 _⇾_
+
+  auth-nodes : ∀ {n} → (x : S³ n) → Vec (Fin n × Nⁱᵉ x) n
+  auth-nodes x = reverseᵛ (topSort (S³.auth x))
+
+  root-edges : ∀ {N E} → Tree N E → List (N × E × N)
+  root-edges {N} {E} (node x es) = map f es
+    where
+      f : E × Tree N E → N × E × N
+      f (e , node l _) = x , e , l
+
+  dag-edges : ∀ {N E n} → DAG N E n → List (N × E × N)
+  dag-edges {N} {E} {n} x =
+    concatMap root-edges (toListᵛ (toForest x))
+
+  data O³ (N : Set) (E : Set) : Set where
+    create        : N → List N → O³ N E
+    permit_to_on_ : N → E → N → O³ N E
+
+  O³-edge : ∀ {N E} → (N × E × N) → O³ N E
+  O³-edge (x , e , y) = permit x to e on y
+
+  O³-create
+    : ∀ {n}
+    → (S : S³ n)
+    → (Fin n × Nⁱᵉ S)
+    → List (O³ (Nⁱᵉ S) (Sig S))
+  O³-create _ (proj₁ , inj₂ y) = []
+  O³-create {n} s (i , inj₁ x) =
+    create (inj₁ x) (map f (sucs g i)) ∷ []
+    where
+      g = auth s
+      f = λ y →
+        -- A bit obscure...
+        label (head ((g [ i ]) [ Fin.suc (proj₂ y) ]))
+
+  S³→O³ : ∀ {n} → (x : S³ n) → List (O³ (Nⁱᵉ x) (Sig x))
+  S³→O³ x =
+    concatMap (O³-create x) (toListᵛ (auth-nodes x)) ++
+    map O³-edge (dag-edges (auth x))
+
+
 -- Now we open up our modules to users of the language.
 open Sⁿ public
 open Sic→EVM public
 open Main public
 open OverloadedNumbers public
 open Combinatronics public
+open S³-System public
