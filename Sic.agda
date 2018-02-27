@@ -69,7 +69,13 @@ module Relations where
 module Strings where
   open import Data.String
     using (String; Costring)
-    renaming (_≟_ to _string≟_; _++_ to _string++_)
+    renaming ( _≟_ to _string≟_
+             ; _++_ to _string++_
+             ; fromList to stringFromList
+             )
+    public
+  open import Data.Char
+    using (Char)
     public
 
 module Products where
@@ -355,6 +361,16 @@ module Oⁿ where
   map-O²-act f (caseₒ p x y) =
     caseₒ p (map-O²-act f x) (map-O²-act f y)
 
+  map-O²-guy : ∀ {Guy₁ Guy₂ Act} → (Guy₁ → Guy₂) → O² Guy₁ Act → O² Guy₂ Act
+  map-O²-guy f (actₒ (the guy) s x₁ x₂) =
+    actₒ (the (f guy)) s x₁ x₂
+  map-O²-guy f (actₒ anybody s x₁ x₂) =
+    actₒ anybody s x₁ x₂
+  map-O²-guy f (seqₒ x₁ x₂) =
+    seqₒ (map-O²-guy f x₁) (map-O²-guy f x₂)
+  map-O²-guy f (caseₒ p x₁ x₂) =
+    caseₒ p (map-O²-guy f x₁) (map-O²-guy f x₂)
+
   infixr  5 _┆_
   infixr 10 _∥_
 
@@ -470,6 +486,9 @@ module EVM where
   open Oⁿ
   open Naturals
   open Strings
+  open Vectors
+
+  Addrᴱ = Vec Char 20
 
   data Oᴱ : Set where
     ADD          : Oᴱ
@@ -498,6 +517,7 @@ module EVM where
     POP          : Oᴱ
     PUSH         : ℕ → Oᴱ
     PUSHSIG      : String → Oᴱ
+    PUSHADDR     : Addrᴱ → Oᴱ
     RETURN       : Oᴱ
     REVERT       : Oᴱ
     REVERTIF     : Oᴱ
@@ -578,6 +598,7 @@ module EVM-Math where
 --
 
 module Sic→EVM where
+  open Sⁿ using (Some; the; anybody)
   open Oⁿ
   open EVM
   open EVM-Math
@@ -692,10 +713,14 @@ module Sic→EVM where
     PUSH 224 ⟫ PUSH 2 ⟫ EXP ⟫ PUSH 0 ⟫ CALLDATALOAD ⟫ DIV ⟫
     PUSHSIG s ⟫ EQ
 
-  ⟦_⟧²ᵉ : O² String String → Oᴱ
+  guy-check : Some Addrᴱ → Oᴱ
+  guy-check (the x) = PUSHADDR x ⟫ CALLER ⟫ EQ
+  guy-check anybody = PUSH 1
+
+  ⟦_⟧²ᵉ : O² Addrᴱ String → Oᴱ
   ⟦ seqₒ a b   ⟧²ᵉ = ⟦ a ⟧²ᵉ ⟫ ⟦ b ⟧²ᵉ
-  ⟦ actₒ _ s n k ⟧²ᵉ =
-    sig-check s n ⟫ ISZERO ⟫
+  ⟦ actₒ guy s n k ⟧²ᵉ =
+    guy-check guy ⟫ sig-check s n ⟫ AND ⟫ ISZERO ⟫
       let m₁ = O¹-var-memory k
           m₂ = m₁ +ℕ (O¹-fyi-memory k)
       in
@@ -706,11 +731,14 @@ module Sic→EVM where
   open Sⁿ    using (S²)
   open Sⁿ→Oⁿ using (⟦_⟧²)
 
-  S²→Oᴱ : ∀ {Act} → (Act → String) → S² String Act → Oᴱ
-  S²→Oᴱ f s = prelude ⟫ ⟦ map-O²-act f ⟦ s ⟧² ⟧²ᵉ ⟫ REVERT
+  S²→Oᴱ : ∀ {Guy Act}
+        → (Guy → Addrᴱ)
+        → (Act → String)
+        → S² Guy Act → Oᴱ
+  S²→Oᴱ f g s = prelude ⟫ ⟦ map-O²-guy f (map-O²-act g ⟦ s ⟧²) ⟧²ᵉ ⟫ REVERT
 
-  compile : S² String String → Oᴱ
-  compile = S²→Oᴱ (λ x → x)
+  compile : S² Addrᴱ String → Oᴱ
+  compile = S²→Oᴱ (λ x → x) (λ x → x)
 
 
 -- Section 8: Assembling EVM assembly
@@ -756,17 +784,19 @@ module External where
 
 module EVM-Assembly where
   open Sic→EVM using (revert-jumpdest)
-
+  open EVM
   open Naturals
   open Integers
+  open Vectors
   open Strings
   open Products
   open External
 
   data B⁰ : ℕ → Set where
-    B1   : ℕ      → B⁰ 1
-    B2   : ℤ      → B⁰ 2
-    BSig : String → B⁰ 4
+    B1    : ℕ      → B⁰ 1
+    B2    : ℤ      → B⁰ 2
+    BSig  : String → B⁰ 4
+    BAddr : Addrᴱ  → B⁰ 20
 
   data B¹ : ℕ → Set where
     op_ : ∀ {m} → B⁰ m → B¹ m
@@ -832,6 +862,7 @@ module EVM-Assembly where
   code′ OR = , op B1 0x17
   code′ (PUSH x) = , op B1 0x60 ⦂ op B1 x
   code′ (PUSHSIG x) = , op B1 0x63 ⦂ op BSig x
+  code′ (PUSHADDR x) = , op B1 0x73 ⦂ op BAddr x
   code′ DIV = , op B1 0x04
   code′ SDIV = , op B1 0x05
   code′ SGT = , op B1 0x13
@@ -873,10 +904,13 @@ module EVM-Assembly where
   B⁰⋆→String (B1   x ⟩ x₁) = ℤ→hex 2 (+ x) string++ B⁰⋆→String x₁
   B⁰⋆→String (B2   x ⟩ x₁) = ℤ→hex 4 x string++ B⁰⋆→String x₁
   B⁰⋆→String (BSig x ⟩ x₁) = keccak256 x string++ B⁰⋆→String x₁
+  B⁰⋆→String (BAddr x ⟩ x₁) =
+    stringFromList (toListᵛ x) string++ B⁰⋆→String x₁
   B⁰⋆→String fin = ""
 
 module Main where
   open Sⁿ
+  open Oⁿ
   open EVM
   open EVM-Assembly
   open Sic→EVM
@@ -887,10 +921,13 @@ module Main where
   import IO.Primitive
   open import IO
 
-  compile-and-assemble : S² String String → String
-  compile-and-assemble s² = B⁰⋆→String (⋆ (code (compile s²)))
-
-  sic²evm = λ x → run (putStrLn (compile-and-assemble x))
+  compile-and-assemble
+    : ∀ {Guy Act}
+    → (Guy → Addrᴱ)
+    → (Act → String)
+    → S² Guy Act → String
+  compile-and-assemble f₁ f₂ s² =
+    B⁰⋆→String (⋆ (code (S²→Oᴱ f₁ f₂ s²)))
 
   assemble : Oᴱ → B⁰⋆
   assemble oᴱ = ⋆ (code (prelude ⟫ oᴱ ⟫ STOP))

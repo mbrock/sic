@@ -40,19 +40,59 @@ callee =
   the "mom" may "poke()" :: 0 ← 1 //
   anybody may "fail()" :: iff 0
 
-stoppable =
-  let stopped = 0 ; counter = 1
-  in case (get stopped)
-       then anybody may "poke()" :: counter ← 1 + get counter
-         // the "dad" may "stop()" :: stopped ← 1
-       else anybody may "peek()" :: fyi₁ (get counter)
 
--- TODO: add `this` as resource, maybe as `&`
+------------------------------------------------------------------------
+
+data Guy : Set where
+  dad : Guy
+
+data Act : Set where
+  peek! poke! shut! open! : Act
+
+sig : Act → String
+sig peek! = "peek()"
+sig poke! = "poke()"
+sig shut! = "shut()"
+sig open! = "open()"
+
+pausable-counter =
+  let p = 0 ; i = 1
+  in case get p
+     then
+       the dad may open! :: p ← 0 //
+       anybody may peek! :: fyi₁ (get i)
+     else
+       the dad may shut! :: p ← 1 //
+       anybody may poke! :: i ← 1 + get i
+
+------------------------------------------------------------------------
+
+open Naturals
+open Vectors
+open Lists
+open EVM
 
 open import IO
 open import Coinduction
+open import Data.Maybe
+
+fixed-width : (A : Set) → (n : ℕ) → List A → Maybe (Vec A n)
+fixed-width _ ℕ.zero [] = just []ᵛ
+fixed-width _ ℕ.zero (x ∷ xs) = nothing
+fixed-width _ (suc n) [] = nothing
+fixed-width A (suc n) (x ∷ xs) with fixed-width A n xs
+... | nothing = nothing
+... | just xs′ = just (x ∷ᵛ xs′)
+
+addr : String → Maybe Addrᴱ
+addr s = fixed-width Char 20 (Data.String.toList s)
+  where import Data.String
+
+compile-it : Maybe (Vec Char 20) → IO ⊤
+compile-it nothing = IO.return ⊤.tt
+compile-it (just a) =
+  putStrLn (compile-and-assemble (λ { dad → a }) sig pausable-counter)
 
 main = run
-  (♯ lift (ask "HELLO") >>=
-     λ x → ♯ (♯ putStrLn x >>
-              ♯ putStrLn (compile-and-assemble stoppable)))
+  (♯ lift (ask "DAD_ADDRESS") >>=
+     λ x → ♯ compile-it (addr x))
