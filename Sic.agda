@@ -68,7 +68,7 @@ module Relations where
 
 module Strings where
   open import Data.String
-    using (String)
+    using (String; Costring)
     renaming (_≟_ to _string≟_; _++_ to _string++_)
     public
 
@@ -214,35 +214,34 @@ module Sⁿ where
 
   open ext-helpers public
 
-  sig : Set
-  sig = String
-
   -- S², the set of Sic contracts with named actions.
-  mutual
-    data S² : Set where
-      act_::_ : ∀ {n} → sig → S¹ n → S²
-      _//_    : Op₂ S²
-      case_then_else_ : S⁰ → Op₂ S²
 
-    all-sigs : S² → List sig
-    all-sigs (act s :: _) = s ∷ []
-    all-sigs (x₁ // x₂) =
-      all-sigs x₁ ++ all-sigs x₂
-    all-sigs (case p then x₁ else x₂) =
-      all-sigs x₁ ++ all-sigs x₂
+  -- We apologize for using the somewhat gender-biased noun “guy”
+  -- as the generic term for an external entity that acts on us.
+  --
+  -- However, note that Guy, as a metavariable, must be instantiated
+  -- by some actual set of Alices and Bobs.
+  --
+  -- S² acts are defined by who is authorized to perform them.
+  --
+  -- When deploying a concrete system from an S² specification,
+  -- you will provide the identity of each “guy” as a parameter
+  -- to the deployment procedure.
+  --
+  data Some (Guy : Set) : Set where
+    the : Guy → Some Guy
+    anybody : Some Guy
 
-    disjoint-sigs : S² → S² → Bool
-    disjoint-sigs x y =
-      all
-        (λ s₁ → not (any (λ s₂ → ⌊ s₁ string≟ s₂ ⌋)
-                       (all-sigs y)))
-        (all-sigs x)
+  data S² (Guy : Set) (Act : Set) : Set where
+    _may_::_ : ∀ {n} → Some Guy → Act → S¹ n → S² Guy Act
+    _//_    : Op₂ (S² Guy Act)
+    case_then_else_ : S⁰ → Op₂ (S² Guy Act)
 
   -- Syntax precedence list
 
   infix  1 case_then_else_
   infixr 2 _//_
-  infixr 3 act_::_
+  infixr 3 _may_::_
   infixr 4 _│_
 
   infix  10 iff_ _≜_ _←_
@@ -264,7 +263,6 @@ module Sⁿ where
   infixr 61 _,_
   infixr 62 _⟩
 
-open Sⁿ using (sig)
 
 module OverloadedNumbers where
   open Naturals
@@ -307,6 +305,7 @@ module Oⁿ where
   open Vectors
   open Lists
   open Strings
+  open Sⁿ
 
   -- The O⁰ operations have stack effects, which we encode in the types.
   -- For example, the type of +ₒ denotes taking two items and leaving one.
@@ -343,18 +342,18 @@ module Oⁿ where
     fyiₒ  : ∀ {n} → Vec (O⁰ 0 1) (suc n) → O¹
     extₒ  : ∀ {n} → String → O⁰ 0 1 → Vec (O⁰ 0 1) n → O¹
 
-  data O² (sig : Set) : Set where
-    sigₒ  : sig → ℕ → O¹ → O² sig
-    seqₒ  : Op₂ (O² sig)
-    caseₒ : O⁰ 0 1 → Op₂ (O² sig)
+  data O² (Guy : Set) (Act : Set) : Set where
+    actₒ  : Some Guy → Act → ℕ → O¹ → O² Guy Act
+    seqₒ  : Op₂ (O² Guy Act)
+    caseₒ : O⁰ 0 1 → Op₂ (O² Guy Act)
 
-  map-O²-sig : ∀ {sig₁ sig₂} → (sig₁ → sig₂) → O² sig₁ → O² sig₂
-  map-O²-sig f (sigₒ s x₁ x₂) =
-    sigₒ (f s) x₁ x₂
-  map-O²-sig f (seqₒ x y) =
-    seqₒ (map-O²-sig f x) (map-O²-sig f y)
-  map-O²-sig f (caseₒ p x y) =
-    caseₒ p (map-O²-sig f x) (map-O²-sig f y)
+  map-O²-act : ∀ {Guy Act₁ Act₂} → (Act₁ → Act₂) → O² Guy Act₁ → O² Guy Act₂
+  map-O²-act f (actₒ g s x₁ x₂) =
+    actₒ g (f s) x₁ x₂
+  map-O²-act f (seqₒ x y) =
+    seqₒ (map-O²-act f x) (map-O²-act f y)
+  map-O²-act f (caseₒ p x y) =
+    caseₒ p (map-O²-act f x) (map-O²-act f y)
 
   infixr  5 _┆_
   infixr 10 _∥_
@@ -432,9 +431,9 @@ module Sⁿ→Oⁿ where
   ⟦ x │ y ⟧¹  = ⟦ x ⟧¹ ∥ ⟦ y ⟧¹
 
   -- Compiling signature dispatch sequences
-  ⟦_⟧² : S² → O² sig
-  ⟦ act s :: k ⟧² =
-    sigₒ s (S¹-fyi-size k) ⟦ k ⟧¹
+  ⟦_⟧² : ∀ {Guy Act} → S² Guy Act → O² Guy Act
+  ⟦ g may s :: k ⟧² =
+    actₒ g s (S¹-fyi-size k) ⟦ k ⟧¹
   ⟦ a // b     ⟧² =
     seqₒ ⟦ a ⟧² ⟦ b ⟧²
   ⟦ case p then a else b ⟧² =
@@ -693,9 +692,9 @@ module Sic→EVM where
     PUSH 224 ⟫ PUSH 2 ⟫ EXP ⟫ PUSH 0 ⟫ CALLDATALOAD ⟫ DIV ⟫
     PUSHSIG s ⟫ EQ
 
-  ⟦_⟧²ᵉ : O² String → Oᴱ
+  ⟦_⟧²ᵉ : O² String String → Oᴱ
   ⟦ seqₒ a b   ⟧²ᵉ = ⟦ a ⟧²ᵉ ⟫ ⟦ b ⟧²ᵉ
-  ⟦ sigₒ s n k ⟧²ᵉ =
+  ⟦ actₒ _ s n k ⟧²ᵉ =
     sig-check s n ⟫ ISZERO ⟫
       let m₁ = O¹-var-memory k
           m₂ = m₁ +ℕ (O¹-fyi-memory k)
@@ -707,10 +706,10 @@ module Sic→EVM where
   open Sⁿ    using (S²)
   open Sⁿ→Oⁿ using (⟦_⟧²)
 
-  S²→Oᴱ : (sig → String) → S² → Oᴱ
-  S²→Oᴱ f s = prelude ⟫ ⟦ map-O²-sig f ⟦ s ⟧² ⟧²ᵉ ⟫ REVERT
+  S²→Oᴱ : ∀ {Act} → (Act → String) → S² String Act → Oᴱ
+  S²→Oᴱ f s = prelude ⟫ ⟦ map-O²-act f ⟦ s ⟧² ⟧²ᵉ ⟫ REVERT
 
-  compile : S² → Oᴱ
+  compile : S² String String → Oᴱ
   compile = S²→Oᴱ (λ x → x)
 
 
@@ -725,6 +724,36 @@ module Sic→EVM where
 --   These deltas are resolved at the last stage of assembly.
 --
 
+module External where
+  open import IO.Primitive renaming (IO to IO′)
+  open Strings
+
+  postulate
+    ask : String → IO′ String
+    keccak256 : String → String
+
+  {-# FOREIGN GHC import qualified System.Environment as Env #-}
+  {-# FOREIGN GHC import Data.Text (pack, unpack) #-}
+  {-# COMPILE GHC ask = fmap pack . Env.getEnv . unpack #-}
+
+  {-# FOREIGN GHC import qualified Data.ByteString as BS #-}
+  {-# FOREIGN GHC import qualified Data.ByteString.Lazy as LBS #-}
+  {-# FOREIGN GHC import qualified Data.ByteString.Builder as B #-}
+  {-# FOREIGN GHC import qualified Data.ByteString.Base16 as BS16 #-}
+  {-# FOREIGN GHC import qualified EVM.Types as EVM #-}
+  {-# FOREIGN GHC import EVM.Keccak (abiKeccak) #-}
+  {-# FOREIGN GHC import Data.Text.Encoding (encodeUtf8, decodeUtf8) #-}
+
+  {-# COMPILE GHC
+        keccak256 = decodeUtf8
+                  . BS16.encode
+                  . BS.take 4
+                  . LBS.toStrict
+                  . B.toLazyByteString
+                  . B.word32BE
+                  . abiKeccak
+                  . encodeUtf8 #-}
+
 module EVM-Assembly where
   open Sic→EVM using (revert-jumpdest)
 
@@ -732,6 +761,7 @@ module EVM-Assembly where
   open Integers
   open Strings
   open Products
+  open External
 
   data B⁰ : ℕ → Set where
     B1   : ℕ      → B⁰ 1
@@ -752,7 +782,7 @@ module EVM-Assembly where
     _⟩_ : ∀ {m} → B⁰ m → B⁰⋆ → B⁰⋆
     fin : B⁰⋆
 
-  infixr 1 _⟩_
+  infixl 1 _⟩_
 
   append : B⁰⋆ → B⁰⋆ → B⁰⋆
   append (x ⟩ o₁) o₂ = x ⟩ append o₁ o₂
@@ -842,8 +872,7 @@ module EVM-Assembly where
   B⁰⋆→String : B⁰⋆ → String
   B⁰⋆→String (B1   x ⟩ x₁) = ℤ→hex 2 (+ x) string++ B⁰⋆→String x₁
   B⁰⋆→String (B2   x ⟩ x₁) = ℤ→hex 4 x string++ B⁰⋆→String x₁
-  B⁰⋆→String (BSig x ⟩ x₁) =
-    "[" string++ x string++ "]" string++ B⁰⋆→String x₁
+  B⁰⋆→String (BSig x ⟩ x₁) = keccak256 x string++ B⁰⋆→String x₁
   B⁰⋆→String fin = ""
 
 module Main where
@@ -852,11 +881,13 @@ module Main where
   open EVM-Assembly
   open Sic→EVM
 
+  open Basics
   open Strings
 
+  import IO.Primitive
   open import IO
 
-  compile-and-assemble : S² → String
+  compile-and-assemble : S² String String → String
   compile-and-assemble s² = B⁰⋆→String (⋆ (code (compile s²)))
 
   sic²evm = λ x → run (putStrLn (compile-and-assemble x))
@@ -896,96 +927,6 @@ module Dappsys where
   k₁ ↧ k₂ ↥ v = (k₁ ↧ v) │ (k₂ ↥ v)
 
   infix 19 _↧_↥_
-
-
--- Section 8: Compiling to Solidity
---
--- We define a compiler from S² to Solidity source code.
---
-
-module Solidity where
-  open Sⁿ renaming (_,_ to _,,_)
-  open Products
-  open Naturals
-  open Vectors
-  open Lists
-  open Strings
-
-  open import Data.Nat.Show using () renaming (showInBase to show)
-
-  mutual
-
-    sequence : ⟨S⁰⟩ → List String
-    sequence (one-S⁰ x) =
-      "keccak256(" ∷ ⟦ x ⟧ˢ⁰ ++ ")" ∷ []
-    sequence (x ,, s) =
-      "keccak256(" ∷ ⟦ x ⟧ˢ⁰ ++ ", " ∷ sequence s ++ ")" ∷ []
-
-    ⟦_⟧ˢ⁰ : S⁰ → List String
-    ⟦ nat x ⟧ˢ⁰     = show 10 x ∷ []
-    ⟦ u ⟧ˢ⁰         = "msg.sender" ∷ []
-    ⟦ t ⟧ˢ⁰         = "block.timestamp" ∷ []
-    ⟦ get x ⟧ˢ⁰     = "store[" ∷ ⟦ x ⟧ˢ⁰ ++ "]" ∷ []
-    ⟦ ref (# x) ⟧ˢ⁰ = "m" ∷ show 10 x ∷ []
-    ⟦ arg ($ x) ⟧ˢ⁰ = "p" ∷ show 10 x ∷ []
-    ⟦ ⟨ x ⟧ˢ⁰       = sequence x
-    ⟦ x + x₁ ⟧ˢ⁰    = "(" ∷ ⟦ x ⟧ˢ⁰ ++ " + " ∷ ⟦ x₁ ⟧ˢ⁰ ++ ")" ∷ []
-    ⟦ x − x₁ ⟧ˢ⁰    = "(" ∷ ⟦ x ⟧ˢ⁰ ++ " - " ∷ ⟦ x₁ ⟧ˢ⁰ ++ ")" ∷ []
-    ⟦ x ∙ x₁ ⟧ˢ⁰    = "(" ∷ ⟦ x ⟧ˢ⁰ ++ " * " ∷ ⟦ x₁ ⟧ˢ⁰ ++ ")" ∷ []
-    ⟦ x ^ x₁ ⟧ˢ⁰    = "(" ∷ ⟦ x ⟧ˢ⁰ ++ " ^ " ∷ ⟦ x₁ ⟧ˢ⁰ ++ ")" ∷ []
-    ⟦ x ∨ x₁ ⟧ˢ⁰    = "(" ∷ ⟦ x ⟧ˢ⁰ ++ " || " ∷ ⟦ x₁ ⟧ˢ⁰ ++ ")" ∷ []
-    ⟦ x ∧ x₁ ⟧ˢ⁰    = "(" ∷ ⟦ x ⟧ˢ⁰ ++ " && " ∷ ⟦ x₁ ⟧ˢ⁰ ++ ")" ∷ []
-    ⟦ x ≥ x₁ ⟧ˢ⁰    = "(" ∷ ⟦ x ⟧ˢ⁰ ++ " >= " ∷ ⟦ x₁ ⟧ˢ⁰ ++ ")" ∷ []
-    ⟦ x ≤ x₁ ⟧ˢ⁰    = "(" ∷ ⟦ x ⟧ˢ⁰ ++ " <= " ∷ ⟦ x₁ ⟧ˢ⁰ ++ ")" ∷ []
-    ⟦ x ≡ x₁ ⟧ˢ⁰    = "(" ∷ ⟦ x ⟧ˢ⁰ ++ " == " ∷ ⟦ x₁ ⟧ˢ⁰ ++ ")" ∷ []
-    ⟦ ¬ x ⟧ˢ⁰       = "(!" ∷ ⟦ x ⟧ˢ⁰ ++ ")" ∷ []
-    ⟦ - x ⟧ˢ⁰       = "(-" ∷ ⟦ x ⟧ˢ⁰ ++ ")" ∷ []
-
-  ⟦_⟧ᶠʸⁱ : ∀ {n} → Vec S⁰ (suc n) → List String
-  ⟦ xs ⟧ᶠʸⁱ = intersperse ""
-               (concatMap f (zip (toListᵛ xs) ("a" ∷ "b" ∷ "c" ∷ "d" ∷ [])))
-    where
-      open Products
-      f : S⁰ × String → List String
-      f (x , k) =  k ∷ " = " ∷ ⟦ x ⟧ˢ⁰ ++ ";\n" ∷ []
-
-  ⟦_⟧ᵉˣᵗ : ∀ {n} → Vec S⁰ n → List String
-  ⟦ xs ⟧ᵉˣᵗ = concatMap f (toListᵛ xs)
-    where
-      f : S⁰ → List String
-      f x =  ", " ∷ ⟦ x ⟧ˢ⁰
-
-  ⟦_⟧ˢ¹ : ∀ {n} → S¹ n → List String
-  ⟦ iff x ⟧ˢ¹      = "require(" ∷ ⟦ x ⟧ˢ⁰ ++ " != 0);\n" ∷ []
-  ⟦ ext s c xs ⟧ˢ¹ = "require(" ∷ ⟦ c ⟧ˢ⁰ ++ ".call(bytes4(keccak256(\""
-                     ∷ s ∷ "\"))" ∷ ⟦ xs ⟧ᵉˣᵗ ++ "));\n" ∷ []
-  ⟦ i ≜ x ⟧ˢ¹      = "uint256 m" ∷ show 10 i ∷ " = " ∷ ⟦ x ⟧ˢ⁰ ++ ";\n" ∷ []
-  ⟦ k ← x ⟧ˢ¹      = "store["  ∷ ⟦ k ⟧ˢ⁰ ++ "] = " ∷ ⟦ x ⟧ˢ⁰ ++ ";\n" ∷ []
-  ⟦ fyi xs ⟧ˢ¹     = ⟦ xs ⟧ᶠʸⁱ
-  ⟦ x₁ │ x₂ ⟧ˢ¹    = ⟦ x₁ ⟧ˢ¹ ++ "" ∷ ⟦ x₂ ⟧ˢ¹
-
-  fyi-returns : ℕ → List String
-  fyi-returns 0 = " public" ∷ []
-  fyi-returns n = " public returns (" ∷ intersperse ", "
-                   (map (λ x → "int256 " string++ x)
-                    (take n ("a" ∷ "b" ∷ "c" ∷ "d" ∷ []))) ++ ")" ∷ []
-
-  ⟦_⟧ˢ² : S² → List String
-  ⟦ act sig :: k ⟧ˢ² =
-    "function " ∷ sig ∷
-    fyi-returns (S¹-fyi-size k) ++ " {\n" ∷
-    ⟦ k ⟧ˢ¹ ++ "}" ∷ []
-  ⟦ x₁ // x₂ ⟧ˢ² =
-    ⟦ x₁ ⟧ˢ² ++ "\n" ∷ ⟦ x₂ ⟧ˢ²
-  ⟦ case _ then _ else _ ⟧ˢ² =
-    "S²-case-not-implemented;" ∷ []
-
-  S²→Solidity : S² → String
-  S²→Solidity s = "contract Anon {\n"
-                  +++ "mapping (uint => uint) store;\n"
-                  +++ (foldr _+++_ "" ⟦ s ⟧ˢ²)
-                  +++ "\n}"
-      where open import Data.String renaming (_++_ to _+++_)
 
 
 -- Section 9: Experimental Sⁿ modifiers and combinators
@@ -1029,9 +970,9 @@ module Combinatronics where
   zone¹ n (_│_ {m₁} {m₂} s₁ s₂ {ok}) =
     _│_ {m₁} {m₂} (zone¹ n s₁) (zone¹ n s₂) {ok}
 
-  zone² : ℕ → Op₁ S²
-  zone² n (act x :: x₁) =
-    act x :: zone¹ n x₁
+  zone² : ∀ {Guy Act} → ℕ → Op₁ (S² Guy Act)
+  zone² n (guy may act :: x₁) =
+    guy may act :: zone¹ n x₁
   zone² n (s₁ // s₂) =
     zone² n s₁ // zone² n s₂
   zone² n (case p then s₁ else s₂) =
@@ -1040,127 +981,18 @@ module Combinatronics where
 
   -- If we distinctly zone two S² terms, we can merge them
   -- without storage interference.
-  _⊗_ : Op₂ S²
+  _⊗_ : ∀ {Guy Act} → Op₂ (S² Guy Act)
   x ⊗ y = zone² 0 x // zone² 1 y
 
   private
     open Relations
 
-    ex-1 : (zone² 5 (act "foo" ::       0   ← get       1 )) ≣
-                    (act "foo" :: ⟨ 5 , 0 ⟩ ← get ⟨ 5 , 1 ⟩)
+    data Guy1 : Set where gal : Guy1
+    data Act1 : Set where foo : Act1
+
+    ex-1 : (zone² 5 (the gal may foo ::       0   ← get       1 )) ≣
+                    (the gal may foo :: ⟨ 5 , 0 ⟩ ← get ⟨ 5 , 1 ⟩)
     ex-1 = refl
-
-
--- Section 10: S³, the “contract systems”, graphs of related contracts
---
--- Observing smart contract systems in the wild, you see a forest of
--- interacting entities.
---
--- An S² term is a schema that can be realized as a contract instance.
--- An S³ term describes how to realize a network of S² instances.
---
--- We try to model a useful kind of “topology” for contract instances,
--- which is also simple and easy to analyze.
---
--- It seems reasonable to assume an acyclic dependence structure,
--- so that instances can be deployed in order by topological order,
--- like a Makefile.
---
--- To describe a system as an S³ term, you specify its call graph
--- as a DAG with labelled edges being call signatures.
---
--- The result of an S³ compiler will be a “deploy script.”
---
--- A method in an S³ system is either “public” or “private.”
--- A public method can be called by anyone.
--- A private method can only be called by specific other entities.
---
--- This is under construction!
---
-
-module S³-System where
-
-  open import Data.Graph.Acyclic
-    hiding (map) renaming (Graph to DAG) public
-
-  open Basics
-  open Products
-  open Relations
-  open Naturals
-  open FiniteSets
-  open Vectors
-  open Lists hiding ([_])
-  open Strings
-
-  open import Data.Sum
-    using (_⊎_; inj₁; inj₂)
-  open import Relation.Unary
-    using (Pred; _∈_)
-
-  open Sⁿ renaming (_,_ to _,,_)
-
-  record S³ (n : ℕ) : Set₁ where
-    constructor s³
-    field
-      -- The set of internal S² instances
-      Nⁱ  : Set
-      -- The set of external addresses
-      Nᵉ  : Set
-      -- The set of all internal and external signatures
-      Sig : Set
-      -- The instance network's control flow graph
-      auth : DAG (Nⁱ ⊎ Nᵉ) Sig n
-      -- The S² code for each internal instance
-      code : Nⁱ → S²
-
-  open S³
-
-  Nⁱᵉ : ∀ {n} → S³ n → Set
-  Nⁱᵉ x = Nⁱ x ⊎ Nᵉ x
-
-  _⇾_ : ∀ {N E n} → N → List (E × Fin n) → Context N E n
-  x ⇾ y = context x y
-
-  infix 5 _⇾_
-
-  auth-nodes : ∀ {n} → (x : S³ n) → Vec (Fin n × Nⁱᵉ x) n
-  auth-nodes x = reverseᵛ (topSort (S³.auth x))
-
-  root-edges : ∀ {N E} → Tree N E → List (N × E × N)
-  root-edges {N} {E} (node x es) = map f es
-    where
-      f : E × Tree N E → N × E × N
-      f (e , node l _) = x , e , l
-
-  dag-edges : ∀ {N E n} → DAG N E n → List (N × E × N)
-  dag-edges {N} {E} {n} x =
-    concatMap root-edges (toListᵛ (toForest x))
-
-  data O³ (N : Set) (E : Set) : Set where
-    create        : N → List N → O³ N E
-    permit_to_on_ : N → E → N → O³ N E
-
-  O³-edge : ∀ {N E} → (N × E × N) → O³ N E
-  O³-edge (x , e , y) = permit x to e on y
-
-  O³-create
-    : ∀ {n}
-    → (S : S³ n)
-    → (Fin n × Nⁱᵉ S)
-    → List (O³ (Nⁱᵉ S) (Sig S))
-  O³-create _ (proj₁ , inj₂ y) = []
-  O³-create {n} s (i , inj₁ x) =
-    create (inj₁ x) (map f (sucs g i)) ∷ []
-    where
-      g = auth s
-      f = λ y →
-        -- A bit obscure...
-        label (head ((g [ i ]) [ Fin.suc (proj₂ y) ]))
-
-  S³→O³ : ∀ {n} → (x : S³ n) → List (O³ (Nⁱᵉ x) (Sig x))
-  S³→O³ x =
-    concatMap (O³-create x) (toListᵛ (auth-nodes x)) ++
-    map O³-edge (dag-edges (auth x))
 
 
 -- Now we open up our modules to users of the language.
@@ -1169,4 +1001,6 @@ open Sic→EVM public
 open Main public
 open OverloadedNumbers public
 open Combinatronics public
-open S³-System public
+open External public
+open Strings public
+open Basics public
