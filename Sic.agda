@@ -51,9 +51,11 @@ module Integers where
     public
 
 module Basics where
+  open import Function   using (_∘_) public
   open import Data.Empty using (⊥) public
   open import Data.Unit  using (⊤) public
   open import Data.Bool  using (Bool; not; T) public
+  open import Data.Maybe using (Maybe; maybe; just; nothing) public
   open import Algebra.FunctionProperties
     using (Op₁; Op₂)
     public
@@ -737,6 +739,12 @@ module Sic→EVM where
         → S² Guy Act → Oᴱ
   S²→Oᴱ f g s = prelude ⟫ ⟦ map-O²-guy f (map-O²-act g ⟦ s ⟧²) ⟧²ᵉ ⟫ REVERT
 
+  S²→O² : ∀ {Guy Act} → S² Guy Act → O² Guy Act
+  S²→O² x = ⟦ x ⟧²
+
+  O²→Oᴱ : O² Addrᴱ String → Oᴱ
+  O²→Oᴱ x = prelude ⟫ ⟦ x ⟧²ᵉ ⟫ REVERT
+
   compile : S² Addrᴱ String → Oᴱ
   compile = S²→Oᴱ (λ x → x) (λ x → x)
 
@@ -754,15 +762,16 @@ module Sic→EVM where
 
 module External where
   open import IO.Primitive renaming (IO to IO′)
+  open Basics
   open Strings
 
   postulate
-    ask : String → IO′ String
+    ask : String → IO′ (Maybe String)
     keccak256 : String → String
 
   {-# FOREIGN GHC import qualified System.Environment as Env #-}
   {-# FOREIGN GHC import Data.Text (pack, unpack) #-}
-  {-# COMPILE GHC ask = fmap pack . Env.getEnv . unpack #-}
+  {-# COMPILE GHC ask = fmap (fmap pack) . Env.lookupEnv . unpack #-}
 
   {-# FOREIGN GHC import qualified Data.ByteString as BS #-}
   {-# FOREIGN GHC import qualified Data.ByteString.Lazy as LBS #-}
@@ -908,18 +917,75 @@ module EVM-Assembly where
     stringFromList (toListᵛ x) string++ B⁰⋆→String x₁
   B⁰⋆→String fin = ""
 
-module Main where
+module Linking where
   open Sⁿ
   open Oⁿ
   open EVM
   open EVM-Assembly
   open Sic→EVM
+  open External
 
   open Basics
   open Strings
 
   import IO.Primitive
   open import IO
+  open import Coinduction
+
+  open Naturals
+  open Vectors
+  open Lists
+  open EVM
+
+  data ID : Set where
+    parameter : String → ID
+    hardcoded : Addrᴱ  → ID
+
+  fixed-width : (A : Set) → (n : ℕ) → List A → Maybe (Vec A n)
+  fixed-width _ ℕ.zero [] = just []ᵛ
+  fixed-width _ ℕ.zero (x ∷ xs) = nothing
+  fixed-width _ (suc n) [] = nothing
+  fixed-width A (suc n) (x ∷ xs) with fixed-width A n xs
+  ... | nothing = nothing
+  ... | just xs′ = just (x ∷ᵛ xs′)
+
+  addr : String → Maybe Addrᴱ
+  addr s = fixed-width Char 20 (Data.String.toList s)
+    where import Data.String
+
+  -- Resolve parameters via I/O environment variables.
+  resolve : ID → IO (Maybe Addrᴱ)
+  resolve (parameter x) =
+    ♯ lift (ask x) >>= λ y →
+      ♯ IO.return (maybe addr nothing y)
+  resolve (hardcoded x) = IO.return (just x)
+
+  -- Resolve all the guys in an O² using I/O.
+  resolve-O²
+    : ∀ {guy act}
+    → (guy → ID)
+    → O² guy act
+    → IO (Maybe (O² Addrᴱ act))
+  resolve-O² f (actₒ anybody a n x) =
+    IO.return (just (actₒ anybody a n x))
+  resolve-O² f (actₒ (the g) a n x) =
+    ♯ resolve (f g) >>= maybe
+        (λ g′ → ♯ IO.return (just (actₒ (the g′) a n x)))
+        (♯ IO.return nothing)
+  resolve-O² f (seqₒ x₁ x₂) =
+    ♯ resolve-O² f x₁ >>= maybe
+        (λ y₁′ → ♯
+          (♯ resolve-O² f x₂ >>= maybe
+               (λ y₂′ → ♯ IO.return (just (seqₒ y₁′ y₂′)))
+               (♯ IO.return nothing)))
+        (♯ IO.return nothing)
+  resolve-O² f (caseₒ p x₁ x₂) =
+    ♯ resolve-O² f x₁ >>= maybe
+      (λ y₁′ → ♯
+        (♯ resolve-O² f x₂ >>= maybe
+          (λ y₂′ → ♯ IO.return (just (caseₒ p y₁′ y₂′)))
+          (♯ IO.return nothing)))
+      (♯ IO.return nothing)
 
   compile-and-assemble
     : ∀ {Guy Act}
@@ -929,8 +995,35 @@ module Main where
   compile-and-assemble f₁ f₂ s² =
     B⁰⋆→String (⋆ (code (S²→Oᴱ f₁ f₂ s²)))
 
-  assemble : Oᴱ → B⁰⋆
-  assemble oᴱ = ⋆ (code (prelude ⟫ oᴱ ⟫ STOP))
+  assemble : Oᴱ → String
+  assemble x = B⁰⋆→String (⋆ (code x))
+
+  compile-and-link
+    : ∀ {Guy Act}
+    → (Guy → ID)
+    → (Act → String)
+    → S² Guy Act
+    → IO (Maybe Oᴱ)
+  compile-and-link f₁ f₂ x =
+    ♯ resolve-O² f₁ (map-O²-act f₂ (S²→O² x)) >>=
+        maybe
+          (λ y → ♯ (IO.return (just (O²→Oᴱ y))))
+          (♯ IO.return nothing)
+
+  assemble-and-print : IO (Maybe Oᴱ) → IO ⊤
+  assemble-and-print io = ♯ io >>=
+    maybe
+      (λ x → ♯ putStrLn (assemble x))
+      (♯ putStrLn "Error: linking failed.")
+
+  link_with-guys_with-acts
+    : ∀ {Guy Act}
+    → S² Guy Act
+    → (Guy → ID)
+    → (Act → String)
+    → IO.Primitive.IO ⊤
+  link x with-guys f₁ with-acts f₂ =
+    run (assemble-and-print (compile-and-link f₁ f₂ x))
 
 
 -- Section 7: Dappsys, free stuff for dapp developers
@@ -1033,11 +1126,11 @@ module Combinatronics where
 
 
 -- Now we open up our modules to users of the language.
+open Basics public
+open Strings public
+open OverloadedNumbers public
 open Sⁿ public
 open Sic→EVM public
-open Main public
-open OverloadedNumbers public
 open Combinatronics public
 open External public
-open Strings public
-open Basics public
+open Linking public

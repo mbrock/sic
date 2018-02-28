@@ -1,6 +1,0 @@
-#!/usr/bin/env node
-function sig(_, p1) {
-  return require("./sha3.js").keccak256(p1).slice(0, 8)
-}
-var data = require("fs").readFileSync(process.argv[2]).toString()
-console.log(data.replace(/\[(.*?)\]/g, sig).replace(/\n/g, ""))
