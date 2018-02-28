@@ -141,62 +141,75 @@ module Sⁿ where
   data Arg : Set where $ : ℕ → Arg
   data Ref : Set where # : ℕ → Ref
 
+  data Type : Set where
+    Word : Type
+    Slot : Type
+
   mutual
 
     -- S⁰, the set of Sic expressions
-    data S⁰ : Set where
-      -_ ¬_               : Op₁ S⁰   -- Unary negation
-      _+_ _−_ _∙_ _^_     : Op₂ S⁰   -- Binary math
-      _∨_ _∧_ _≥_ _≤_ _≡_ : Op₂ S⁰   -- Binary logic
+    data S⁰ : Type → Set where
+      -_ ¬_               : Op₁ (S⁰ Word)   -- 1-ary negation
+      _+_ _−_ _∙_ _^_     : Op₂ (S⁰ Word)   -- 2-ary math
+      _∨_ _∧_ _≥_ _≤_ _≡_ : Op₂ (S⁰ Word)   -- 2-ary logic
 
-      u     : S⁰            -- The invoking user's ID
-      t     : S⁰            -- The current time
-      nat_  : ℕ → S⁰        -- A natural number literal
-      get_  : S⁰ → S⁰       -- Value of a storage slot
-      ref_  : Ref → S⁰      -- Value of a memory slot
-      arg_  : Arg → S⁰      -- Value of an argument
-      ⟨_    : ⟨S⁰⟩ → S⁰     -- Hash of a sequence of values
+      u     : S⁰ Word            -- The invoking user's ID
+      t     : S⁰ Word            -- The current time
+      nat_  : ℕ → S⁰ Word        -- A natural number literal
+      at_   : ℕ → S⁰ Slot        -- A simple storage slot
+      get_  : S⁰ Slot → S⁰ Word  -- Value of a storage slot
+      ref_  : Ref → S⁰ Word      -- Value of a memory slot
+      arg_  : Arg → S⁰ Word      -- Value of an argument
+      ⟨_    : ⟨S⁰⟩ → S⁰ Slot     -- Hash of a sequence of values
 
     -- A nonempty list of S⁰ terms.
     data ⟨S⁰⟩ : Set where
-      one-S⁰  : S⁰ → ⟨S⁰⟩
-      _,_  : S⁰ → ⟨S⁰⟩ → ⟨S⁰⟩
+      one-S⁰ : S⁰ Word → ⟨S⁰⟩
+      _,_    : S⁰ Word → ⟨S⁰⟩ → ⟨S⁰⟩
 
     -- Some trickery to make ⟨ x₁ , x₂ , ... ⟩ work syntactically.
-    _⟩ : S⁰ → ⟨S⁰⟩
+    _⟩ : S⁰ Word → ⟨S⁰⟩
     x ⟩ = one-S⁰ x
 
-  mutual
+  -- An S¹ is “easy” if it doesn’t do any external calls.
+  data Ease : Set where
+    easy hard : Ease
 
-    -- S¹, the set of Sic actions.
-    -- The ℕ type parameter is the number of values returned via “fyi”.
-    data S¹ : ℕ → Set where
-      iff_ :      S⁰ → S¹ 0
-      _≜_  : ℕ →  S⁰ → S¹ 0
-      _←_  : S⁰ → S⁰ → S¹ 0
-      fyi  : ∀ {n} → (xs : Vec S⁰ (suc n)) → S¹ (suc n)
-      ext  : ∀ {n} → String → S⁰ → Vec S⁰ n → S¹ 0
-      _│_  : ∀ {m n}
-           → S¹ m → S¹ n → {_ : fyi-ok m n}
-           → S¹ (m ⊔ n)
+  _⊔ᵉ_ : Op₂ Ease
+  easy ⊔ᵉ easy = easy
+  easy ⊔ᵉ hard = hard
+  hard ⊔ᵉ easy = hard
+  hard ⊔ᵉ hard = hard
 
-    -- This is for checking that you don’t use “fyi” more than once
-    -- in one action.
-    fyi-ok : ℕ → ℕ → Set
-    fyi-ok 0       _       = ⊤
-    fyi-ok (suc _) 0       = ⊤
-    fyi-ok (suc _) (suc _) = ⊥
+  -- This is for checking that you don’t use “fyi” more than once
+  -- in one action.
+  fyi-ok : ℕ → ℕ → Set
+  fyi-ok 0       _       = ⊤
+  fyi-ok (suc _) 0       = ⊤
+  fyi-ok (suc _) (suc _) = ⊥
 
-  S¹-fyi-size : ∀ {n} → S¹ n → ℕ
-  S¹-fyi-size {n} _ = n
+  -- S¹, the set of Sic actions.
+  -- The ℕ type parameter is the number of values returned via “fyi”.
+  data S¹ : Ease → ℕ → Set where
+    iff_ : S⁰ Word → S¹ easy 0
+    _≜_  : ℕ → S⁰ Word → S¹ easy 0
+    _←_  : S⁰ Slot → S⁰ Word → S¹ easy 0
+    fyi  : ∀ {n} → (xs : Vec (S⁰ Word) (suc n)) → S¹ easy (suc n)
+    ext  : ∀ {n} → String → S⁰ Word → Vec (S⁰ Word) n → S¹ hard 0
+    _│_  : ∀ {m n i₁ i₂}
+         → S¹ i₁ m → S¹ i₂ n → {_ : fyi-ok m n}
+         → S¹ (i₁ ⊔ᵉ i₂) (m ⊔ n)
+
+  S¹-fyi-size : ∀ {ease n} → S¹ ease n → ℕ
+  S¹-fyi-size {_} {n} _ = n
 
 
   -- We define helpers for returning up to 4 values...
   module fyi-helpers where
-    fyi₁ : S⁰ → S¹ 1
-    fyi₂ : S⁰ → S⁰ → S¹ 2
-    fyi₃ : S⁰ → S⁰ → S⁰ → S¹ 3
-    fyi₄ : S⁰ → S⁰ → S⁰ → S⁰ → S¹ 4
+    fyi₁ : S⁰ Word → S¹ easy 1
+    fyi₂ : S⁰ Word → S⁰ Word → S¹ easy 2
+    fyi₃ : S⁰ Word → S⁰ Word → S⁰ Word → S¹ easy 3
+    fyi₄ : S⁰ Word → S⁰ Word → S⁰ Word → S⁰ Word → S¹ easy 4
     fyi₁ a = fyi (a ∷ᵛ []ᵛ)
     fyi₂ a b = fyi (a ∷ᵛ b ∷ᵛ []ᵛ)
     fyi₃ a b c = fyi (a ∷ᵛ b ∷ᵛ c ∷ᵛ []ᵛ)
@@ -206,14 +219,14 @@ module Sⁿ where
 
   -- ...and for calling externally with up to 4 values.
   module ext-helpers where
-    extⁿ : String → S⁰ → List S⁰ → S¹ 0
+    extⁿ : String → S⁰ Word → List (S⁰ Word) → S¹ hard 0
     extⁿ s x xs = ext s x (fromListᵛ xs)
 
-    ext₀ : String → S⁰ → S¹ 0
-    ext₁ : String → S⁰ → S⁰ → S¹ 0
-    ext₂ : String → S⁰ → S⁰ → S⁰ → S¹ 0
-    ext₃ : String → S⁰ → S⁰ → S⁰ → S⁰ → S¹ 0
-    ext₄ : String → S⁰ → S⁰ → S⁰ → S⁰ → S⁰ → S¹ 0
+    ext₀ : String → S⁰ Word → S¹ hard 0
+    ext₁ : String → S⁰ Word → S⁰ Word → S¹ hard 0
+    ext₂ : String → S⁰ Word → S⁰ Word → S⁰ Word → S¹ hard 0
+    ext₃ : String → S⁰ Word → S⁰ Word → S⁰ Word → S⁰ Word → S¹ hard 0
+    ext₄ : String → S⁰ Word → S⁰ Word → S⁰ Word → S⁰ Word → S⁰ Word → S¹ hard 0
     ext₀ s x = extⁿ s x []
     ext₁ s x a = extⁿ s x [ a ]
     ext₂ s x a b = extⁿ s x ( a ∷ [ b ] )
@@ -240,10 +253,26 @@ module Sⁿ where
     the : Guy → Some Guy
     anybody : Some Guy
 
-  data S² (Guy : Set) (Act : Set) : Set where
-    _may_::_ : ∀ {n} → Some Guy → Act → S¹ n → S² Guy Act
-    _//_    : Op₂ (S² Guy Act)
-    case_then_else_ : S⁰ → Op₂ (S² Guy Act)
+  data S² (Guy : Set) (Act : Set) : Ease → Set where
+    _may_::_
+      : ∀ {ease n}
+      → Some Guy
+      → Act
+      → S¹ ease n
+      → S² Guy Act ease
+
+    _//_
+      : ∀ {ease₁ ease₂}
+      → S² Guy Act ease₁
+      → S² Guy Act ease₂
+      → S² Guy Act (ease₁ ⊔ᵉ ease₂)
+
+    case_then_else_
+      : ∀ {ease₁ ease₂}
+      → S⁰ Word
+      → S² Guy Act ease₁
+      → S² Guy Act ease₂
+      → S² Guy Act (ease₁ ⊔ᵉ ease₂)
 
   -- Syntax precedence list
 
@@ -265,7 +294,7 @@ module Sⁿ where
   infixl 41 _∙_
   infixl 42 -_
 
-  infix  50 get_ ref_ arg_
+  infix  50 get_ ref_ arg_ nat_
 
   infixr 60 ⟨_
   infixr 61 _,_
@@ -284,14 +313,16 @@ module OverloadedNumbers where
   open IsNumber {{...}} public
 
   instance
-    ℕ-IsNumber   : IsNumber ℕ
-    S⁰-IsNumber  : IsNumber S⁰
-    Ref-IsNumber : IsNumber Ref
-    Arg-IsNumber : IsNumber Arg
-    from-ℕ {{ℕ-IsNumber}}   n = n
-    from-ℕ {{S⁰-IsNumber}}  n = nat n
-    from-ℕ {{Ref-IsNumber}} n = # n
-    from-ℕ {{Arg-IsNumber}} n = $ n
+    ℕ-IsNumber    : IsNumber ℕ
+    Word-IsNumber : IsNumber (S⁰ Word)
+    Slot-IsNumber : IsNumber (S⁰ Slot)
+    Ref-IsNumber  : IsNumber Ref
+    Arg-IsNumber  : IsNumber Arg
+    from-ℕ {{ℕ-IsNumber}}    n = n
+    from-ℕ {{Word-IsNumber}} n = nat n
+    from-ℕ {{Slot-IsNumber}} n = at n
+    from-ℕ {{Ref-IsNumber}}  n = # n
+    from-ℕ {{Arg-IsNumber}}  n = $ n
 
   {-# BUILTIN FROMNAT from-ℕ #-}
 
@@ -419,8 +450,9 @@ module Sⁿ→Oⁿ where
     ⟨S⁰⟩→O⁰ (x , xs)   = ⟨S⁰⟩→O⁰ xs ┆ ⟦ x ⟧⁰ ┆ H²ₒ
 
     -- Compiling expressions
-    ⟦_⟧⁰ : ∀ {i} → S⁰ → O⁰ i (suc i)
+    ⟦_⟧⁰ : ∀ {i T} → S⁰ T → O⁰ i (suc i)
     ⟦ ⟨ xs ⟧⁰      = ⟨S⁰⟩→O⁰ xs
+    ⟦ at n ⟧⁰      = #ₒ n
     ⟦ nat n ⟧⁰     = #ₒ n
     ⟦ get x ⟧⁰     = ⟦ x ⟧⁰ ┆ getₖₒ
     ⟦ ref (# x) ⟧⁰ = refₒ x
@@ -440,7 +472,7 @@ module Sⁿ→Oⁿ where
     ⟦ - x ⟧⁰       = #ₒ 0  ┆ ⟦ x ⟧⁰ ┆ −ₒ
 
   -- Compiling statement sequences
-  ⟦_⟧¹ : ∀ {n} → S¹ n → O¹
+  ⟦_⟧¹ : ∀ {ease n} → S¹ ease n → O¹
   ⟦ iff x ⟧¹  = iffₒ ⟦ x ⟧⁰
   ⟦ fyi x ⟧¹  = fyiₒ (mapᵛ ⟦_⟧⁰ x)
   ⟦ ext s c a ⟧¹ = extₒ s (⟦_⟧⁰ c) (mapᵛ ⟦_⟧⁰ a)
@@ -449,7 +481,7 @@ module Sⁿ→Oⁿ where
   ⟦ x │ y ⟧¹  = ⟦ x ⟧¹ ∥ ⟦ y ⟧¹
 
   -- Compiling signature dispatch sequences
-  ⟦_⟧² : ∀ {Guy Act} → S² Guy Act → O² Guy Act
+  ⟦_⟧² : ∀ {ease Guy Act} → S² Guy Act ease → O² Guy Act
   ⟦ g may s :: k ⟧² =
     actₒ g s (S¹-fyi-size k) ⟦ k ⟧¹
   ⟦ a // b     ⟧² =
@@ -463,16 +495,16 @@ module Sⁿ→Oⁿ where
     open Sⁿ
     open Relations
 
-    S¹-memory : ∀ {n} → S¹ n → ℕ
+    S¹-memory : ∀ {ease n} → S¹ ease n → ℕ
     S¹-memory s = O¹-var-memory ⟦ s ⟧¹
 
-    example-1 : S¹-memory {0} (nat 0 ← nat 0) ≣ 0
+    example-1 : S¹-memory {_} {0} (at 0 ← nat 0) ≣ 0
     example-1 = refl
 
-    example-2 : S¹-memory {0} (0 ≜ nat 0) ≣ 1
+    example-2 : S¹-memory {_} {0} (0 ≜ nat 0) ≣ 1
     example-2 = refl
 
-    example-3 : S¹-memory {0} (0 ≜ ref 1 + ref 2) ≣ 3
+    example-3 : S¹-memory {_} {0} (0 ≜ ref 1 + ref 2) ≣ 3
     example-3 = refl
 
 
@@ -733,19 +765,19 @@ module Sic→EVM where
   open Sⁿ    using (S²)
   open Sⁿ→Oⁿ using (⟦_⟧²)
 
-  S²→Oᴱ : ∀ {Guy Act}
+  S²→Oᴱ : ∀ {Guy Act ease}
         → (Guy → Addrᴱ)
         → (Act → String)
-        → S² Guy Act → Oᴱ
+        → S² Guy Act ease → Oᴱ
   S²→Oᴱ f g s = prelude ⟫ ⟦ map-O²-guy f (map-O²-act g ⟦ s ⟧²) ⟧²ᵉ ⟫ REVERT
 
-  S²→O² : ∀ {Guy Act} → S² Guy Act → O² Guy Act
+  S²→O² : ∀ {Guy Act ease} → S² Guy Act ease → O² Guy Act
   S²→O² x = ⟦ x ⟧²
 
   O²→Oᴱ : O² Addrᴱ String → Oᴱ
   O²→Oᴱ x = prelude ⟫ ⟦ x ⟧²ᵉ ⟫ REVERT
 
-  compile : S² Addrᴱ String → Oᴱ
+  compile : ∀ {ease} → S² Addrᴱ String ease → Oᴱ
   compile = S²→Oᴱ (λ x → x) (λ x → x)
 
 
@@ -988,10 +1020,10 @@ module Linking where
       (♯ IO.return nothing)
 
   compile-and-assemble
-    : ∀ {Guy Act}
+    : ∀ {Guy Act ease}
     → (Guy → Addrᴱ)
     → (Act → String)
-    → S² Guy Act → String
+    → S² Guy Act ease → String
   compile-and-assemble f₁ f₂ s² =
     B⁰⋆→String (⋆ (code (S²→Oᴱ f₁ f₂ s²)))
 
@@ -999,10 +1031,10 @@ module Linking where
   assemble x = B⁰⋆→String (⋆ (code x))
 
   compile-and-link
-    : ∀ {Guy Act}
+    : ∀ {Guy Act ease}
     → (Guy → ID)
     → (Act → String)
-    → S² Guy Act
+    → S² Guy Act ease
     → IO (Maybe Oᴱ)
   compile-and-link f₁ f₂ x =
     ♯ resolve-O² f₁ (map-O²-act f₂ (S²→O² x)) >>=
@@ -1017,8 +1049,8 @@ module Linking where
       (♯ putStrLn "Error: linking failed.")
 
   link_with-guys_with-acts
-    : ∀ {Guy Act}
-    → S² Guy Act
+    : ∀ {Guy Act ease}
+    → S² Guy Act ease
     → (Guy → ID)
     → (Act → String)
     → IO.Primitive.IO ⊤
@@ -1041,10 +1073,10 @@ module Dappsys where
 
   v = x₁
 
-  _↑_ : S⁰ → S⁰ → S¹ 0
-  _↓_ : S⁰ → S⁰ → S¹ 0
-  _↥_ : S⁰ → S⁰ → S¹ 0
-  _↧_ : S⁰ → S⁰ → S¹ 0
+  _↑_ : S⁰ Slot → S⁰ Word → S¹ easy 0
+  _↓_ : S⁰ Slot → S⁰ Word → S¹ easy 0
+  _↥_ : S⁰ Slot → S⁰ Word → S¹ easy 0
+  _↧_ : S⁰ Slot → S⁰ Word → S¹ easy 0
 
   n ↑ v = n ← get n + v
   n ↥ v = n ← get n + v │ iff get n ≥ 0
@@ -1053,7 +1085,7 @@ module Dappsys where
 
   -- The “move statement” which subtracts and adds the same quantity
   -- to different places, failing if either place becomes negative.
-  _↧_↥_ : S⁰ → S⁰ → S⁰ → S¹ 0
+  _↧_↥_ : S⁰ Slot → S⁰ Slot → S⁰ Word → S¹ easy 0
   k₁ ↧ k₂ ↥ v = (k₁ ↧ v) │ (k₂ ↥ v)
 
   infix 19 _↧_↥_
@@ -1071,7 +1103,7 @@ module Combinatronics where
   -- The “zone” functions change the storage access of Sⁿ terms
   -- by hashing them together with a given ℕ.
 
-  zone⁰ : ℕ → Op₁ S⁰
+  zone⁰ : ℕ → Op₁ (S⁰ Word)
   zone⁰ n (- s) = - (zone⁰ n s)
   zone⁰ n (¬ s) = ¬ (zone⁰ n s)
   zone⁰ n (x₁ + x₂) = zone⁰ n x₁ + zone⁰ n x₂
@@ -1086,21 +1118,22 @@ module Combinatronics where
   zone⁰ n u = u
   zone⁰ n t = t
   zone⁰ n (nat i) = nat i
-  zone⁰ n (get s) = get ⟨ (nat n) , zone⁰ n s ⟩
+  zone⁰ n (get (at x)) = get ⟨ (nat n) , (nat x) ⟩
+  zone⁰ n (get ⟨ x) = get ⟨ ((nat n) , x)
   zone⁰ n (ref x) = ref x
   zone⁰ n (arg x) = arg x
-  zone⁰ n (⟨ x) = ⟨ x
 
-  zone¹ : ∀ {n} → ℕ → Op₁ (S¹ n)
+  zone¹ : ∀ {ease n} → ℕ → Op₁ (S¹ ease n)
   zone¹ n (iff x) = iff (zone⁰ n x)
   zone¹ n (x ≜ x₁) = x ≜ zone⁰ n x₁
-  zone¹ n (x ← x₁) = ⟨ (nat n) , zone⁰ n x ⟩ ← zone⁰ n x₁
+  zone¹ n ((at x) ← x₁) = ⟨ (nat n) , (nat x) ⟩ ← zone⁰ n x₁
+  zone¹ n (⟨ x ← x₁) = ⟨ (nat n) , x ← zone⁰ n x₁
   zone¹ n (fyi {m} xs) = fyi (mapᵛ (zone⁰ n) xs)
   zone¹ n (ext x x₁ x₂) = ext x (zone⁰ n x₁) (mapᵛ (zone⁰ n) x₂)
   zone¹ n (_│_ {m₁} {m₂} s₁ s₂ {ok}) =
     _│_ {m₁} {m₂} (zone¹ n s₁) (zone¹ n s₂) {ok}
 
-  zone² : ∀ {Guy Act} → ℕ → Op₁ (S² Guy Act)
+  zone² : ∀ {Guy Act ease} → ℕ → Op₁ (S² Guy Act ease)
   zone² n (guy may act :: x₁) =
     guy may act :: zone¹ n x₁
   zone² n (s₁ // s₂) =
@@ -1111,17 +1144,21 @@ module Combinatronics where
 
   -- If we distinctly zone two S² terms, we can merge them
   -- without storage interference.
-  _⊗_ : ∀ {Guy Act} → Op₂ (S² Guy Act)
+  _⊗_ : ∀ {Guy Act ease₁ ease₂}
+      → S² Guy Act ease₁
+      → S² Guy Act ease₂
+      → S² Guy Act (ease₁ ⊔ᵉ ease₂)
   x ⊗ y = zone² 0 x // zone² 1 y
 
   private
     open Relations
+    open OverloadedNumbers
 
     data Guy1 : Set where gal : Guy1
     data Act1 : Set where foo : Act1
 
     ex-1 : (zone² 5 (the gal may foo ::       0   ← get       1 )) ≣
-                    (the gal may foo :: ⟨ 5 , 0 ⟩ ← get ⟨ 5 , 1 ⟩)
+                    (the gal may foo :: ⟨ 5 , (nat 0) ⟩ ← get ⟨ 5 , 1 ⟩)
     ex-1 = refl
 
 

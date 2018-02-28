@@ -7,12 +7,12 @@ pow =
   the "lad" may "cool" :: ⟨ 0 , u ⟩ ← 1 │ iff (0 ≡ 1) //
   the "gal" may "frob" :: iff root │ ⟨ 0 , u ⟩ ← 1 │ fyi₂ u t
 
-simple : S² ⊥ String
+simple : S² ⊥ String easy
 simple =
   anybody may "mem" :: fyi₁ 1 //
   anybody may "str" :: fyi₁ (get 0)
 
-hello : S² ⊥ String
+hello : S² ⊥ String easy
 hello =
   anybody may "poke()" :: 0 ← 1 //
   anybody may "frob()" :: iff (get 0) │ 1 ← 2 //
@@ -22,7 +22,7 @@ hello =
 
 simple&hello = simple ⊗ hello
 
-fyi&ext : S² ⊥ String
+fyi&ext : S² ⊥ String hard
 fyi&ext =
   anybody may "foo()" ::
       0 ≜ (ref 1)
