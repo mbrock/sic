@@ -490,7 +490,7 @@ module EVM where
   open Strings
   open Vectors
 
-  Addrᴱ = Vec Char 20
+  Addrᴱ = Vec Char 40
 
   data Oᴱ : Set where
     ADD          : Oᴱ
@@ -950,7 +950,7 @@ module Linking where
   ... | just xs′ = just (x ∷ᵛ xs′)
 
   addr : String → Maybe Addrᴱ
-  addr s = fixed-width Char 20 (Data.String.toList s)
+  addr s = fixed-width Char 40 (Data.String.toList s)
     where import Data.String
 
   -- Resolve parameters via I/O environment variables.
