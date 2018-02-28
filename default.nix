@@ -27,15 +27,18 @@ in stdenv.mkDerivation rec {
   buildInputs =
     [(dapphub.haskellPackages.ghcWithPackages
       (x: with x; [ieee754 text hevm bytestring base16-bytestring]))];
+
   buildPhase = ''
     ${haskellPackages.Agda}/bin/agda --compile ${contract}.agda \
        -i ${stdlib}/share/agda
-    ${haskellPackages.Agda}/bin/agda --html-dir=docs ${contract}.agda \
-       -i ${stdlib}/share/agda
+    mkdir html
+    ${haskellPackages.Agda}/bin/agda --html ${contract}.agda \
+       --html-dir=html -i ${stdlib}/share/agda
   '';
+
   installPhase = ''
     mkdir -p "$out"/{bin,sic}
     cp ${contract} "$out/bin"
-    cp -r docs "$out/sic/${contract}"
+    cp -r html "$out/sic/${contract}"
   '';
 }
