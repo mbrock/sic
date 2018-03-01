@@ -512,7 +512,7 @@ module Sⁿ→Oⁿ where
 --
 -- We now introduce a data type denoting EVM assembly.
 --
--- Our EVM assembly type has the control flow structures LOOP and ELSE
+-- Our EVM assembly type has the control flow structures LOOP and THEN
 -- which are taken care of later by the bytecode assembler.
 --
 
@@ -563,7 +563,7 @@ module EVM where
     STOP         : Oᴱ
     SUB          : Oᴱ
     SWAP         : ℕ → Oᴱ
-    ELSE         : Oᴱ → Oᴱ
+    THEN         : Oᴱ → Oᴱ
     TIMESTAMP    : Oᴱ
     XOR          : Oᴱ
     _⟫_          : Oᴱ → Oᴱ → Oᴱ
@@ -602,7 +602,7 @@ module EVM-Math where
     LOOP (DUP 1) (
       SWAP 2 ⟫ DUP 1 ⟫ RMUL ⟫ SWAP 1 ⟫ SWAP 2 ⟫ SWAP 1 ⟫ SWAP 2 ⟫
       PUSH 2 ⟫ DUP 2 ⟫ MOD ⟫ ISZERO ⟫
-      ELSE (SWAP 2 ⟫ SWAP 1 ⟫ DUP 2 ⟫ RMUL ⟫ SWAP 1 ⟫ SWAP 2) ⟫
+      THEN (SWAP 2 ⟫ SWAP 1 ⟫ DUP 2 ⟫ RMUL ⟫ SWAP 1 ⟫ SWAP 2) ⟫
       PUSH 2 ⟫ SWAP 2 ⟫ DIV
     ) ⟫ SWAP 2 ⟫ POP ⟫ POP
 
@@ -623,7 +623,7 @@ module EVM-Math where
     SWAP 1 ⟫ DUP 3 ⟫ MUL ⟫ ADD ⟫ PUSH z ⟫ MSTORE ⟫
     SWAP 1 ⟫ PUSH 2 ⟫ SWAP 1 ⟫ DIV ⟫ LOOP (DUP 1) (
       SWAP 1 ⟫ DUP 1 ⟫ MUL ⟫ PUSH 2 ⟫ DUP 3 ⟫ MOD ⟫ ISZERO ⟫
-      ELSE (PUSH z ⟫ MLOAD ⟫ DUP 2 ⟫ MUL ⟫ PUSH z ⟫ MSTORE) ⟫
+      THEN (PUSH z ⟫ MLOAD ⟫ DUP 2 ⟫ MUL ⟫ PUSH z ⟫ MSTORE) ⟫
       SWAP 1 ⟫ PUSH 2 ⟫ SWAP 1 ⟫ DIV
     ) ⟫ POP ⟫ POP ⟫ PUSH z ⟫ MLOAD
 
@@ -758,9 +758,9 @@ module Sic→EVM where
       let m₁ = O¹-var-memory k
           m₂ = m₁ +ℕ (O¹-fyi-memory k)
       in
-        ELSE (⟦ k with-var m₁ with-fyi m₂ ⟧¹ᵉ ⟫ return m₁ n)
+        THEN (⟦ k with-var m₁ with-fyi m₂ ⟧¹ᵉ ⟫ return m₁ n)
   ⟦ caseₒ p a b ⟧²ᵉ =
-    ⟦ p ⟧⁰ᵉ ⟫ ELSE ⟦ a ⟧²ᵉ ⟫ ⟦ b ⟧²ᵉ
+    ⟦ p ⟧⁰ᵉ ⟫ THEN ⟦ a ⟧²ᵉ ⟫ ⟦ b ⟧²ᵉ
 
   open Sⁿ    using (S²)
   open Sⁿ→Oⁿ using (⟦_⟧²)
@@ -883,7 +883,7 @@ module EVM-Assembly where
   code′ JUMPDEST = , op B1 0x5b
   code′ (JUMP x)  = , op B1 0x61 ⦂ op B2 (+ x) ⦂ op B1 0x56
   code′ (JUMPI x) = , op B1 0x61 ⦂ op B2 (+ x) ⦂ op B1 0x57
-  code′ (ELSE x) with code′ x
+  code′ (THEN x) with code′ x
   ... | i , bs = , op B1 0x61 ⦂ Δ (+ (i +ℕ skip)) ⦂ op B1 0x57 ⦂ bs ⦂ op B1 0x5b
     where skip = 3
   code′ (LOOP p k) with code′ p
@@ -1068,8 +1068,8 @@ module Dappsys where
 
   root = get ⟨ 0 , u ⟩ ≡ 1
 
-  x₁ x₂ x₃ x₄ x₅ : Arg
-  x₁ = 0; x₂ = 1; x₃ = 2; x₄ = 3; x₅ = 4
+  x₁ x₂ x₃ x₄ x₅ : S⁰ Word
+  x₁ = arg 0; x₂ = arg 1; x₃ = arg 2; x₄ = arg 3; x₅ = arg 4
 
   v = x₁
 
