@@ -46,22 +46,40 @@ callee =
 data Guy : Set where dad pal : Guy
 data Act : Set where peek! poke! shut! open! : Act
 
-main =
+counter =
   let
     p = 0 ; i = 1
-    it =
-      case get p
-        then the dad may open! :: p ← 0 //
-             anybody may peek! :: fyi₁ (get i)
-        else the dad may shut! :: p ← 1 //
-             the pal may poke! :: i ← 1 + get i
   in
-    link it
-      with-guys
-        (λ { dad → parameter "DAD_ADDRESS"
-           ; pal → parameter "PAL_ADDRESS" })
-      with-acts
-        (λ { peek! → "peek()"
-           ; poke! → "poke()"
-           ; shut! → "shut()"
-           ; open! → "open()" })
+    case get p
+      then the dad may open! :: p ← 0 //
+           anybody may peek! :: fyi₁ (get i)
+      else the dad may shut! :: p ← 1 //
+           the pal may poke! :: i ← 1 + get i
+
+counter-main =
+  link counter
+    with-guys
+      (λ { dad → parameter "DAD_ADDRESS"
+         ; pal → parameter "PAL_ADDRESS" })
+    with-acts
+      (λ { peek! → "peek()"
+         ; poke! → "poke()"
+         ; shut! → "shut()"
+         ; open! → "open()" })
+
+-----
+
+data MathAct : Set where
+  add! sub! mul! pow! : MathAct
+
+main =
+  link
+    anybody may add! :: fyi₁ (x₁ + x₂) //
+    anybody may sub! :: fyi₁ (x₁ − x₂) //
+    anybody may mul! :: fyi₁ (x₁ ∙ x₂) //
+    anybody may pow! :: fyi₁ (x₁ ^ x₂)
+  with-guys (λ z → z)
+  with-acts λ { add! → "add(int128,int128)"
+              ; sub! → "sub(int128,int128)"
+              ; mul! → "mul(int128,int128)"
+              ; pow! → "pow(int128,int128)" }

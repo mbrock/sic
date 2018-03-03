@@ -344,7 +344,7 @@ module Oⁿ where
   open Vectors
   open Lists
   open Strings
-  open Sⁿ
+  open Sⁿ using (Some; the; anybody)
 
   -- The O⁰ operations have stack effects, which we encode in the types.
   -- For example, the type of +ₒ denotes taking two items and leaving one.
@@ -508,7 +508,97 @@ module Sⁿ→Oⁿ where
     example-3 = refl
 
 
--- Section 5: EVM assembly
+-- Section 5: Reasoning about stack manipulations
+--
+-- We define a subset of the EVM stack operations for the purpose
+-- of proving the stack effects of “pure” stack operations.
+--
+-- Later, we will use this to help write correct assembly snippets
+-- for the Sic arithmetic helpers: overflow-safe signed addition, etc.
+--
+
+module StackReasoning (A : Set) where
+
+  postulate
+    -- The meaning of these operators don't matter for our reasoning,
+    -- so we have them as postulates.
+    _+_ _×_ _÷_ _<_ _==_ _⊕_ _∨_ : A → A → A
+    ¬ : A → A
+
+  infixr 1 _⤇_
+  infixr 2 _⟫_
+
+  open import Data.List
+    using (List; [])
+    renaming (_∷_ to _,_) public
+  open import Relation.Binary.PropositionalEquality
+    using (_≡_; isEquivalence)
+
+  -- We think of the set of stack actions as a relation ⤇ on lists,
+  -- defined by constructors corresponding to the EVM operators.
+  --
+  -- X ⤇ Y is inhabited iff there is some operator sequence that
+  -- yields the stack Y when applied to the initial stack X.
+  --
+  -- Preorder reasoning on this relation is very useful!
+  --
+  -- The values of X ⤇ Y are “proof terms” of the relation.
+
+  data _⤇_  : List A → List A → Set where
+    -- Transitivity (action composition)
+    _⟫_   : ∀ {a b c} → a ⤇ b → b ⤇ c → a ⤇ c
+    -- Reflexivity (needed for preorder)
+    noop  : ∀ {a b}   → a ≡ b → a ⤇ b
+
+    push  : ∀ {s}   → (a : A) →      s ⤇ a , s
+    pop   : ∀ {a s} →            a , s ⤇ s
+
+    swap₁ : ∀ {a b s}     → a , b , s ⤇ b , a , s
+    swap₂ : ∀ {a b c s}   → a , b , c , s ⤇ c , a , b , s
+    swap₃ : ∀ {a b c d s} → a , b , c , d , s ⤇ d , a , b , c , s
+
+    add   : ∀ {a b s} → a , b , s ⤇ (a + b) , s
+    mul   : ∀ {a b s} → a , b , s ⤇ (a × b) , s
+    div   : ∀ {a b s} → a , b , s ⤇ (a ÷ b) , s
+    slt   : ∀ {a b s} → a , b , s ⤇ (a < b) , s
+    eq    : ∀ {a b s} → a , b , s ⤇ (a == b) , s
+    or    : ∀ {a b s} → a , b , s ⤇ (a ∨ b) , s
+    xor   : ∀ {a b s} → a , b , s ⤇ (a ⊕ b) , s
+
+    iszero : ∀ {a s} → a , s ⤇ ¬ a , s
+
+    dup₁  : ∀ {a s}                   → a , s ⤇ a , a , s
+    dup₂  : ∀ {a b s}             → a , b , s ⤇ b , a , b , s
+    dup₃  : ∀ {a b c s}       → a , b , c , s ⤇ c , a , b , c , s
+    dup₄  : ∀ {a b c d s} → a , b , c , d , s ⤇ d , a , b , c , d , s
+
+  -- Now we define the necessary algebraic structure
+  -- for importing the preorder reasoning module.
+
+  open import Relation.Binary
+
+  ⤇-isPreorder : IsPreorder _≡_ _⤇_
+  ⤇-isPreorder = record
+    { isEquivalence = isEquivalence; reflexive = noop; trans = _⟫_ }
+
+  ⤇-Preorder : Preorder _ _ _
+  ⤇-Preorder = record
+    { Carrier = List A; _≈_ = _≡_; _∼_ = _⤇_; isPreorder = ⤇-isPreorder }
+
+  -- Finally we export the instantiated preorder reasoning module.
+  open import Relation.Binary.PreorderReasoning ⤇-Preorder public
+
+  private
+    module Example where
+      a,b⤇a+b,a,b : ∀ {a b ◎} → a , b , ◎ ⤇ (a + b) , a , b , ◎
+      a,b⤇a+b,a,b {a} {b} {◎} = begin
+        a , b , ◎           ∼⟨ dup₂ ⟩
+        b , a , b , ◎       ∼⟨ dup₂ ⟩
+        a , b , a , b , ◎   ∼⟨ add ⟩
+        (a + b) , a , b , ◎ ∎
+
+
+-- Section 6: EVM assembly
 --
 -- We now introduce a data type denoting EVM assembly.
 --
@@ -531,6 +621,8 @@ module EVM where
     CALLDATALOAD : Oᴱ
     CALL         : Oᴱ
     CALLER       : Oᴱ
+    CODECOPY     : Oᴱ
+    CODESIZE     : Oᴱ
     DIV          : Oᴱ
     DUP          : ℕ → Oᴱ
     EQ           : Oᴱ
@@ -571,12 +663,40 @@ module EVM where
 
   infixr 10 _⟫_
 
-  |Oᴱ| : Oᴱ → ℕ
-  |Oᴱ| (x ⟫ y) = |Oᴱ| x +ℕ |Oᴱ| y
-  |Oᴱ| _ = 1
+  -- The stack reasoning module is very useful for defining
+  -- pure stack operations with verified stack effects,
+  -- in particular the math snippets we’ll define later.
+
+  open StackReasoning ℕ renaming (_⟫_ to _⟩_)
+
+  private
+    -- We can map stack reasoning proof terms to EVM opcode sequences.
+    ⟦_⟧ : ∀ {a b} → a ⤇ b → Oᴱ
+    ⟦ x₁ ⟩ x₂ ⟧ = ⟦ x₁ ⟧ ⟫ ⟦ x₂ ⟧
+    ⟦ noop x ⟧  = PUSH 0 ⟫ POP
+    ⟦ push a ⟧  = PUSH a
+    ⟦ pop ⟧     = POP
+    ⟦ add ⟧     = ADD
+    ⟦ xor ⟧     = XOR
+    ⟦ slt ⟧     = SLT
+    ⟦ mul ⟧     = MUL
+    ⟦ div ⟧     = DIV
+    ⟦ eq ⟧      = EQ
+    ⟦ or ⟧      = OR
+    ⟦ iszero ⟧  = ISZERO
+    ⟦ swap₁ ⟧   = SWAP 1
+    ⟦ swap₂ ⟧   = SWAP 2
+    ⟦ swap₃ ⟧   = SWAP 3
+    ⟦ dup₁ ⟧    = DUP 1
+    ⟦ dup₂ ⟧    = DUP 2
+    ⟦ dup₃ ⟧    = DUP 3
+    ⟦ dup₄ ⟧    = DUP 4
+
+  snippet : ∀ {a b} → a ⤇ b → Oᴱ
+  snippet = ⟦_⟧
 
 
--- Section 6: EVM safe math and exponentiation
+-- Section 7: EVM safe math and exponentiation
 --
 -- For the EVM, we define our own overflow safe arithmetic.
 --
@@ -588,12 +708,46 @@ module EVM-Math where
   open EVM
   open Naturals
 
-  XADD = DUP 2 ⟫ DUP 2 ⟫ XOR ⟫ NOT ⟫ SWAP 2 ⟫ DUP 2 ⟫ ADD ⟫ DUP 1 ⟫ SWAP 2 ⟫
-    XOR ⟫ SWAP 1 ⟫ SWAP 2 ⟫ AND ⟫ PUSH 255 ⟫ PUSH 2 ⟫ EXP ⟫ AND ⟫ REVERTIF
+  open StackReasoning ℕ hiding (_⟫_)
+
+  XADD = snippet (xadd₁ 0 0 []) ⟫ ISZERO ⟫ REVERTIF ⟫ ADD
+    where
+      xadd₁ : ∀ x y ◎ → x , y , ◎ ⤇ ((y < 0) ⊕ (x < (x + y))) , x , y , ◎
+      xadd₁ x y ◎ = begin
+        x , y , ◎                               ∼⟨ dup₂ ⟩
+        y , x , y , ◎                           ∼⟨ dup₂ ⟩
+        x , y , x , y , ◎                       ∼⟨ add ⟩
+        (x + y) , x , y , ◎                     ∼⟨ dup₂ ⟩
+        x , (x + y) , x , y , ◎                 ∼⟨ slt ⟩
+        (x < (x + y)) , x , y , ◎               ∼⟨ push 0 ⟩
+        0 , (x < (x + y)) , x , y , ◎           ∼⟨ dup₄ ⟩
+        y , 0 , (x < (x + y)) , x , y , ◎       ∼⟨ slt ⟩
+        (y < 0) , (x < (x + y)) , x , y , ◎     ∼⟨ xor ⟩
+        ((y < 0) ⊕ (x < (x + y))) , x , y , ◎ ∎
+
   XSUB = PUSH 0 ⟫ SUB ⟫ XADD
-  XMUL = DUP 2 ⟫ DUP 2 ⟫ MUL ⟫ DUP 2 ⟫ DUP 2 ⟫ DIV ⟫ SWAP 2 ⟫ SWAP 3 ⟫
-    SWAP 1 ⟫ SWAP 2 ⟫ EQ ⟫ SWAP 2 ⟫ ISZERO ⟫ SWAP 1 ⟫ SWAP 2 ⟫ OR ⟫
-    ISZERO ⟫ REVERTIF
+
+  XMUL = snippet (xmul₁ 0 0 []) ⟫ ISZERO ⟫ REVERTIF
+    where
+      xmul₁ = λ x y ∅ → begin
+        x , y , ∅                                    ∼⟨ dup₂ ⟩
+        y , x , y , ∅                                ∼⟨ dup₂ ⟩
+        x , y , x , y , ∅                            ∼⟨ mul ⟩
+        (x × y) , x , y , ∅                          ∼⟨ dup₃ ⟩
+        y , (x × y) , x , y , ∅                      ∼⟨ dup₂ ⟩
+        (x × y) , y , (x × y) , x , y , ∅            ∼⟨ div ⟩
+        ((x × y) ÷ y) , (x × y) , x , y , ∅          ∼⟨ swap₂ ⟩
+        x , ((x × y) ÷ y) , (x × y) , y , ∅          ∼⟨ swap₃ ⟩
+        y , x , ((x × y) ÷ y) , (x × y) , ∅          ∼⟨ swap₁ ⟩
+        x , y , ((x × y) ÷ y) , (x × y) , ∅          ∼⟨ swap₂ ⟩
+        ((x × y) ÷ y) , x , y , (x × y) , ∅          ∼⟨ eq ⟩
+        (((x × y) ÷ y) == x) , y , (x × y) , ∅       ∼⟨ swap₂ ⟩
+        (x × y) , (((x × y) ÷ y) == x) , y , ∅       ∼⟨ swap₁ ⟩
+        (((x × y) ÷ y) == x) , (x × y) , y , ∅       ∼⟨ swap₂ ⟩
+        y , (((x × y) ÷ y) == x) , (x × y) , ∅       ∼⟨ iszero ⟩
+        ¬ y , (((x × y) ÷ y) == x) , (x × y) , ∅     ∼⟨ or ⟩
+        ((¬ y) ∨ (((x × y) ÷ y) == x)) , (x × y) , ∅ ∎
+
   RONE = PUSH 27 ⟫ PUSH 10 ⟫ EXP
   RMUL = RONE ⟫ XMUL ⟫ PUSH 2 ⟫ RONE ⟫ DIV ⟫ XADD ⟫ DIV
   RPOW = PUSH 2 ⟫ DUP 3 ⟫ MOD ⟫ ISZERO ⟫
@@ -628,7 +782,7 @@ module EVM-Math where
     ) ⟫ POP ⟫ POP ⟫ PUSH z ⟫ MLOAD
 
 
--- Section 7: Compiling Sic machine code to EVM assembly
+-- Section 8: Compiling Sic machine code to EVM assembly
 --
 
 module Sic→EVM where
@@ -736,6 +890,11 @@ module Sic→EVM where
   revert-jumpdest : ℕ
   revert-jumpdest = 4
 
+  -- This is the simplest possible “constructor.”
+  constructor-prelude =
+    PUSH 13 ⟫ CODESIZE ⟫ SUB ⟫ DUP 1 ⟫
+    PUSH 13 ⟫ PUSH 0 ⟫ CODECOPY ⟫ PUSH 0 ⟫ RETURN
+
   return : ℕ → ℕ → Oᴱ
   return offset n =
     PUSH (n * wordsize) ⟫
@@ -781,7 +940,7 @@ module Sic→EVM where
   compile = S²→Oᴱ (λ x → x) (λ x → x)
 
 
--- Section 8: Assembling EVM assembly
+-- Section 9: Assembling EVM assembly
 --
 -- We define the concrete output format of the Agda program.
 --
@@ -878,6 +1037,8 @@ module EVM-Assembly where
   code′ CALLDATALOAD = , op B1 0x35
   code′ CALL = , op B1 0xf1
   code′ CALLER = , op B1 0x33
+  code′ CODESIZE = , op B1 0x38
+  code′ CODECOPY = , op B1 0x39
   code′ EQ = , op B1 0x14
   code′ GAS = , op B1 0x5a
   code′ JUMPDEST = , op B1 0x5b
@@ -1039,7 +1200,7 @@ module Linking where
   compile-and-link f₁ f₂ x =
     ♯ resolve-O² f₁ (map-O²-act f₂ (S²→O² x)) >>=
         maybe
-          (λ y → ♯ (IO.return (just (O²→Oᴱ y))))
+          (λ y → ♯ (IO.return (just (constructor-prelude ⟫ O²→Oᴱ y))))
           (♯ IO.return nothing)
 
   assemble-and-print : IO (Maybe Oᴱ) → IO ⊤
@@ -1058,7 +1219,7 @@ module Linking where
     run (assemble-and-print (compile-and-link f₁ f₂ x))
 
 
--- Section 7: Dappsys, free stuff for dapp developers
+-- Section 10: Dappsys, free stuff for dapp developers
 --
 -- We now define a “standard library” in the Sic language.
 --
@@ -1091,7 +1252,7 @@ module Dappsys where
   infix 19 _↧_↥_
 
 
--- Section 9: Experimental Sⁿ modifiers and combinators
+-- Section 11: Experimental Sⁿ modifiers and combinators
 --
 
 module Combinatronics where
