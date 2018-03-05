@@ -522,7 +522,7 @@ module StackReasoning (A : Set) where
   postulate
     -- The meaning of these operators don't matter for our reasoning,
     -- so we have them as postulates.
-    _+_ _×_ _÷_ _<_ _==_ _⊕_ _∨_ : A → A → A
+    _+_ _×_ _÷_ _<_ _==_ _⊕_ _∨_ _∧_ : A → A → A
     ¬ : A → A
 
   infixr 1 _⤇_
@@ -563,6 +563,7 @@ module StackReasoning (A : Set) where
     slt   : ∀ {a b s} → a , b , s ⤇ (a < b) , s
     eq    : ∀ {a b s} → a , b , s ⤇ (a == b) , s
     or    : ∀ {a b s} → a , b , s ⤇ (a ∨ b) , s
+    and   : ∀ {a b s} → a , b , s ⤇ (a ∧ b) , s
     xor   : ∀ {a b s} → a , b , s ⤇ (a ⊕ b) , s
 
     iszero : ∀ {a s} → a , s ⤇ ¬ a , s
@@ -683,6 +684,7 @@ module EVM where
     ⟦ div ⟧     = DIV
     ⟦ eq ⟧      = EQ
     ⟦ or ⟧      = OR
+    ⟦ and ⟧     = AND
     ⟦ iszero ⟧  = ISZERO
     ⟦ swap₁ ⟧   = SWAP 1
     ⟦ swap₂ ⟧   = SWAP 2
@@ -708,22 +710,19 @@ module EVM-Math where
   open EVM
   open Naturals
 
-  open StackReasoning ℕ hiding (_⟫_)
+  open StackReasoning ℕ renaming (_⟫_ to _&_)
 
   XADD = snippet (xadd₁ 0 0 []) ⟫ ISZERO ⟫ REVERTIF ⟫ ADD
     where
-      xadd₁ : ∀ x y ◎ → x , y , ◎ ⤇ ((y < 0) ⊕ (x < (x + y))) , x , y , ◎
+      -- This overflow check formula comes from Hacker’s Delight, section 2.13.
+      xadd₁ : ∀ x y ◎ → x , y , ◎ ⤇ (¬ (x ⊕ y) ∧ ((x + y) ⊕ x)) , x , y , ◎
       xadd₁ x y ◎ = begin
-        x , y , ◎                               ∼⟨ dup₂ ⟩
-        y , x , y , ◎                           ∼⟨ dup₂ ⟩
-        x , y , x , y , ◎                       ∼⟨ add ⟩
-        (x + y) , x , y , ◎                     ∼⟨ dup₂ ⟩
-        x , (x + y) , x , y , ◎                 ∼⟨ slt ⟩
-        (x < (x + y)) , x , y , ◎               ∼⟨ push 0 ⟩
-        0 , (x < (x + y)) , x , y , ◎           ∼⟨ dup₄ ⟩
-        y , 0 , (x < (x + y)) , x , y , ◎       ∼⟨ slt ⟩
-        (y < 0) , (x < (x + y)) , x , y , ◎     ∼⟨ xor ⟩
-        ((y < 0) ⊕ (x < (x + y))) , x , y , ◎ ∎
+        x , y , ◎                              ∼⟨ dup₂ & dup₂ & dup₁ & dup₃ & dup₂ ⟩
+        x , y , x , x , y , x , y , ◎          ∼⟨ add & xor ⟩
+        (x + y) ⊕ x , x , y , x , y , ◎        ∼⟨ swap₂ & swap₂ ⟩
+        x , y , (x + y) ⊕ x , x , y , ◎        ∼⟨ xor & iszero ⟩
+        ¬ (x ⊕ y) , (x + y) ⊕ x , x , y , ◎    ∼⟨ and ⟩
+        (¬ (x ⊕ y) ∧ ((x + y) ⊕ x)) , x , y , ◎ ∎
 
   XSUB = PUSH 0 ⟫ SUB ⟫ XADD
 
