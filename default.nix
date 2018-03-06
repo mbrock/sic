@@ -1,4 +1,4 @@
-{ stdenv, haskell, haskellPackages, fetchFromGitHub, AgdaStdlib }:
+{ stdenv, haskell, haskellPackages, fetchFromGitHub, AgdaStdlib, z3 }:
 
 let
   stdlib = AgdaStdlib.overrideDerivation (x: {
@@ -25,10 +25,12 @@ in stdenv.mkDerivation rec {
 
   src = ./.;
   buildInputs =
-    [(dapphub.haskellPackages.ghcWithPackages
+    [z3
+     (dapphub.haskellPackages.ghcWithPackages
       (x: with x; [ieee754 text hevm bytestring base16-bytestring]))];
 
   buildPhase = ''
+    z3 math.z3
     ${haskellPackages.Agda}/bin/agda --compile ${contract}.agda \
        -i ${stdlib}/share/agda
     mkdir html

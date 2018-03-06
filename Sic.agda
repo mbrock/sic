@@ -523,7 +523,7 @@ module StackReasoning (A : Set) where
     -- The meaning of these operators don't matter for our reasoning,
     -- so we have them as postulates.
     _+_ _×_ _÷_ _<_ _==_ _⊕_ _∨_ _∧_ : A → A → A
-    ¬ : A → A
+    ¬ neg? : A → A
 
   infixr 1 _⤇_
   infixr 2 _⟫_
@@ -534,44 +534,67 @@ module StackReasoning (A : Set) where
   open import Relation.Binary.PropositionalEquality
     using (_≡_; isEquivalence)
 
-  -- We think of the set of stack actions as a relation ⤇ on lists,
+  -- We think of the set of stack actions as a relation ⤇ on stacks,
   -- defined by constructors corresponding to the EVM operators.
   --
-  -- X ⤇ Y is inhabited iff there is some operator sequence that
+  -- “X ⤇ Y” is inhabited iff there is some operator sequence that
   -- yields the stack Y when applied to the initial stack X.
   --
   -- Preorder reasoning on this relation is very useful!
   --
   -- The values of X ⤇ Y are “proof terms” of the relation.
 
-  data _⤇_  : List A → List A → Set where
+  open Naturals
+
+  infix 40 _¤_
+
+  -- We represent a stack as a list and a gas cost,
+  -- so that we can also reason about gas usage.
+  record Stack (A : Set) : Set where
+    constructor _¤_
+    field
+      gas   : ℕ
+      stack : List A
+
+  -- These are the current relevant Ethereum VM gas costs.
+  base+    = λ g → 2 +ℕ g
+  verylow+ = λ g → 3 +ℕ g
+  low+     = λ g → 5 +ℕ g
+
+  data _⤇_ : Stack A → Stack A → Set where
     -- Transitivity (action composition)
-    _⟫_   : ∀ {a b c} → a ⤇ b → b ⤇ c → a ⤇ c
+    _⟫_   : ∀ {a b c g₁ g₂ g₃}
+          → g₁ ¤ a ⤇ g₂ ¤ b
+          → g₂ ¤ b ⤇ g₃ ¤ c
+          → g₁ ¤ a ⤇ g₃ ¤ c
     -- Reflexivity (needed for preorder)
-    noop  : ∀ {a b}   → a ≡ b → a ⤇ b
+    noop  : ∀ {a b g₁ g₂}   → g₁ ¤ a  ≡ g₂ ¤ b → g₁ ¤ a ⤇ g₂ ¤ b
 
-    push  : ∀ {s}   → (a : A) →      s ⤇ a , s
-    pop   : ∀ {a s} →            a , s ⤇ s
+    pop   : ∀ {a s g} → g ¤ (a , s) ⤇ base+ g ¤ s
 
-    swap₁ : ∀ {a b s}     → a , b , s ⤇ b , a , s
-    swap₂ : ∀ {a b c s}   → a , b , c , s ⤇ c , a , b , s
-    swap₃ : ∀ {a b c d s} → a , b , c , d , s ⤇ d , a , b , c , s
+    swap₁ : ∀ {a b s g}
+      → g ¤ (a , b , s) ⤇ base+ g ¤ (b , a , s)
+    swap₂ : ∀ {a b c s g}
+      → g ¤ (a , b , c , s) ⤇ base+ g ¤ (c , a , b , s)
+    swap₃ : ∀ {a b c d s g}
+      → g ¤ (a , b , c , d , s) ⤇ base+ g ¤ (d , a , b , c , s)
 
-    add   : ∀ {a b s} → a , b , s ⤇ (a + b) , s
-    mul   : ∀ {a b s} → a , b , s ⤇ (a × b) , s
-    div   : ∀ {a b s} → a , b , s ⤇ (a ÷ b) , s
-    slt   : ∀ {a b s} → a , b , s ⤇ (a < b) , s
-    eq    : ∀ {a b s} → a , b , s ⤇ (a == b) , s
-    or    : ∀ {a b s} → a , b , s ⤇ (a ∨ b) , s
-    and   : ∀ {a b s} → a , b , s ⤇ (a ∧ b) , s
-    xor   : ∀ {a b s} → a , b , s ⤇ (a ⊕ b) , s
+    add   : ∀ {a b s g} → g ¤ (a , b , s) ⤇ verylow+ g ¤ ((a + b) , s)
+    slt   : ∀ {a b s g} → g ¤ (a , b , s) ⤇ verylow+ g ¤ ((a < b) , s)
+    eq    : ∀ {a b s g} → g ¤ (a , b , s) ⤇ verylow+ g ¤ ((a == b) , s)
+    or    : ∀ {a b s g} → g ¤ (a , b , s) ⤇ verylow+ g ¤ ((a ∨ b) , s)
+    and   : ∀ {a b s g} → g ¤ (a , b , s) ⤇ verylow+ g ¤ ((a ∧ b) , s)
+    xor   : ∀ {a b s g} → g ¤ (a , b , s) ⤇ verylow+ g ¤ ((a ⊕ b) , s)
+    mul   : ∀ {a b s g} → g ¤ (a , b , s) ⤇ low+ g     ¤ ((a × b) , s)
+    div   : ∀ {a b s g} → g ¤ (a , b , s) ⤇ low+ g     ¤ ((a ÷ b) , s)
 
-    iszero : ∀ {a s} → a , s ⤇ ¬ a , s
+    isneg  : ∀ {a s g} → g ¤ (a , s) ⤇ verylow+ (verylow+ g) ¤ (neg? a , s)
+    iszero : ∀ {a s g} → g ¤ (a , s) ⤇ verylow+ g ¤ (¬ a , s)
 
-    dup₁  : ∀ {a s}                   → a , s ⤇ a , a , s
-    dup₂  : ∀ {a b s}             → a , b , s ⤇ b , a , b , s
-    dup₃  : ∀ {a b c s}       → a , b , c , s ⤇ c , a , b , c , s
-    dup₄  : ∀ {a b c d s} → a , b , c , d , s ⤇ d , a , b , c , d , s
+    dup₁  : ∀ {g a s}                   → g ¤ (a , s) ⤇ base+ g ¤ (a , a , s)
+    dup₂  : ∀ {g a b s}             → g ¤ (a , b , s) ⤇ base+ g ¤ (b , a , b , s)
+    dup₃  : ∀ {g a b c s}       → g ¤ (a , b , c , s) ⤇ base+ g ¤ (c , a , b , c , s)
+    dup₄  : ∀ {g a b c d s} → g ¤ (a , b , c , d , s) ⤇ base+ g ¤ (d , a , b , c , d , s)
 
   -- Now we define the necessary algebraic structure
   -- for importing the preorder reasoning module.
@@ -584,19 +607,19 @@ module StackReasoning (A : Set) where
 
   ⤇-Preorder : Preorder _ _ _
   ⤇-Preorder = record
-    { Carrier = List A; _≈_ = _≡_; _∼_ = _⤇_; isPreorder = ⤇-isPreorder }
+    { Carrier = Stack A; _≈_ = _≡_; _∼_ = _⤇_; isPreorder = ⤇-isPreorder }
 
   -- Finally we export the instantiated preorder reasoning module.
   open import Relation.Binary.PreorderReasoning ⤇-Preorder public
 
   private
     module Example where
-      a,b⤇a+b,a,b : ∀ {a b ◎} → a , b , ◎ ⤇ (a + b) , a , b , ◎
+      a,b⤇a+b,a,b : ∀ {a b ◎} → 0 ¤ (a , b , ◎) ⤇ 7 ¤ ((a + b) , a , b , ◎)
       a,b⤇a+b,a,b {a} {b} {◎} = begin
-        a , b , ◎           ∼⟨ dup₂ ⟩
-        b , a , b , ◎       ∼⟨ dup₂ ⟩
-        a , b , a , b , ◎   ∼⟨ add ⟩
-        (a + b) , a , b , ◎ ∎
+        0 ¤ (a , b , ◎)           ∼⟨ dup₂ ⟩
+        2 ¤ (b , a , b , ◎)       ∼⟨ dup₂ ⟩
+        4 ¤ (a , b , a , b , ◎)   ∼⟨ add ⟩
+        7 ¤ ((a + b) , a , b , ◎) ∎
 
 
 -- Section 6: EVM assembly
@@ -615,54 +638,21 @@ module EVM where
 
   Addrᴱ = Vec Char 40
 
+  infixr 10 _⟫_
   data Oᴱ : Set where
-    ADD          : Oᴱ
-    ADDRESS      : Oᴱ
-    AND          : Oᴱ
-    CALLDATALOAD : Oᴱ
-    CALL         : Oᴱ
-    CALLER       : Oᴱ
-    CODECOPY     : Oᴱ
-    CODESIZE     : Oᴱ
-    DIV          : Oᴱ
-    DUP          : ℕ → Oᴱ
-    EQ           : Oᴱ
-    EXP          : Oᴱ
-    GAS          : Oᴱ
-    ISZERO       : Oᴱ
-    JUMP         : ℕ → Oᴱ
-    JUMPDEST     : Oᴱ
-    JUMPI        : ℕ → Oᴱ
-    KECCAK256    : Oᴱ
-    LOOP         : Oᴱ → Oᴱ → Oᴱ
-    MLOAD        : Oᴱ
-    MOD          : Oᴱ
-    MSTORE       : Oᴱ
-    MUL          : Oᴱ
-    NOT          : Oᴱ
-    OR           : Oᴱ
-    POP          : Oᴱ
-    PUSH         : ℕ → Oᴱ
+    NOOP : Oᴱ
+    ADD SUB ADDRESS AND CALLDATALOAD CALL CALLER CODECOPY CODESIZE DIV EQ : Oᴱ
+    EXP GAS ISZERO JUMPDEST KECCAK256 MLOAD MOD MSTORE MUL NOT OR POP : Oᴱ
+    TIMESTAMP RETURN REVERT REVERTIF SDIV SGT SLOAD SLT SSTORE STOP XOR : Oᴱ
+
+    DUP JUMP JUMPI SWAP PUSH : ℕ → Oᴱ
+
     PUSHSIG      : String → Oᴱ
     PUSHADDR     : Addrᴱ → Oᴱ
-    RETURN       : Oᴱ
-    REVERT       : Oᴱ
-    REVERTIF     : Oᴱ
-    SDIV         : Oᴱ
-    SGT          : Oᴱ
-    SLOAD        : Oᴱ
-    SLT          : Oᴱ
-    SSTORE       : Oᴱ
-    STOP         : Oᴱ
-    SUB          : Oᴱ
-    SWAP         : ℕ → Oᴱ
     THEN         : Oᴱ → Oᴱ
-    TIMESTAMP    : Oᴱ
-    XOR          : Oᴱ
+    LOOP         : Oᴱ → Oᴱ → Oᴱ
     _⟫_          : Oᴱ → Oᴱ → Oᴱ
     tag          : O¹ → Oᴱ → Oᴱ
-
-  infixr 10 _⟫_
 
   -- The stack reasoning module is very useful for defining
   -- pure stack operations with verified stack effects,
@@ -674,8 +664,7 @@ module EVM where
     -- We can map stack reasoning proof terms to EVM opcode sequences.
     ⟦_⟧ : ∀ {a b} → a ⤇ b → Oᴱ
     ⟦ x₁ ⟩ x₂ ⟧ = ⟦ x₁ ⟧ ⟫ ⟦ x₂ ⟧
-    ⟦ noop x ⟧  = PUSH 0 ⟫ POP
-    ⟦ push a ⟧  = PUSH a
+    ⟦ noop x ⟧  = NOOP
     ⟦ pop ⟧     = POP
     ⟦ add ⟧     = ADD
     ⟦ xor ⟧     = XOR
@@ -686,6 +675,7 @@ module EVM where
     ⟦ or ⟧      = OR
     ⟦ and ⟧     = AND
     ⟦ iszero ⟧  = ISZERO
+    ⟦ isneg ⟧   = PUSH 0 ⟫ SGT
     ⟦ swap₁ ⟧   = SWAP 1
     ⟦ swap₂ ⟧   = SWAP 2
     ⟦ swap₃ ⟧   = SWAP 3
@@ -712,43 +702,52 @@ module EVM-Math where
 
   open StackReasoning ℕ renaming (_⟫_ to _&_)
 
-  XADD = snippet (xadd₁ 0 0 []) ⟫ ISZERO ⟫ REVERTIF ⟫ ADD
+  XADD = snippet (bad-impl 0 0 []) ⟫ REVERTIF
     where
       -- This overflow check formula comes from Hacker’s Delight, section 2.13.
-      xadd₁ : ∀ x y ◎ → x , y , ◎ ⤇ (¬ (x ⊕ y) ∧ ((x + y) ⊕ x)) , x , y , ◎
-      xadd₁ x y ◎ = begin
-        x , y , ◎                              ∼⟨ dup₂ & dup₂ & dup₁ & dup₃ & dup₂ ⟩
-        x , y , x , x , y , x , y , ◎          ∼⟨ add & xor ⟩
-        (x + y) ⊕ x , x , y , x , y , ◎        ∼⟨ swap₂ & swap₂ ⟩
-        x , y , (x + y) ⊕ x , x , y , ◎        ∼⟨ xor & iszero ⟩
-        ¬ (x ⊕ y) , (x + y) ⊕ x , x , y , ◎    ∼⟨ and ⟩
-        (¬ (x ⊕ y) ∧ ((x + y) ⊕ x)) , x , y , ◎ ∎
+      -- Z3 can prove it equivalent to a naïve formula; see “math.z3”.
+      bad? = λ x y → neg? (((x + y) ⊕ x) ∧ ((x + y) ⊕ y))
 
-  XSUB = PUSH 0 ⟫ SUB ⟫ XADD
+      gas-cost = 32 -- TODO: Optimize for eternal glory!
 
-  XMUL = snippet (xmul₁ 0 0 []) ⟫ ISZERO ⟫ REVERTIF
+      bad-impl : ∀ x y ◎ → 0 ¤ (x , y , ◎) ⤇ gas-cost ¤ (bad? x y , x + y , ◎)
+      bad-impl x y ◎ = begin
+         0 ¤ (x , y , ◎)                                 ∼⟨ dup₂ & dup₂ & add ⟩
+         7 ¤ (x + y , x , y , ◎)                         ∼⟨ swap₁ & swap₂ ⟩
+        11 ¤ (y , x , x + y , ◎)                         ∼⟨ dup₃ ⟩
+        13 ¤ (x + y , y , x , x + y , ◎)                 ∼⟨ xor ⟩
+        16 ¤ ((x + y) ⊕ y , x , x + y , ◎)               ∼⟨ swap₁ & dup₃ ⟩
+        20 ¤ ((x + y) , x , (x + y) ⊕ y , x + y , ◎)     ∼⟨ xor ⟩
+        23 ¤ ((x + y) ⊕ x , (x + y) ⊕ y , x + y , ◎)     ∼⟨ and ⟩
+        26 ¤ (((x + y) ⊕ x) ∧ ((x + y) ⊕ y) , x + y , ◎) ∼⟨ isneg ⟩
+        32 ¤ (bad? x y , x + y , ◎) ∎
+
+  XSUB = PUSH 0 ⟫ SUB ⟫ XADD   -- I guess this could be optimized.
+
+  XMUL = snippet (bad-impl 0 0 []) ⟫ REVERTIF
     where
-      xmul₁ = λ x y ∅ → begin
-        x , y , ∅                                    ∼⟨ dup₂ ⟩
-        y , x , y , ∅                                ∼⟨ dup₂ ⟩
-        x , y , x , y , ∅                            ∼⟨ mul ⟩
-        (x × y) , x , y , ∅                          ∼⟨ dup₃ ⟩
-        y , (x × y) , x , y , ∅                      ∼⟨ dup₂ ⟩
-        (x × y) , y , (x × y) , x , y , ∅            ∼⟨ div ⟩
-        ((x × y) ÷ y) , (x × y) , x , y , ∅          ∼⟨ swap₂ ⟩
-        x , ((x × y) ÷ y) , (x × y) , y , ∅          ∼⟨ swap₃ ⟩
-        y , x , ((x × y) ÷ y) , (x × y) , ∅          ∼⟨ swap₁ ⟩
-        x , y , ((x × y) ÷ y) , (x × y) , ∅          ∼⟨ swap₂ ⟩
-        ((x × y) ÷ y) , x , y , (x × y) , ∅          ∼⟨ eq ⟩
-        (((x × y) ÷ y) == x) , y , (x × y) , ∅       ∼⟨ swap₂ ⟩
-        (x × y) , (((x × y) ÷ y) == x) , y , ∅       ∼⟨ swap₁ ⟩
-        (((x × y) ÷ y) == x) , (x × y) , y , ∅       ∼⟨ swap₂ ⟩
-        y , (((x × y) ÷ y) == x) , (x × y) , ∅       ∼⟨ iszero ⟩
-        ¬ y , (((x × y) ÷ y) == x) , (x × y) , ∅     ∼⟨ or ⟩
-        ((¬ y) ∨ (((x × y) ÷ y) == x)) , (x × y) , ∅ ∎
+      -- We check for multiplication overflow by verifying the division.
+      bad? = λ x y → (¬ (((x × y) ÷ y) == x)) ∧ y
+
+      gas-cost = 38 -- TODO: Optimize for eternal glory!
+
+      bad-impl : ∀ x y ∅ → 0 ¤ (x , y , ∅) ⤇ gas-cost ¤ (bad? x y , (x × y) , ∅)
+      bad-impl = λ x y ∅ → begin
+         0 ¤ (x , y , ∅)                              ∼⟨ dup₂ & dup₂ & mul ⟩
+         9 ¤ ((x × y) , x , y , ∅)                    ∼⟨ swap₂ & swap₂ ⟩
+        13 ¤ (x , y , x × y , ∅)                      ∼⟨ dup₂ & dup₁ & dup₃ ⟩
+        19 ¤ (x , y , y , x , y , x × y , ∅)          ∼⟨ mul ⟩
+        24 ¤ (x × y , y , x , y , x × y , ∅)          ∼⟨ div ⟩
+        29 ¤ ((x × y) ÷ y , x , y , x × y , ∅)        ∼⟨ eq ⟩
+        32 ¤ (((x × y) ÷ y) == x , y , x × y , ∅)     ∼⟨ iszero ⟩
+        35 ¤ (¬ (((x × y) ÷ y) == x) , y , x × y , ∅) ∼⟨ and ⟩
+        38 ¤ (bad? x y , x × y , ∅) ∎
 
   RONE = PUSH 27 ⟫ PUSH 10 ⟫ EXP
   RMUL = RONE ⟫ XMUL ⟫ PUSH 2 ⟫ RONE ⟫ DIV ⟫ XADD ⟫ DIV
+
+  -- This was an attempt at a stack-only rpow, but it’s not right.
+  -- It should be easier to implement now that we have stack reasoning.
   RPOW = PUSH 2 ⟫ DUP 3 ⟫ MOD ⟫ ISZERO ⟫
     DUP 1 ⟫ RONE ⟫ MUL ⟫ SWAP 1 ⟫ ISZERO ⟫ DUP 3 ⟫ MUL ⟫ ADD ⟫
     SWAP 1 ⟫ SWAP 2 ⟫ PUSH 2 ⟫ SWAP 1 ⟫ DIV ⟫
@@ -770,6 +769,7 @@ module EVM-Math where
     -- f(a) = !a + a * x
     -- f(0) = 1 + 0 * x; f(1) = 0 + 1 * x
 
+  -- Here is a memory-using rpow.
   RPOW′ =
     let z = 2 * 32 in
     DUP 2 ⟫ PUSH 2 ⟫ SWAP 1 ⟫ MOD ⟫ DUP 1 ⟫ ISZERO ⟫
@@ -992,6 +992,7 @@ module EVM-Assembly where
   open External
 
   data B⁰ : ℕ → Set where
+    B0    :          B⁰ 0
     B1    : ℕ      → B⁰ 1
     B2    : ℤ      → B⁰ 2
     BSig  : String → B⁰ 4
@@ -1028,6 +1029,7 @@ module EVM-Assembly where
   open EVM
 
   code′ : Oᴱ → Σ ℕ B¹
+  code′ NOOP = , op B0
   code′ (tag o¹ oᴱ) = code′ oᴱ
   code′ (x₁ ⟫ x₂) = , (proj₂ (code′ x₁) ⦂ proj₂ (code′ x₂))
   code′ ADD = , op B1 0x01
@@ -1102,6 +1104,7 @@ module EVM-Assembly where
   ℤ→hex _ (ℤ.negsuc n) = "{erroneously-negative}"
 
   B⁰⋆→String : B⁰⋆ → String
+  B⁰⋆→String (B0     ⟩ x₁) = B⁰⋆→String x₁
   B⁰⋆→String (B1   x ⟩ x₁) = ℤ→hex 2 (+ x) string++ B⁰⋆→String x₁
   B⁰⋆→String (B2   x ⟩ x₁) = ℤ→hex 4 x string++ B⁰⋆→String x₁
   B⁰⋆→String (BSig x ⟩ x₁) = keccak256 x string++ B⁰⋆→String x₁
