@@ -19,16 +19,16 @@
 (define-fun
     add-overflow-clever
     ((x Word) (y Word)) Bool
-    (bvslt zero
-           (bvand (bvxor (bvadd x y) x)
-                  (bvxor (bvadd x y) y))))
+    (bvslt (bvand (bvxor (bvadd x y) x)
+                  (bvxor (bvadd x y) y))
+           zero))
 
 (set-option :pp.bv-literals false)
 
 (declare-const x Word)
 (declare-const y Word)
 
-(assert (not (= (add-overflow-basic x y) (add-overflow-basic x y))))
+(assert (not (= (add-overflow-basic x y) (add-overflow-clever x y))))
 
 (check-sat)
 (display "Unsat is good; no exception was found.")
