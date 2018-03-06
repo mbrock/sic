@@ -731,17 +731,17 @@ module EVM-Math where
 
       gas-cost = 38 -- TODO: Optimize for eternal glory!
 
-      bad-impl : ∀ x y ∅ → 0 ¤ (x , y , ∅) ⤇ gas-cost ¤ (bad? x y , (x × y) , ∅)
-      bad-impl = λ x y ∅ → begin
-         0 ¤ (x , y , ∅)                              ∼⟨ dup₂ & dup₂ & mul ⟩
-         9 ¤ ((x × y) , x , y , ∅)                    ∼⟨ swap₂ & swap₂ ⟩
-        13 ¤ (x , y , x × y , ∅)                      ∼⟨ dup₂ & dup₁ & dup₃ ⟩
-        19 ¤ (x , y , y , x , y , x × y , ∅)          ∼⟨ mul ⟩
-        24 ¤ (x × y , y , x , y , x × y , ∅)          ∼⟨ div ⟩
-        29 ¤ ((x × y) ÷ y , x , y , x × y , ∅)        ∼⟨ eq ⟩
-        32 ¤ (((x × y) ÷ y) == x , y , x × y , ∅)     ∼⟨ iszero ⟩
-        35 ¤ (¬ (((x × y) ÷ y) == x) , y , x × y , ∅) ∼⟨ and ⟩
-        38 ¤ (bad? x y , x × y , ∅) ∎
+      bad-impl : ∀ x y ◎ → 0 ¤ (x , y , ◎) ⤇ gas-cost ¤ (bad? x y , (x × y) , ◎)
+      bad-impl = λ x y ◎ → begin
+         0 ¤ (x , y , ◎)                              ∼⟨ dup₂ & dup₂ & mul ⟩
+         9 ¤ ((x × y) , x , y , ◎)                    ∼⟨ swap₂ & swap₂ ⟩
+        13 ¤ (x , y , x × y , ◎)                      ∼⟨ dup₂ & dup₁ & dup₃ ⟩
+        19 ¤ (x , y , y , x , y , x × y , ◎)          ∼⟨ mul ⟩
+        24 ¤ (x × y , y , x , y , x × y , ◎)          ∼⟨ div ⟩
+        29 ¤ ((x × y) ÷ y , x , y , x × y , ◎)        ∼⟨ eq ⟩
+        32 ¤ (((x × y) ÷ y) == x , y , x × y , ◎)     ∼⟨ iszero ⟩
+        35 ¤ (¬ (((x × y) ÷ y) == x) , y , x × y , ◎) ∼⟨ and ⟩
+        38 ¤ (bad? x y , x × y , ◎) ∎
 
   RONE = PUSH 27 ⟫ PUSH 10 ⟫ EXP
   RMUL = RONE ⟫ XMUL ⟫ PUSH 2 ⟫ RONE ⟫ DIV ⟫ XADD ⟫ DIV
