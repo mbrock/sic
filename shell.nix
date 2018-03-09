@@ -8,6 +8,5 @@ let
       sha256 = "1rbfgfp9y2wqn1k0q00363hrb6dc0jbqm7nmnnmi9az3sw55q0rv";
     }
   ) {};
-  drv = pkgs.callPackage (import ./default.nix) {};
 in
-  if pkgs.lib.inNixShell then drv.env else drv
+  pkgs.callPackage (import ./default.nix) {}

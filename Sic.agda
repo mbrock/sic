@@ -327,15 +327,10 @@ module OverloadedNumbers where
   {-# BUILTIN FROMNAT from-ℕ #-}
 
 
--- Section 3: Oⁿ, the “Abstract Contract Machine”
+-- Section 3: Oⁿ, linearized versions of Sⁿ
 --
--- We define a stack machine that is more general than the EVM.
--- This instruction set can be compiled to other virtual machines.
--- Like the Sⁿ syntax types, the Oⁿ code types form a hierarchy:
---
---   ● O⁰, the target of S⁰, stack computations;
---   ● O¹, the target of S¹, effect sequences; and
---   ● O², the target of S², contracts with named actions.
+-- The first phase of compiling is to linearize the recursive expressions;
+-- thus, Oⁿ is Sⁿ with expressions flattened into “reverse Polish notation.”
 --
 
 module Oⁿ where
@@ -410,8 +405,6 @@ module Oⁿ where
   -- In order to allocate memory (say, for EVM return values),
   -- we need to compute the memory requirements of operations.
 
-  -- %%%M...R...X...
-
   O⁰-memory : ∀ {m n} → O⁰ m n → ℕ
   O⁰-memory (refₒ i)  = suc i
   O⁰-memory (o₁ ┆ o₂) = O⁰-memory o₁ ⊔ O⁰-memory o₂
@@ -431,11 +424,6 @@ module Oⁿ where
   O¹-fyi-memory (o₁ ∥ o₂) = O¹-fyi-memory o₁ ⊔ O¹-fyi-memory o₂
   O¹-fyi-memory _         = 0
 
--- Section 4: Compiling Sic to abstract machine code
---
--- This transformation is mostly a simple linearization,
--- since our abstract machine is based on Sic semantics.
---
 
 module Sⁿ→Oⁿ where
   open Sⁿ
@@ -508,7 +496,7 @@ module Sⁿ→Oⁿ where
     example-3 = refl
 
 
--- Section 5: Reasoning about stack manipulations
+-- Section 4: Reasoning about stack manipulations
 --
 -- We define a subset of the EVM stack operations for the purpose
 -- of proving the stack effects of “pure” stack operations.
@@ -522,8 +510,9 @@ module StackReasoning (A : Set) where
   postulate
     -- The meaning of these operators don't matter for our reasoning,
     -- so we have them as postulates.
-    _+_ _×_ _÷_ _<_ _==_ _⊕_ _∨_ _∧_ : A → A → A
+    _+_ _×_ _÷_ _%_ _<_ _==_ _⊕_ _∨_ _∧_ : A → A → A
     ¬ neg? : A → A
+    two : A
 
   infixr 1 _⤇_
   infixr 2 _⟫_
@@ -575,9 +564,9 @@ module StackReasoning (A : Set) where
     swap₁ : ∀ {a b s g}
       → g ¤ (a , b , s) ⤇ base+ g ¤ (b , a , s)
     swap₂ : ∀ {a b c s g}
-      → g ¤ (a , b , c , s) ⤇ base+ g ¤ (c , a , b , s)
+      → g ¤ (a , b , c , s) ⤇ base+ g ¤ (c , b , a , s)
     swap₃ : ∀ {a b c d s g}
-      → g ¤ (a , b , c , d , s) ⤇ base+ g ¤ (d , a , b , c , s)
+      → g ¤ (a , b , c , d , s) ⤇ base+ g ¤ (d , b , c , a , s)
 
     add   : ∀ {a b s g} → g ¤ (a , b , s) ⤇ verylow+ g ¤ ((a + b) , s)
     slt   : ∀ {a b s g} → g ¤ (a , b , s) ⤇ verylow+ g ¤ ((a < b) , s)
@@ -587,6 +576,7 @@ module StackReasoning (A : Set) where
     xor   : ∀ {a b s g} → g ¤ (a , b , s) ⤇ verylow+ g ¤ ((a ⊕ b) , s)
     mul   : ∀ {a b s g} → g ¤ (a , b , s) ⤇ low+ g     ¤ ((a × b) , s)
     div   : ∀ {a b s g} → g ¤ (a , b , s) ⤇ low+ g     ¤ ((a ÷ b) , s)
+    mod   : ∀ {a b s g} → g ¤ (a , b , s) ⤇ low+ g     ¤ ((a % b) , s)
 
     isneg  : ∀ {a s g} → g ¤ (a , s) ⤇ verylow+ (verylow+ g) ¤ (neg? a , s)
     iszero : ∀ {a s g} → g ¤ (a , s) ⤇ verylow+ g ¤ (¬ a , s)
@@ -622,7 +612,7 @@ module StackReasoning (A : Set) where
         7 ¤ ((a + b) , a , b , ◎) ∎
 
 
--- Section 6: EVM assembly
+-- Section 5: EVM assembly
 --
 -- We now introduce a data type denoting EVM assembly.
 --
@@ -671,6 +661,7 @@ module EVM where
     ⟦ slt ⟧     = SLT
     ⟦ mul ⟧     = MUL
     ⟦ div ⟧     = DIV
+    ⟦ mod ⟧     = MOD
     ⟦ eq ⟧      = EQ
     ⟦ or ⟧      = OR
     ⟦ and ⟧     = AND
@@ -688,7 +679,7 @@ module EVM where
   snippet = ⟦_⟧
 
 
--- Section 7: EVM safe math and exponentiation
+-- Section 6: EVM safe math and exponentiation
 --
 -- For the EVM, we define our own overflow safe arithmetic.
 --
@@ -708,80 +699,89 @@ module EVM-Math where
       -- Z3 can prove it equivalent to a naïve formula; see “math.z3”.
       bad? = λ x y → neg? (((x + y) ⊕ x) ∧ ((x + y) ⊕ y))
 
-      gas-cost = 32 -- TODO: Optimize for eternal glory!
+      gas-cost = 30 -- TODO: Optimize for eternal glory!
 
       bad-impl : ∀ x y ◎ → 0 ¤ (x , y , ◎) ⤇ gas-cost ¤ (bad? x y , x + y , ◎)
       bad-impl x y ◎ = begin
          0 ¤ (x , y , ◎)                                 ∼⟨ dup₂ & dup₂ & add ⟩
-         7 ¤ (x + y , x , y , ◎)                         ∼⟨ swap₁ & swap₂ ⟩
-        11 ¤ (y , x , x + y , ◎)                         ∼⟨ dup₃ ⟩
-        13 ¤ (x + y , y , x , x + y , ◎)                 ∼⟨ xor ⟩
-        16 ¤ ((x + y) ⊕ y , x , x + y , ◎)               ∼⟨ swap₁ & dup₃ ⟩
-        20 ¤ ((x + y) , x , (x + y) ⊕ y , x + y , ◎)     ∼⟨ xor ⟩
-        23 ¤ ((x + y) ⊕ x , (x + y) ⊕ y , x + y , ◎)     ∼⟨ and ⟩
-        26 ¤ (((x + y) ⊕ x) ∧ ((x + y) ⊕ y) , x + y , ◎) ∼⟨ isneg ⟩
-        32 ¤ (bad? x y , x + y , ◎) ∎
+         7 ¤ (x + y , x , y , ◎)                         ∼⟨ swap₂ ⟩
+         9 ¤ (y , x , x + y , ◎)                         ∼⟨ dup₃ ⟩
+        11 ¤ (x + y , y , x , x + y , ◎)                 ∼⟨ xor ⟩
+        14 ¤ ((x + y) ⊕ y , x , x + y , ◎)               ∼⟨ swap₁ & dup₃ ⟩
+        18 ¤ ((x + y) , x , (x + y) ⊕ y , x + y , ◎)     ∼⟨ xor ⟩
+        21 ¤ ((x + y) ⊕ x , (x + y) ⊕ y , x + y , ◎)     ∼⟨ and ⟩
+        24 ¤ (((x + y) ⊕ x) ∧ ((x + y) ⊕ y) , x + y , ◎) ∼⟨ isneg ⟩
+        30 ¤ (bad? x y , x + y , ◎) ∎
 
   XSUB = PUSH 0 ⟫ SUB ⟫ XADD   -- I guess this could be optimized.
 
-  XMUL = snippet (bad-impl 0 0 []) ⟫ REVERTIF
-    where
-      -- We check for multiplication overflow by verifying the division.
-      bad? = λ x y → (¬ (((x × y) ÷ y) == x)) ∧ y
+  -- We check for multiplication overflow by verifying the division.
+  ×-bad? = λ x y → (¬ (((x × y) ÷ y) == x)) ∧ y
 
-      gas-cost = 38 -- TODO: Optimize for eternal glory!
+  ×-bad-impl : ∀ x y ◎ → 0 ¤ (x , y , ◎) ⤇ 38 ¤ (×-bad? x y , (x × y) , ◎)
+  ×-bad-impl = λ x y ◎ → begin
+      0 ¤ (x , y , ◎)                              ∼⟨ dup₂ & dup₂ & mul ⟩
+      9 ¤ ((x × y) , x , y , ◎)                    ∼⟨ swap₂ & swap₁ ⟩
+     13 ¤ (x , y , x × y , ◎)                      ∼⟨ dup₂ & dup₁ & dup₃ ⟩
+     19 ¤ (x , y , y , x , y , x × y , ◎)          ∼⟨ mul ⟩
+     24 ¤ (x × y , y , x , y , x × y , ◎)          ∼⟨ div ⟩
+     29 ¤ ((x × y) ÷ y , x , y , x × y , ◎)        ∼⟨ eq ⟩
+     32 ¤ (((x × y) ÷ y) == x , y , x × y , ◎)     ∼⟨ iszero ⟩
+     35 ¤ (¬ (((x × y) ÷ y) == x) , y , x × y , ◎) ∼⟨ and ⟩
+     38 ¤ (×-bad? x y , x × y , ◎) ∎
 
-      bad-impl : ∀ x y ◎ → 0 ¤ (x , y , ◎) ⤇ gas-cost ¤ (bad? x y , (x × y) , ◎)
-      bad-impl = λ x y ◎ → begin
-         0 ¤ (x , y , ◎)                              ∼⟨ dup₂ & dup₂ & mul ⟩
-         9 ¤ ((x × y) , x , y , ◎)                    ∼⟨ swap₂ & swap₂ ⟩
-        13 ¤ (x , y , x × y , ◎)                      ∼⟨ dup₂ & dup₁ & dup₃ ⟩
-        19 ¤ (x , y , y , x , y , x × y , ◎)          ∼⟨ mul ⟩
-        24 ¤ (x × y , y , x , y , x × y , ◎)          ∼⟨ div ⟩
-        29 ¤ ((x × y) ÷ y , x , y , x × y , ◎)        ∼⟨ eq ⟩
-        32 ¤ (((x × y) ÷ y) == x , y , x × y , ◎)     ∼⟨ iszero ⟩
-        35 ¤ (¬ (((x × y) ÷ y) == x) , y , x × y , ◎) ∼⟨ and ⟩
-        38 ¤ (bad? x y , x × y , ◎) ∎
+  XMUL = snippet (×-bad-impl 0 0 []) ⟫ REVERTIF
 
   RONE = PUSH 27 ⟫ PUSH 10 ⟫ EXP
-  RMUL = RONE ⟫ XMUL ⟫ PUSH 2 ⟫ RONE ⟫ DIV ⟫ XADD ⟫ DIV
-
-  -- This was an attempt at a stack-only rpow, but it’s not right.
-  -- It should be easier to implement now that we have stack reasoning.
-  RPOW = PUSH 2 ⟫ DUP 3 ⟫ MOD ⟫ ISZERO ⟫
-    DUP 1 ⟫ RONE ⟫ MUL ⟫ SWAP 1 ⟫ ISZERO ⟫ DUP 3 ⟫ MUL ⟫ ADD ⟫
-    SWAP 1 ⟫ SWAP 2 ⟫ PUSH 2 ⟫ SWAP 1 ⟫ DIV ⟫
-    LOOP (DUP 1) (
-      SWAP 2 ⟫ DUP 1 ⟫ RMUL ⟫ SWAP 1 ⟫ SWAP 2 ⟫ SWAP 1 ⟫ SWAP 2 ⟫
-      PUSH 2 ⟫ DUP 2 ⟫ MOD ⟫ ISZERO ⟫
-      THEN (SWAP 2 ⟫ SWAP 1 ⟫ DUP 2 ⟫ RMUL ⟫ SWAP 1 ⟫ SWAP 2) ⟫
-      PUSH 2 ⟫ SWAP 2 ⟫ DIV
-    ) ⟫ SWAP 2 ⟫ POP ⟫ POP
+  RMUL = XMUL ⟫ PUSH 2 ⟫ RONE ⟫ DIV ⟫ XADD ⟫ RONE ⟫ SWAP 1 ⟫ SDIV
 
     -- rpow(x, n) => z
-    --   z = n % 2 ? x : 1
-    --   for (n /= 2; n != 0; n /= 2)
-    --     x = x * x
-    --     if (n % 2)
-    --       z = z * x
+    --   z = 1
+    --   while (n)
+    --     if n & 1
+    --       z = rmul(z, x)
+    --     x = rmul(x, x)
+    --     n = n / 2
 
-    -- f(1) = x; f(0) = 1
-    -- f(a) = !a + a * x
-    -- f(0) = 1 + 0 * x; f(1) = 0 + 1 * x
+  RPOW =
+    SWAP 1 ⟫ RONE ⟫ SWAP 1 ⟫
+    LOOP (DUP 1)
+      (PUSH 1 ⟫ SWAP 1 ⟫ AND ⟫
+       THEN (DUP 3 ⟫ SWAP 2 ⟫ RMUL ⟫ SWAP 1) ⟫
+       SWAP 2 ⟫ DUP 1 ⟫ RMUL ⟫ PUSH 2 ⟫ SWAP 1 ⟫ DIV ⟫
+       SWAP 1 ⟫ SWAP 2 ⟫ SWAP 1) ⟫
+    SWAP 2 ⟫ POP ⟫ POP
 
-  -- Here is a memory-using rpow.
-  RPOW′ =
-    let z = 2 * 32 in
-    DUP 2 ⟫ PUSH 2 ⟫ SWAP 1 ⟫ MOD ⟫ DUP 1 ⟫ ISZERO ⟫
-    SWAP 1 ⟫ DUP 3 ⟫ MUL ⟫ ADD ⟫ PUSH z ⟫ MSTORE ⟫
-    SWAP 1 ⟫ PUSH 2 ⟫ SWAP 1 ⟫ DIV ⟫ LOOP (DUP 1) (
-      SWAP 1 ⟫ DUP 1 ⟫ MUL ⟫ PUSH 2 ⟫ DUP 3 ⟫ MOD ⟫ ISZERO ⟫
-      THEN (PUSH z ⟫ MLOAD ⟫ DUP 2 ⟫ MUL ⟫ PUSH z ⟫ MSTORE) ⟫
-      SWAP 1 ⟫ PUSH 2 ⟫ SWAP 1 ⟫ DIV
-    ) ⟫ POP ⟫ POP ⟫ PUSH z ⟫ MLOAD
+{-
+x n
+n x
+z(1) n x
+n z x
+LOOP
+  1 n z x
+  n 1 n z x
+  n&1 n z x
+  THEN
+    x n z x
+    z x n x
+    z*x n x
+    n z′ x
+  x n z′
+  x x n z′
+  x*x n z′
+  2 n x′ z′
+  n 2 x′ z′
+  n/2 x′ z′
+  x′ n′ z′
+  z′ n′ x′
+  n′ z′ x′
+x′ n′ z′
+n′ z′
+z′
+-}
 
 
--- Section 8: Compiling Sic machine code to EVM assembly
+-- Section 7: Compiling Sic machine code to EVM assembly
 --
 
 module Sic→EVM where
@@ -798,13 +798,12 @@ module Sic→EVM where
   wordsize : ℕ
   wordsize = 32
 
-  -- We use three reserved variables: two for hashing, one for RPOW.
+  -- We use two reserved variables, for hashing.
   %hash¹ = 0 * wordsize
   %hash² = 1 * wordsize
-  %rpowᶻ = 2 * wordsize
 
   -- Let mₒ be the first memory address for non-reserved variables.
-  m₀ = %rpowᶻ +ℕ wordsize
+  m₀ = %hash² +ℕ wordsize
 
   ⟦_⟧⁰ᵉ : ∀ {i j} → O⁰ i j → Oᴱ
   ⟦ #ₒ n    ⟧⁰ᵉ  = PUSH n
@@ -813,12 +812,12 @@ module Sic→EVM where
   ⟦ callerₒ ⟧⁰ᵉ  = CALLER
   ⟦ refₒ x  ⟧⁰ᵉ  = PUSH (x * wordsize +ℕ m₀) ⟫ MLOAD
   ⟦ getₒ x  ⟧⁰ᵉ  = PUSH x ⟫ SLOAD
-  ⟦ argₒ x  ⟧⁰ᵉ  = PUSH (x * wordsize) ⟫ CALLDATALOAD
+  ⟦ argₒ x  ⟧⁰ᵉ  = PUSH (4 +ℕ x * wordsize) ⟫ CALLDATALOAD
   ⟦ getₖₒ   ⟧⁰ᵉ  = SLOAD
   ⟦ +ₒ      ⟧⁰ᵉ  = XADD
   ⟦ −ₒ      ⟧⁰ᵉ  = XSUB
   ⟦ ∙ₒ      ⟧⁰ᵉ  = RMUL
-  ⟦ ^ₒ      ⟧⁰ᵉ  = RPOW′
+  ⟦ ^ₒ      ⟧⁰ᵉ  = RPOW
   ⟦ ≡ₒ      ⟧⁰ᵉ  = EQ
   ⟦ ≥ₒ      ⟧⁰ᵉ  = SGT ⟫ ISZERO
   ⟦ ≤ₒ      ⟧⁰ᵉ  = SLT ⟫ ISZERO
@@ -939,7 +938,7 @@ module Sic→EVM where
   compile = S²→Oᴱ (λ x → x) (λ x → x)
 
 
--- Section 9: Assembling EVM assembly
+-- Section 8: Assembling EVM assembly
 --
 -- We define the concrete output format of the Agda program.
 --
@@ -1202,13 +1201,13 @@ module Linking where
   compile-and-link f₁ f₂ x =
     ♯ resolve-O² f₁ (map-O²-act f₂ (S²→O² x)) >>=
         maybe
-          (λ y → ♯ (IO.return (just (constructor-prelude ⟫ O²→Oᴱ y))))
+          (λ y → ♯ (IO.return (just (O²→Oᴱ y))))
           (♯ IO.return nothing)
 
   assemble-and-print : IO (Maybe Oᴱ) → IO ⊤
   assemble-and-print io = ♯ io >>=
     maybe
-      (λ x → ♯ putStrLn (assemble x))
+      (λ x → ♯ putStrLn (assemble constructor-prelude string++ assemble x))
       (♯ putStrLn "Error: linking failed.")
 
   link_with-guys_with-acts
@@ -1221,7 +1220,7 @@ module Linking where
     run (assemble-and-print (compile-and-link f₁ f₂ x))
 
 
--- Section 10: Dappsys, free stuff for dapp developers
+-- Section 9: Dappsys, free stuff for dapp developers
 --
 -- We now define a “standard library” in the Sic language.
 --
@@ -1254,7 +1253,7 @@ module Dappsys where
   infix 19 _↧_↥_
 
 
--- Section 11: Experimental Sⁿ modifiers and combinators
+-- Section 10: Experimental Sⁿ modifiers and combinators
 --
 
 module Combinatronics where
@@ -1334,3 +1333,5 @@ open Sic→EVM public
 open Combinatronics public
 open External public
 open Linking public
+open EVM-Assembly public
+open EVM public
