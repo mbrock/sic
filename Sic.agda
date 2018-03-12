@@ -1253,84 +1253,12 @@ module Dappsys where
   infix 19 _↧_↥_
 
 
--- Section 10: Experimental Sⁿ modifiers and combinators
---
-
-module Combinatronics where
-  open Sⁿ
-  open Basics
-  open Naturals
-  open Vectors
-
-  -- The “zone” functions change the storage access of Sⁿ terms
-  -- by hashing them together with a given ℕ.
-
-  zone⁰ : ℕ → Op₁ (S⁰ Word)
-  zone⁰ n (- s) = - (zone⁰ n s)
-  zone⁰ n (¬ s) = ¬ (zone⁰ n s)
-  zone⁰ n (x₁ + x₂) = zone⁰ n x₁ + zone⁰ n x₂
-  zone⁰ n (x₁ − x₂) = zone⁰ n x₁ − zone⁰ n x₂
-  zone⁰ n (x₁ ∙ x₂) = zone⁰ n x₁ ∙ zone⁰ n x₂
-  zone⁰ n (x₁ ^ x₂) = zone⁰ n x₁ ^ zone⁰ n x₂
-  zone⁰ n (x₁ ∨ x₂) = zone⁰ n x₁ ∨ zone⁰ n x₂
-  zone⁰ n (x₁ ∧ x₂) = zone⁰ n x₁ ∧ zone⁰ n x₂
-  zone⁰ n (x₁ ≥ x₂) = zone⁰ n x₁ ≥ zone⁰ n x₂
-  zone⁰ n (x₁ ≤ x₂) = zone⁰ n x₁ ≤ zone⁰ n x₂
-  zone⁰ n (x₁ ≡ x₂) = zone⁰ n x₁ ≡ zone⁰ n x₂
-  zone⁰ n u = u
-  zone⁰ n t = t
-  zone⁰ n (nat i) = nat i
-  zone⁰ n (get (at x)) = get ⟨ (nat n) , (nat x) ⟩
-  zone⁰ n (get ⟨ x) = get ⟨ ((nat n) , x)
-  zone⁰ n (ref x) = ref x
-  zone⁰ n (arg x) = arg x
-
-  zone¹ : ∀ {ease n} → ℕ → Op₁ (S¹ ease n)
-  zone¹ n (iff x) = iff (zone⁰ n x)
-  zone¹ n (x ≜ x₁) = x ≜ zone⁰ n x₁
-  zone¹ n ((at x) ← x₁) = ⟨ (nat n) , (nat x) ⟩ ← zone⁰ n x₁
-  zone¹ n (⟨ x ← x₁) = ⟨ (nat n) , x ← zone⁰ n x₁
-  zone¹ n (fyi {m} xs) = fyi (mapᵛ (zone⁰ n) xs)
-  zone¹ n (ext x x₁ x₂) = ext x (zone⁰ n x₁) (mapᵛ (zone⁰ n) x₂)
-  zone¹ n (_│_ {m₁} {m₂} s₁ s₂ {ok}) =
-    _│_ {m₁} {m₂} (zone¹ n s₁) (zone¹ n s₂) {ok}
-
-  zone² : ∀ {Guy Act ease} → ℕ → Op₁ (S² Guy Act ease)
-  zone² n (guy may act :: x₁) =
-    guy may act :: zone¹ n x₁
-  zone² n (s₁ // s₂) =
-    zone² n s₁ // zone² n s₂
-  zone² n (case p then s₁ else s₂) =
-    case (zone⁰ n p) then (zone² n s₁)
-                     else (zone² n s₂)
-
-  -- If we distinctly zone two S² terms, we can merge them
-  -- without storage interference.
-  _⊗_ : ∀ {Guy Act ease₁ ease₂}
-      → S² Guy Act ease₁
-      → S² Guy Act ease₂
-      → S² Guy Act (ease₁ ⊔ᵉ ease₂)
-  x ⊗ y = zone² 0 x // zone² 1 y
-
-  private
-    open Relations
-    open OverloadedNumbers
-
-    data Guy1 : Set where gal : Guy1
-    data Act1 : Set where foo : Act1
-
-    ex-1 : (zone² 5 (the gal may foo ::       0   ← get       1 )) ≣
-                    (the gal may foo :: ⟨ 5 , (nat 0) ⟩ ← get ⟨ 5 , 1 ⟩)
-    ex-1 = refl
-
-
 -- Now we open up our modules to users of the language.
 open Basics public
 open Strings public
 open OverloadedNumbers public
 open Sⁿ public
 open Sic→EVM public
-open Combinatronics public
 open External public
 open Linking public
 open EVM-Assembly public
