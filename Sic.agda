@@ -254,7 +254,7 @@ module Sⁿ where
     anybody : Some Guy
 
   data S² (Guy : Set) (Act : Set) : Ease → Set where
-    _may_::_
+    _can_::_
       : ∀ {ease n}
       → Some Guy
       → Act
@@ -278,7 +278,7 @@ module Sⁿ where
 
   infix  1 case_then_else_
   infixr 2 _//_
-  infixr 3 _may_::_
+  infixr 3 _can_::_
   infixr 4 _│_
 
   infix  10 iff_ _≜_ _←_
@@ -470,7 +470,7 @@ module Sⁿ→Oⁿ where
 
   -- Compiling signature dispatch sequences
   ⟦_⟧² : ∀ {ease Guy Act} → S² Guy Act ease → O² Guy Act
-  ⟦ g may s :: k ⟧² =
+  ⟦ g can s :: k ⟧² =
     actₒ g s (S¹-fyi-size k) ⟦ k ⟧¹
   ⟦ a // b     ⟧² =
     seqₒ ⟦ a ⟧² ⟦ b ⟧²
