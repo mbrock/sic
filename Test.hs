@@ -16,7 +16,7 @@ import EVM.UnitTest
 
 import Data.Binary.Get (runGetOrFail)
 
-import Control.Monad (unless)
+import Control.Monad (unless, when)
 import Control.Monad.State.Strict (execState, runState)
 import System.Exit (exitFailure)
 
@@ -31,43 +31,52 @@ import qualified Data.Vector as Vector
 
 import Control.Lens
 
-foo :: ByteString -> Text -> AbiType -> [AbiValue] -> Maybe AbiValue
-foo code sig tret args = do
-  case runState exec (vmForEthrunCreation code) of
-    (VMSuccess (B runtime), vm1) -> do
-      let
-        target = view (state . contract) vm1
-        vm2 = execState (replaceCodeOfSelf runtime) vm1
-        continue = do
-          resetState
-          assign (state . gas) 0xffffffffffffff
-          loadContract target
-          assign (state . calldata) (B (abiCalldata sig (Vector.fromList args)))
-          exec
-      case runState continue vm2 of
-        (VMSuccess (B out), _) ->
-          case runGetOrFail (getAbi tret) (fromStrict out) of
-            Right ("", _, x) -> Just x
-            _ -> Nothing
-        (VMFailure problem, _) ->
-          Nothing
-    _ -> Nothing
+(runtime, vm1) =
+  case (unsafePerformIO $
+          runState exec . vmForEthrunCreation <$>
+            hexByteString "code" <$> BS.getContents) of
+    (VMFailure problem, _) -> error (show problem)
+    (VMSuccess (B runtime), vm) -> (runtime, vm)
 
-program :: ByteString
-program = unsafePerformIO (hexByteString "code" <$> BS.getContents)
+run :: Text -> AbiType -> [AbiValue] -> Either Error AbiValue
+run sig tret args = do
+  let
+    target = view (state . contract) vm1
+    vm2 = execState (replaceCodeOfSelf runtime) vm1
+    continue = do
+      resetState
+      assign (state . gas) 0xffffffffffffff
+      loadContract target
+      assign (state . calldata) (B (abiCalldata sig (Vector.fromList args)))
+      exec
+  case runState continue vm2 of
+    (VMSuccess (B out), _) ->
+      case runGetOrFail (getAbi tret) (fromStrict out) of
+        Right ("", _, x) -> Right x
+        _ -> error "ABI return value decoding error"
+    (VMFailure problem, _) ->
+      Left problem
 
 maxint = 2 ^ 255 - 1
 
+integer :: Integral a => a -> Integer
+integer x = fromIntegral x
+
 prop_add :: Property
 prop_add =
-  property $ do
+  withTests 200 . property $ do
     x <- forAll $ Gen.integral (Range.linear (-maxint) maxint)
     y <- forAll $ Gen.integral (Range.linear (-maxint) maxint)
-    case foo program "add(int128,int128)" (AbiIntType 256) [AbiInt 256 x, AbiInt 256 y] of
-      Just (AbiInt 256 z) ->
+    case run "add(int128,int128)" (AbiIntType 256) [AbiInt 256 x, AbiInt 256 y] of
+      Right (AbiInt 256 z) -> do
         z === x + y
-      Nothing ->
-        failure
+      Left Revert ->
+        if (x > 0 && y > 0)
+          then assert (x + y < x)     -- Overflow
+          else
+            if (x < 0 && y < 0)
+              then assert (x + y > x) -- Underflow
+              else failure
 
 main :: IO ()
 main = do
