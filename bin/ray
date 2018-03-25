@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+printf "0x%64s\n" $(bc <<<"obase=16; ($1 * 10^27)/1") | sed 's/ /0/g' | tr A-F a-f

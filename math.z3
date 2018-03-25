@@ -31,4 +31,3 @@
 (assert (not (= (add-overflow-basic x y) (add-overflow-clever x y))))
 
 (check-sat)
-(display "Unsat is good; no exception was found.")

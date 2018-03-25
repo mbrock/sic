@@ -575,8 +575,7 @@ module StackReasoning (A : Set) where
     and   : ∀ {a b s g} → g ¤ (a , b , s) ⤇ verylow+ g ¤ ((a ∧ b) , s)
     xor   : ∀ {a b s g} → g ¤ (a , b , s) ⤇ verylow+ g ¤ ((a ⊕ b) , s)
     mul   : ∀ {a b s g} → g ¤ (a , b , s) ⤇ low+ g     ¤ ((a × b) , s)
-    div   : ∀ {a b s g} → g ¤ (a , b , s) ⤇ low+ g     ¤ ((a ÷ b) , s)
-    mod   : ∀ {a b s g} → g ¤ (a , b , s) ⤇ low+ g     ¤ ((a % b) , s)
+    sdiv  : ∀ {a b s g} → g ¤ (a , b , s) ⤇ low+ g     ¤ ((a ÷ b) , s)
 
     isneg  : ∀ {a s g} → g ¤ (a , s) ⤇ verylow+ (verylow+ g) ¤ (neg? a , s)
     iszero : ∀ {a s g} → g ¤ (a , s) ⤇ verylow+ g ¤ (¬ a , s)
@@ -660,8 +659,7 @@ module EVM where
     ⟦ xor ⟧     = XOR
     ⟦ slt ⟧     = SLT
     ⟦ mul ⟧     = MUL
-    ⟦ div ⟧     = DIV
-    ⟦ mod ⟧     = MOD
+    ⟦ sdiv ⟧    = SDIV
     ⟦ eq ⟧      = EQ
     ⟦ or ⟧      = OR
     ⟦ and ⟧     = AND
@@ -693,7 +691,7 @@ module EVM-Math where
 
   open StackReasoning ℕ renaming (_⟫_ to _&_)
 
-  XADD = snippet (bad-impl 0 0 []) ⟫ REVERTIF
+  IADD = snippet (impl 0 0 []) ⟫ REVERTIF
     where
       -- This overflow check formula comes from Hacker’s Delight, section 2.13.
       -- Z3 can prove it equivalent to a naïve formula; see “math.z3”.
@@ -701,8 +699,8 @@ module EVM-Math where
 
       gas-cost = 30 -- TODO: Optimize for eternal glory!
 
-      bad-impl : ∀ x y ◎ → 0 ¤ (x , y , ◎) ⤇ gas-cost ¤ (bad? x y , x + y , ◎)
-      bad-impl x y ◎ = begin
+      impl : ∀ x y ◎ → 0 ¤ (x , y , ◎) ⤇ gas-cost ¤ (bad? x y , x + y , ◎)
+      impl x y ◎ = begin
          0 ¤ (x , y , ◎)                                 ∼⟨ dup₂ & dup₂ & add ⟩
          7 ¤ (x + y , x , y , ◎)                         ∼⟨ swap₂ ⟩
          9 ¤ (y , x , x + y , ◎)                         ∼⟨ dup₃ ⟩
@@ -713,27 +711,30 @@ module EVM-Math where
         24 ¤ (((x + y) ⊕ x) ∧ ((x + y) ⊕ y) , x + y , ◎) ∼⟨ isneg ⟩
         30 ¤ (bad? x y , x + y , ◎) ∎
 
-  XSUB = PUSH 0 ⟫ SUB ⟫ XADD   -- I guess this could be optimized.
+  ISUB = SWAP 1 ⟫ PUSH 0 ⟫ SUB ⟫ IADD
 
-  -- We check for multiplication overflow by verifying the division.
-  ×-bad? = λ x y → (¬ (((x × y) ÷ y) == x)) ∧ y
+  IMUL = snippet (×-impl 0 0 []) ⟫ REVERTIF
+    where
+      -- We check for multiplication overflow by verifying the division.
+      ×-bad? = λ x y → (¬ (((x × y) ÷ y) == x)) ∧ y
 
-  ×-bad-impl : ∀ x y ◎ → 0 ¤ (x , y , ◎) ⤇ 38 ¤ (×-bad? x y , (x × y) , ◎)
-  ×-bad-impl = λ x y ◎ → begin
-      0 ¤ (x , y , ◎)                              ∼⟨ dup₂ & dup₂ & mul ⟩
-      9 ¤ ((x × y) , x , y , ◎)                    ∼⟨ swap₂ & swap₁ ⟩
-     13 ¤ (x , y , x × y , ◎)                      ∼⟨ dup₂ & dup₁ & dup₃ ⟩
-     19 ¤ (x , y , y , x , y , x × y , ◎)          ∼⟨ mul ⟩
-     24 ¤ (x × y , y , x , y , x × y , ◎)          ∼⟨ div ⟩
-     29 ¤ ((x × y) ÷ y , x , y , x × y , ◎)        ∼⟨ eq ⟩
-     32 ¤ (((x × y) ÷ y) == x , y , x × y , ◎)     ∼⟨ iszero ⟩
-     35 ¤ (¬ (((x × y) ÷ y) == x) , y , x × y , ◎) ∼⟨ and ⟩
-     38 ¤ (×-bad? x y , x × y , ◎) ∎
-
-  XMUL = snippet (×-bad-impl 0 0 []) ⟫ REVERTIF
+      ×-impl : ∀ x y ◎ → 0 ¤ (x , y , ◎) ⤇ 38 ¤ (×-bad? x y , (x × y) , ◎)
+      ×-impl = λ x y ◎ → begin
+          0 ¤ (x , y , ◎)                              ∼⟨ dup₂ & dup₂ & mul ⟩
+          9 ¤ ((x × y) , x , y , ◎)                    ∼⟨ swap₂ & swap₁ ⟩
+         13 ¤ (x , y , x × y , ◎)                      ∼⟨ dup₂ & dup₁ & dup₃ ⟩
+         19 ¤ (x , y , y , x , y , x × y , ◎)          ∼⟨ mul ⟩
+         24 ¤ (x × y , y , x , y , x × y , ◎)          ∼⟨ sdiv ⟩
+         29 ¤ ((x × y) ÷ y , x , y , x × y , ◎)        ∼⟨ eq ⟩
+         32 ¤ (((x × y) ÷ y) == x , y , x × y , ◎)     ∼⟨ iszero ⟩
+         35 ¤ (¬ (((x × y) ÷ y) == x) , y , x × y , ◎) ∼⟨ and ⟩
+         38 ¤ (×-bad? x y , x × y , ◎) ∎
 
   RONE = PUSH 27 ⟫ PUSH 10 ⟫ EXP
-  RMUL = XMUL ⟫ PUSH 2 ⟫ RONE ⟫ DIV ⟫ XADD ⟫ RONE ⟫ SWAP 1 ⟫ SDIV
+  RHALF = PUSH 2 ⟫ RONE ⟫ SDIV
+  RTRUNC = RONE ⟫ SWAP 1 ⟫ SDIV
+
+  RMUL = IMUL ⟫ RHALF ⟫ IADD ⟫ RTRUNC
 
     -- rpow(x, n) => z
     --   z = 1
@@ -744,7 +745,7 @@ module EVM-Math where
     --     n = n / 2
 
   RPOW =
-    SWAP 1 ⟫ RONE ⟫ SWAP 1 ⟫
+    SWAP 1 ⟫ PUSH 1 ⟫ SWAP 1 ⟫
     LOOP (DUP 1)
       (PUSH 1 ⟫ SWAP 1 ⟫ AND ⟫
        THEN (DUP 3 ⟫ SWAP 2 ⟫ RMUL ⟫ SWAP 1) ⟫
@@ -814,8 +815,8 @@ module Sic→EVM where
   ⟦ getₒ x  ⟧⁰ᵉ  = PUSH x ⟫ SLOAD
   ⟦ argₒ x  ⟧⁰ᵉ  = PUSH (4 +ℕ x * wordsize) ⟫ CALLDATALOAD
   ⟦ getₖₒ   ⟧⁰ᵉ  = SLOAD
-  ⟦ +ₒ      ⟧⁰ᵉ  = XADD
-  ⟦ −ₒ      ⟧⁰ᵉ  = XSUB
+  ⟦ +ₒ      ⟧⁰ᵉ  = IADD
+  ⟦ −ₒ      ⟧⁰ᵉ  = ISUB
   ⟦ ∙ₒ      ⟧⁰ᵉ  = RMUL
   ⟦ ^ₒ      ⟧⁰ᵉ  = RPOW
   ⟦ ≡ₒ      ⟧⁰ᵉ  = EQ
@@ -888,7 +889,6 @@ module Sic→EVM where
   revert-jumpdest : ℕ
   revert-jumpdest = 4
 
-  -- This is the simplest possible “constructor.”
   constructor-prelude =
     PUSH 13 ⟫ CODESIZE ⟫ SUB ⟫ DUP 1 ⟫
     PUSH 13 ⟫ PUSH 0 ⟫ CODECOPY ⟫ PUSH 0 ⟫ RETURN
@@ -1094,8 +1094,8 @@ module EVM-Assembly where
 
   0-pad : ℕ → String → String
   0-pad n s with (+ n) -ℤ (+ length (toList s))
-  0-pad n s | +_ i = fromList (replicate i '0') string++ s
-  0-pad n s | ℤ.negsuc n₁ = "{erroneously-huge}"
+  ... | +_ i = fromList (replicate i '0') string++ s
+  ... | ℤ.negsuc n₁ = "{erroneously-huge}"
 
   ℤ→hex : ℕ → ℤ → String
   ℤ→hex n (+_ x) = 0-pad n (Data.Nat.Show.showInBase 16 x)
@@ -1134,6 +1134,7 @@ module Linking where
   data ID : Set where
     parameter : String → ID
     hardcoded : Addrᴱ  → ID
+    construct : ID
 
   fixed-width : (A : Set) → (n : ℕ) → List A → Maybe (Vec A n)
   fixed-width _ ℕ.zero [] = just []ᵛ
@@ -1153,6 +1154,7 @@ module Linking where
     ♯ lift (ask x) >>= λ y →
       ♯ IO.return (maybe addr nothing y)
   resolve (hardcoded x) = IO.return (just x)
+  resolve (construct) = IO.return nothing
 
   -- Resolve all the guys in an O² using I/O.
   resolve-O²

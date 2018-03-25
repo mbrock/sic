@@ -54,11 +54,16 @@ counter =
       else the dad can shut! :: p ← 1 //
            the pal can poke! :: i ← 1 + get i
 
+multi-owner =
+  CALLER ⟫ PUSH 1 ⟫ SSTORE ⟫
+  PUSH 13 ⟫ CODESIZE ⟫ SUB ⟫ DUP 1 ⟫
+  PUSH 13 ⟫ PUSH 0 ⟫ CODECOPY ⟫ PUSH 0 ⟫ RETURN
+
 counter-main =
   link counter
     with-guys
-      (λ { dad → parameter "DAD_ADDRESS"
-         ; pal → parameter "PAL_ADDRESS" })
+      (λ { dad → parameter "DAD"
+         ; pal → parameter "PAL" })
     with-acts
       (λ { peek! → "peek()"
          ; poke! → "poke()"

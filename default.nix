@@ -26,21 +26,29 @@ in stdenv.mkDerivation rec {
   src = ./.;
   buildInputs =
     [z3
-     (dapphub.haskellPackages.ghcWithPackages
-      (x: with x; [ieee754 text hevm bytestring base16-bytestring]))];
+     (dapphub.haskellPackages.ghcWithPackages (x: with x; [
+       ieee754 text hevm bytestring base16-bytestring lens
+       hedgehog
+     ]))
+    ];
 
   buildPhase = ''
-    z3 math.z3
+    result=$(z3 math.z3)
+    test $result = unsat
     ${haskellPackages.Agda}/bin/agda --compile ${contract}.agda \
        -i ${stdlib}/share/agda
-    mkdir html
-    ${haskellPackages.Agda}/bin/agda --html ${contract}.agda \
-       --html-dir=html -i ${stdlib}/share/agda
+    # mkdir html
+    # ${haskellPackages.Agda}/bin/agda --html ${contract}.agda \
+    #    --html-dir=html -i ${stdlib}/share/agda
+  '';
+
+  testPhase = ''
+    runghc Test.hs
   '';
 
   installPhase = ''
     mkdir -p "$out"/{bin,sic}
     cp ${contract} "$out/bin"
-    cp -r html "$out/sic/${contract}"
+    # cp -r html "$out/sic/${contract}"
   '';
 }
