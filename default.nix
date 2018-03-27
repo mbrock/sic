@@ -37,18 +37,19 @@ in stdenv.mkDerivation rec {
     test $result = unsat
     ${haskellPackages.Agda}/bin/agda --compile ${contract}.agda \
        -i ${stdlib}/share/agda
-    # mkdir html
-    # ${haskellPackages.Agda}/bin/agda --html ${contract}.agda \
-    #    --html-dir=html -i ${stdlib}/share/agda
   '';
 
-  testPhase = ''
-    runghc Test.hs
+  doCheck = true;
+  checkPhase = ''
+    ./${contract} | tr -d '\n' | runghc Test.hs
   '';
 
   installPhase = ''
+    mkdir html
+    ${haskellPackages.Agda}/bin/agda --html ${contract}.agda \
+       --html-dir=html -i ${stdlib}/share/agda
     mkdir -p "$out"/{bin,sic}
     cp ${contract} "$out/bin"
-    # cp -r html "$out/sic/${contract}"
+    cp -r html "$out/sic/${contract}"
   '';
 }

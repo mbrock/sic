@@ -747,13 +747,18 @@ module EVM-Math where
   IMUL = snippet (impl 0 0 []) ⟫ ISZERO ⟫ REVERTIF
     where
       -- We check for multiplication overflow by verifying the division.
-      no-overflow? = λ x y → ((x × y) ÷ y) == x ∨ y
+      no-overflow? = λ x y → ¬ y ∨ ((x × y) ÷ y) == x
 
-      impl : ∀ x y ◎ → 0 ¤ (x , y , ◎) ⤇ 28 ¤ (no-overflow? x y , (x × y) , ◎)
-      impl = λ x y ◎ → begin
-          0 ¤ (x , y , ◎)                 ∼⟨ dup₂ & dup₂ & mul & swap₂ & swap₁ ⟩
-         13 ¤ (x , y , x × y , ◎)         ∼⟨ dup₂ & dup₄ & sdiv & eq & or ⟩
-         28 ¤ (no-overflow? x y , x × y , ◎) ∎
+      impl : ∀ x y ◎ →
+            0 ¤ (x , y , ◎)
+        ⤇ 33 ¤ (no-overflow? x y , (x × y) , ◎)
+      impl =
+        λ x y ◎ → begin
+          0 ¤ (x , y , ◎)
+            ∼⟨ dup₂ & dup₂ & mul & swap₂ & swap₁ ⟩
+         13 ¤ (x , y , x × y , ◎)
+            ∼⟨ dup₂ & dup₄ & sdiv & eq & swap₁ & iszero & or ⟩
+         33 ¤ (no-overflow? x y , x × y , ◎) ∎
 
   ISUB = SWAP 1 ⟫ PUSH 0 ⟫ SUB ⟫ IADD
 

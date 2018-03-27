@@ -32,6 +32,9 @@ import qualified Data.ByteString as BS
 import qualified Data.Text as Text
 import qualified Data.Vector as Vector
 
+-- Top-level unsafe I/O to read bytecode from stdin.
+-- Forgive me; it's nice to have it globally available
+-- for all the Hedgehog properties.
 (runtime, vm1) =
   case (unsafePerformIO $
           runState exec . vmForEthrunCreation <$>
@@ -66,15 +69,12 @@ minint = - (2 ^ 255)
 
 smallRange = Range.linear (-100) 100
 maxRange = Range.linear 0 maxint
-anyInt = forAll (Gen.integral maxRange)
-
-type Ray = Decimal E27
+anyInt = Gen.integral maxRange
 
 ray x = x :: Ray
 rayRange x = (Range.linear (unfixed (ray x)) (- (unfixed (ray x))))
 
-anyRay :: PropertyT IO (Ray)
-anyRay = forAll $
+anyRay =
   fixed <$>
     (Gen.choice $
       Gen.integral maxRange :
@@ -87,8 +87,8 @@ integer x = fromIntegral x
 prop_iadd :: Property
 prop_iadd =
   withTests 100 . property $ do
-    x <- anyInt
-    y <- anyInt
+    x <- forAll anyInt
+    y <- forAll anyInt
     case run "iadd(int256,int256)" (AbiIntType 256) [AbiInt 256 x, AbiInt 256 y] of
       Right (AbiInt 256 z) -> do
         z === x + y
@@ -106,9 +106,9 @@ fixed x = fromRational (fromIntegral (fromIntegral x :: Int256) % 10^27)
 prop_imul :: Property
 prop_imul =
   withTests 100 . property $ do
-    x <- anyInt
+    x <- forAll anyInt
     annotate (show x)
-    y <- anyInt
+    y <- forAll anyInt
     annotate (show y)
     case run "imul(int256,int256)" (AbiIntType 256) [AbiInt 256 x, AbiInt 256 y] of
       Right (AbiInt 256 z) -> do
@@ -122,9 +122,9 @@ prop_imul =
 prop_rmul :: Property
 prop_rmul =
   withShrinks 10 . withTests 100 . property $ do
-    x <- unfixed <$> anyRay
+    x <- unfixed <$> forAll anyRay
     annotate (show (fixed x))
-    y <- unfixed <$> anyRay
+    y <- unfixed <$> forAll anyRay
     annotate (show (fixed y))
     case run "rmul(int256,int256)" (AbiIntType 256) [AbiInt 256 x, AbiInt 256 y] of
       Right (AbiInt 256 z) -> do
@@ -141,9 +141,9 @@ prop_rmul =
 
 prop_rpow :: Property
 prop_rpow =
-  withTests 500 . withShrinks 10 . property $ do
-    x <- anyRay
-    n <- anyInt
+  withTests 250 . withShrinks 1 . property $ do
+    x <- forAll anyRay
+    n <- forAll (Gen.filter (> 0) anyInt)
     case run "rpow(int256,int256)" (AbiIntType 256) [AbiInt 256 (unfixed x), AbiInt 256 n] of
       Right (AbiInt 256 z) -> do
         if n == 0
@@ -164,16 +164,19 @@ prop_rpow =
 
 main :: IO ()
 main = do
-  good <- checkParallel $$(discover)
+  good <- checkSequential $$(discover)
   unless good exitFailure
 
-
-
-
-
+-- Fixed point number support
 
 newtype Decimal e = D (Fixed e)
   deriving (Ord, Eq, Real, RealFrac)
+
+data E27
+instance HasResolution E27 where
+  resolution _ = 10^(27 :: Integer)
+
+type Ray = Decimal E27
 
 instance HasResolution e => Read (Decimal e) where
   readsPrec n s = fmap (\(x, y) -> (D x, y)) (readsPrec n s)
@@ -182,6 +185,8 @@ instance HasResolution e => Show (Decimal e) where
 
 instance HasResolution e => Num (Decimal e) where
   x@(D (MkFixed a)) * D (MkFixed b) =
+    -- Using quot here instead of div is necessary for compatibility
+    -- with the EVM's SDIV opcode, which negatives towards zero.
     D (MkFixed (quot (a * b + div (resolution x) 2)
                      (resolution x)))
 
@@ -198,11 +203,4 @@ instance HasResolution e => Fractional (Decimal e) where
 
   recip (D a)     = D (recip a)
   fromRational r  = D (fromRational r)
-
-data E27
-
-instance HasResolution E27 where
-  resolution _ = 10^(27 :: Integer)
-
-epsilon = 1 / 10^27
 
