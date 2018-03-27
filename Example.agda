@@ -73,16 +73,18 @@ counter-main =
 -----
 
 data MathAct : Set where
-  add! sub! mul! pow! : MathAct
+  iadd! isub! imul! rmul! rpow! : MathAct
 
 main =
   link
-    anybody can add! :: fyi₁ (x₁ + x₂) //
-    anybody can sub! :: fyi₁ (x₁ − x₂) //
-    anybody can mul! :: fyi₁ (x₁ ∙ x₂) //
-    anybody can pow! :: fyi₁ (x₁ ^ x₂)
+    anybody can iadd! :: fyi₁ (x₁ + x₂) //
+    anybody can isub! :: fyi₁ (x₁ − x₂) //
+    anybody can imul! :: fyi₁ (x₁ × x₂) //
+    anybody can rmul! :: fyi₁ (x₁ ∙ x₂) //
+    anybody can rpow! :: fyi₁ (x₁ ^ x₂)
   with-guys (λ z → z)
-  with-acts λ { add! → "add(int128,int128)"
-              ; sub! → "sub(int128,int128)"
-              ; mul! → "mul(int128,int128)"
-              ; pow! → "pow(int128,int128)" }
+  with-acts λ { iadd! → "iadd(int256,int256)"
+              ; isub! → "isub(int256,int256)"
+              ; imul! → "imul(int256,int256)"
+              ; rmul! → "rmul(int256,int256)"
+              ; rpow! → "rpow(int256,int256)" }

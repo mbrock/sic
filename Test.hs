@@ -1,5 +1,7 @@
 {-# Language TemplateHaskell #-}
 {-# Language OverloadedStrings #-}
+{-# Language GeneralizedNewtypeDeriving #-}
+{-# Language ScopedTypeVariables #-}
 
 import Hedgehog
 import qualified Hedgehog.Gen as Gen
@@ -14,22 +16,21 @@ import EVM.Exec
 import EVM.Types
 import EVM.UnitTest
 
-import Data.Binary.Get (runGetOrFail)
-
-import Control.Monad (unless, when)
-import Control.Monad.State.Strict (execState, runState)
-import System.Exit (exitFailure)
-
-import Data.ByteString (ByteString)
-import Data.ByteString.Lazy (fromStrict)
-import qualified Data.ByteString as BS
-
-import Data.Text (Text)
-import qualified Data.Text as Text
-
-import qualified Data.Vector as Vector
+import Data.DoubleWord
 
 import Control.Lens
+import Control.Monad (unless, when)
+import Control.Monad.State.Strict (execState, runState)
+import Data.Binary.Get (runGetOrFail)
+import Data.ByteString (ByteString)
+import Data.ByteString.Lazy (fromStrict)
+import Data.Fixed
+import Data.Ratio
+import Data.Text (Text)
+import System.Exit (exitFailure)
+import qualified Data.ByteString as BS
+import qualified Data.Text as Text
+import qualified Data.Vector as Vector
 
 (runtime, vm1) =
   case (unsafePerformIO $
@@ -57,28 +58,135 @@ run sig tret args = do
     (VMFailure problem, _) ->
       Left problem
 
+maxint :: Integral a => a
 maxint = 2 ^ 255 - 1
+
+minint :: Integral a => a
+minint = - (2 ^ 255)
+
+smallRange = Range.linear (-100) 100
+maxRange = Range.linear 0 maxint
+-- anyInt = forAll (Gen.integral maxRange)
+anyInt = forAll (Gen.integral maxRange)
 
 integer :: Integral a => a -> Integer
 integer x = fromIntegral x
 
-prop_add :: Property
-prop_add =
-  withTests 200 . property $ do
-    x <- forAll $ Gen.integral (Range.linear (-maxint) maxint)
-    y <- forAll $ Gen.integral (Range.linear (-maxint) maxint)
-    case run "add(int128,int128)" (AbiIntType 256) [AbiInt 256 x, AbiInt 256 y] of
+prop_iadd :: Property
+prop_iadd =
+  withTests 100 . property $ do
+    x <- anyInt
+    y <- anyInt
+    case run "iadd(int256,int256)" (AbiIntType 256) [AbiInt 256 x, AbiInt 256 y] of
       Right (AbiInt 256 z) -> do
         z === x + y
-      Left Revert ->
-        if (x > 0 && y > 0)
-          then assert (x + y < x)     -- Overflow
-          else
-            if (x < 0 && y < 0)
-              then assert (x + y > x) -- Underflow
-              else failure
+      Left Revert -> do
+        let z = integer x + integer y
+        annotate (show z)
+        assert (z > maxint || z <= minint)
+
+unfixed :: Integral a => Decimal b -> a
+unfixed (D (MkFixed i)) = fromIntegral i
+
+fixed :: Integral a => a -> Decimal E27
+fixed x = fromRational (fromIntegral (fromIntegral x :: Int256) % 10^27)
+
+prop_imul :: Property
+prop_imul =
+  withTests 100 . property $ do
+    x <- anyInt
+    annotate (show x)
+    y <- anyInt
+    annotate (show y)
+    case run "imul(int256,int256)" (AbiIntType 256) [AbiInt 256 x, AbiInt 256 y] of
+      Right (AbiInt 256 z) -> do
+        z === x * y
+      Left Revert -> do
+        assert (x * y `div` y /= x)
+      Left e -> do
+        annotate (show e)
+        failure
+        
+prop_rmul :: Property
+prop_rmul =
+  withShrinks 10 . withTests 100 . property $ do
+    x <- anyInt
+    annotate (show (fixed x))
+    y <- anyInt
+    annotate (show (fixed y))
+    case run "rmul(int256,int256)" (AbiIntType 256) [AbiInt 256 x, AbiInt 256 y] of
+      Right (AbiInt 256 z) -> do
+        annotate (show (fixed z))
+        annotate (show (abs (fixed z - fixed x * fixed y)))
+        fixed z === fixed x * fixed y
+      Left Revert -> do
+        if signum x * signum y > 0
+          then assert (integer x * integer y + (10^27 `div` 2) > maxint)
+          else assert (integer x * integer y + (10^27 `div` 2) < minint)
+      Left e -> do
+        annotate (show e)
+        failure 
+
+prop_rpow :: Property
+prop_rpow =
+  withTests 1000 . withShrinks 10 . property $ do
+    x <- anyInt
+    n <- anyInt
+    case run "rpow(int256,int256)" (AbiIntType 256) [AbiInt 256 x, AbiInt 256 n] of
+      Right (AbiInt 256 z) -> do
+        if n == 0
+          then do
+            assert (not (x == 0))
+            fixed z === 1.0
+          else fixed z === fixed x ^ fromIntegral n
+      Left Revert -> do
+        assert $
+          (fixed x > fixed maxint / 10^27) || (x == 0 && n == 0)
+      Left e -> do
+        annotate (show e)
+        failure 
 
 main :: IO ()
 main = do
   good <- checkParallel $$(discover)
   unless good exitFailure
+
+
+
+
+
+
+newtype Decimal e = D (Fixed e)
+  deriving (Ord, Eq, Real, RealFrac)
+
+instance HasResolution e => Read (Decimal e) where
+  readsPrec n s = fmap (\(x, y) -> (D x, y)) (readsPrec n s)
+instance HasResolution e => Show (Decimal e) where
+  show (D x)  = show x
+
+instance HasResolution e => Num (Decimal e) where
+  x@(D (MkFixed a)) * D (MkFixed b) =
+    D (MkFixed (div  (a * b + div (resolution x) 2)
+                     (resolution x)))
+
+  D a + D b      = D (a + b)
+  D a - D b      = D (a - b)
+  negate  (D a)  = D (negate a)
+  abs     (D a)  = D (abs a)
+  signum  (D a)  = D (signum a)
+  fromInteger i  = D (fromInteger i)
+
+instance HasResolution e => Fractional (Decimal e) where
+  x@(D (MkFixed a)) / D (MkFixed b) =
+    D (MkFixed (div (a * resolution x + div b 2) b))
+
+  recip (D a)     = D (recip a)
+  fromRational r  = D (fromRational r)
+
+data E27
+
+instance HasResolution E27 where
+  resolution _ = 10^(27 :: Integer)
+
+epsilon = 1 / 10^27
+

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
 set -ex
 code=$(hevm exec --code "$1" --gas 1000000000000)
-evm --debug --code "$code" --gas 1000000000000 run
+# evm --debug --code "$code" --gas 1000000000000 --input "$2" run
+hevm exec --debug --code "$code" --gas 1000000000000 --calldata "$2"

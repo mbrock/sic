@@ -28,6 +28,7 @@
 (declare-const x Word)
 (declare-const y Word)
 
-(assert (not (= (add-overflow-basic x y) (add-overflow-clever x y))))
+(assert (not (= (add-overflow-basic x y)
+                (add-overflow-clever x y))))
 
 (check-sat)

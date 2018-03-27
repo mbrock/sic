@@ -149,9 +149,11 @@ module Sⁿ where
 
     -- S⁰, the set of Sic expressions
     data S⁰ : Type → Set where
-      -_ ¬_               : Op₁ (S⁰ Word)   -- 1-ary negation
-      _+_ _−_ _∙_ _^_     : Op₂ (S⁰ Word)   -- 2-ary math
-      _∨_ _∧_ _≥_ _≤_ _≡_ : Op₂ (S⁰ Word)   -- 2-ary logic
+      -_ ¬_               : Op₁ (S⁰ Word)
+      _%+_ _%−_ _%×_      : Op₂ (S⁰ Word)
+      _+_ _−_ _×_ _∙_ _^_ : Op₂ (S⁰ Word)
+      _<_ _>_ _≥_ _≤_ _≡_ : Op₂ (S⁰ Word)
+      _∨_ _∧_             : Op₂ (S⁰ Word)
 
       u     : S⁰ Word            -- The invoking user's ID
       t     : S⁰ Word            -- The current time
@@ -288,7 +290,7 @@ module Sⁿ where
   infixl 33 ¬_
 
   infixl 35 _≡_
-  infixl 36 _≥_
+  infixl 36 _≥_ _≤_ _<_ _>_
 
   infixl 40 _+_ _−_
   infixl 41 _∙_
@@ -358,11 +360,17 @@ module Oⁿ where
     H²ₒ     : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
     +ₒ      : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
     −ₒ      : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
+    ×ₒ      : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
+    %+ₒ     : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
+    %−ₒ     : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
+    %×ₒ     : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
     ∙ₒ      : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
     ^ₒ      : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
     ≡ₒ      : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
     ≥ₒ      : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
     ≤ₒ      : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
+    >ₒ      : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
+    <ₒ      : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
     ¬ₒ      : ∀ {i}     → O⁰      (suc i)  (suc i)
     ∧ₒ      : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
     ∨ₒ      : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
@@ -449,12 +457,18 @@ module Sⁿ→Oⁿ where
     ⟦ t ⟧⁰         = timeₒ
     ⟦ x + y ⟧⁰     = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ +ₒ
     ⟦ x − y ⟧⁰     = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ −ₒ
+    ⟦ x × y ⟧⁰     = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ ×ₒ
+    ⟦ x %+ y ⟧⁰    = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ %+ₒ
+    ⟦ x %− y ⟧⁰    = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ %−ₒ
+    ⟦ x %× y ⟧⁰    = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ %×ₒ
     ⟦ x ∙ y ⟧⁰     = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ ∙ₒ
     ⟦ x ^ y ⟧⁰     = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ ^ₒ
     ⟦ x ∨ y ⟧⁰     = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ ∨ₒ
     ⟦ x ∧ y ⟧⁰     = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ ∧ₒ
     ⟦ x ≥ y ⟧⁰     = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ ≥ₒ
     ⟦ x ≤ y ⟧⁰     = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ ≤ₒ
+    ⟦ x > y ⟧⁰     = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ >ₒ
+    ⟦ x < y ⟧⁰     = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ <ₒ
     ⟦ x ≡ y ⟧⁰     = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ ≡ₒ
     ⟦ ¬ x ⟧⁰       = ⟦ x ⟧⁰ ┆ ¬ₒ
     ⟦ - x ⟧⁰       = #ₒ 0  ┆ ⟦ x ⟧⁰ ┆ −ₒ
@@ -510,12 +524,16 @@ module StackReasoning (A : Set) where
   postulate
     -- The meaning of these operators don't matter for our reasoning,
     -- so we have them as postulates.
-    _+_ _×_ _÷_ _%_ _<_ _==_ _⊕_ _∨_ _∧_ : A → A → A
+    _+_ _×_ _÷_ _%_ _<_ _>_ _==_ _⊕_ _∨_ _∧_ : A → A → A
     ¬ neg? : A → A
     two : A
 
   infixr 1 _⤇_
   infixr 2 _⟫_
+
+  infix  21 _<_
+  infixl 20 _∧_
+  infixl 19 _∨_
 
   open import Data.List
     using (List; [])
@@ -570,6 +588,7 @@ module StackReasoning (A : Set) where
 
     add   : ∀ {a b s g} → g ¤ (a , b , s) ⤇ verylow+ g ¤ ((a + b) , s)
     slt   : ∀ {a b s g} → g ¤ (a , b , s) ⤇ verylow+ g ¤ ((a < b) , s)
+    sgt   : ∀ {a b s g} → g ¤ (a , b , s) ⤇ verylow+ g ¤ ((a > b) , s)
     eq    : ∀ {a b s g} → g ¤ (a , b , s) ⤇ verylow+ g ¤ ((a == b) , s)
     or    : ∀ {a b s g} → g ¤ (a , b , s) ⤇ verylow+ g ¤ ((a ∨ b) , s)
     and   : ∀ {a b s g} → g ¤ (a , b , s) ⤇ verylow+ g ¤ ((a ∧ b) , s)
@@ -580,10 +599,13 @@ module StackReasoning (A : Set) where
     isneg  : ∀ {a s g} → g ¤ (a , s) ⤇ verylow+ (verylow+ g) ¤ (neg? a , s)
     iszero : ∀ {a s g} → g ¤ (a , s) ⤇ verylow+ g ¤ (¬ a , s)
 
-    dup₁  : ∀ {g a s}                   → g ¤ (a , s) ⤇ base+ g ¤ (a , a , s)
-    dup₂  : ∀ {g a b s}             → g ¤ (a , b , s) ⤇ base+ g ¤ (b , a , b , s)
-    dup₃  : ∀ {g a b c s}       → g ¤ (a , b , c , s) ⤇ base+ g ¤ (c , a , b , c , s)
+    dup₁  : ∀ {g a s} → g ¤ (a , s) ⤇ base+ g ¤ (a , a , s)
+    dup₂  : ∀ {g a b s} → g ¤ (a , b , s) ⤇ base+ g ¤ (b , a , b , s)
+    dup₃  : ∀ {g a b c s} → g ¤ (a , b , c , s) ⤇ base+ g ¤ (c , a , b , c , s)
     dup₄  : ∀ {g a b c d s} → g ¤ (a , b , c , d , s) ⤇ base+ g ¤ (d , a , b , c , d , s)
+    dup₅  : ∀ {g a b c d e s} → g ¤ (a , b , c , d , e , s) ⤇ base+ g ¤ (e , a , b , c , d , e , s)
+    dup₆  : ∀ {g a b c d e f s} → g ¤ (a , b , c , d , e , f , s) ⤇ base+ g ¤ (f , a , b , c , d , e , f , s)
+    dup₇  : ∀ {g a b c d e f h s} → g ¤ (a , b , c , d , e , f , h , s) ⤇ base+ g ¤ (h , a , b , c , d , e , f , h , s)
 
   -- Now we define the necessary algebraic structure
   -- for importing the preorder reasoning module.
@@ -615,7 +637,7 @@ module StackReasoning (A : Set) where
 --
 -- We now introduce a data type denoting EVM assembly.
 --
--- Our EVM assembly type has the control flow structures LOOP and THEN
+-- Our EVM assembly type has the control flow structures LOOP and ELSE
 -- which are taken care of later by the bytecode assembler.
 --
 
@@ -624,6 +646,19 @@ module EVM where
   open Naturals
   open Strings
   open Vectors
+
+  wordsize : ℕ
+  wordsize = 32
+
+  -- We use some reserved variables.
+  %hash¹ = 0 * wordsize
+  %hash² = 1 * wordsize
+  %rpowˣ = 2 * wordsize
+  %rpowⁿ = 3 * wordsize
+  %rpowᶻ = 4 * wordsize
+
+  -- Let mₒ be the first memory address for non-reserved variables.
+  m₀ = %rpowᶻ +ℕ wordsize
 
   Addrᴱ = Vec Char 40
 
@@ -638,7 +673,7 @@ module EVM where
 
     PUSHSIG      : String → Oᴱ
     PUSHADDR     : Addrᴱ → Oᴱ
-    THEN         : Oᴱ → Oᴱ
+    ELSE         : Oᴱ → Oᴱ
     LOOP         : Oᴱ → Oᴱ → Oᴱ
     _⟫_          : Oᴱ → Oᴱ → Oᴱ
     tag          : O¹ → Oᴱ → Oᴱ
@@ -658,6 +693,7 @@ module EVM where
     ⟦ add ⟧     = ADD
     ⟦ xor ⟧     = XOR
     ⟦ slt ⟧     = SLT
+    ⟦ sgt ⟧     = SGT
     ⟦ mul ⟧     = MUL
     ⟦ sdiv ⟧    = SDIV
     ⟦ eq ⟧      = EQ
@@ -672,6 +708,9 @@ module EVM where
     ⟦ dup₂ ⟧    = DUP 2
     ⟦ dup₃ ⟧    = DUP 3
     ⟦ dup₄ ⟧    = DUP 4
+    ⟦ dup₅ ⟧    = DUP 5
+    ⟦ dup₆ ⟧    = DUP 6
+    ⟦ dup₇ ⟧    = DUP 7
 
   snippet : ∀ {a b} → a ⤇ b → Oᴱ
   snippet = ⟦_⟧
@@ -687,9 +726,18 @@ module EVM where
 
 module EVM-Math where
   open EVM
+
+  module _ where
+    open Sⁿ
+    iadd-bad? : S⁰ Word → S⁰ Word → S⁰ Word
+    iadd-bad? x y =
+        (x < 0 ∧ (y < 0 ∧ ((x %+ y) > x)))
+      ∨ (x > 0 ∧ (y > 0 ∧ ((x %+ y) < x)))
+
   open Naturals
 
   open StackReasoning ℕ renaming (_⟫_ to _&_)
+
 
   IADD = snippet (impl 0 0 []) ⟫ REVERTIF
     where
@@ -697,7 +745,25 @@ module EVM-Math where
       -- Z3 can prove it equivalent to a naïve formula; see “math.z3”.
       bad? = λ x y → neg? (((x + y) ⊕ x) ∧ ((x + y) ⊕ y))
 
+      -- bad?′ = λ x y →
+      --     ((neg? x) ∧ (neg? y) ∧ ((x + y) > x))
+      --   ∨ (¬ (neg? x) ∧ ¬ (neg? y) ∧ (x + y) < x)
+
       gas-cost = 30 -- TODO: Optimize for eternal glory!
+
+      -- impl′ : ∀ x y ∅ → 0 ¤ (x , y , ∅) ⤇ _ ¤ (bad?′ x y , x + y , ∅)
+      -- impl′ x y ∅ = begin
+      --     0 ¤ (x , y , ∅)
+      --         ∼⟨ dup₁ & dup₃ & dup₃ & add & sgt ⟩
+      --    12 ¤ ((x + y) > x , x , y , ∅)
+      --         ∼⟨ dup₂ & isneg & dup₂ & isneg & and & and ⟩
+      --    34 ¤ ((neg? x) ∧ (neg? y) ∧ ((x + y) > x) , x , y , ∅)
+      --         ∼⟨ dup₃ & isneg & iszero & dup₃ & isneg & iszero ⟩
+      --    -- 59 ¤ (¬ (neg? x) ∧ ¬ (neg? y) , ((x + y) > x) ∧ ((neg? x) ∧ (neg? y)) , x , y , ∅)
+      --    --      ∼⟨ dup₃ & dup₅ & dup₅ & add & sgt & and & or ⟩
+      --    {!!} ¤ {!!} ∼⟨ {!!} ⟩
+      --    {!!} ¤ (((neg? x) ∧ neg? y ∧ ((x + y) > x))
+      --            ∨ (¬ (neg? x) ∧ ¬ (neg? y) ∧ (x + y) < x) , x + y , ∅) ∎
 
       impl : ∀ x y ◎ → 0 ¤ (x , y , ◎) ⤇ gas-cost ¤ (bad? x y , x + y , ◎)
       impl x y ◎ = begin
@@ -716,25 +782,41 @@ module EVM-Math where
   IMUL = snippet (×-impl 0 0 []) ⟫ REVERTIF
     where
       -- We check for multiplication overflow by verifying the division.
-      ×-bad? = λ x y → (¬ (((x × y) ÷ y) == x)) ∧ y
+      ×-bad? = λ x y → ¬ (¬ y) ∧ (¬ (((x × y) ÷ y) == x))
 
-      ×-impl : ∀ x y ◎ → 0 ¤ (x , y , ◎) ⤇ 38 ¤ (×-bad? x y , (x × y) , ◎)
+      ×-impl : ∀ x y ◎ → 0 ¤ (x , y , ◎) ⤇ 46 ¤ (×-bad? x y , (x × y) , ◎)
       ×-impl = λ x y ◎ → begin
-          0 ¤ (x , y , ◎)                              ∼⟨ dup₂ & dup₂ & mul ⟩
-          9 ¤ ((x × y) , x , y , ◎)                    ∼⟨ swap₂ & swap₁ ⟩
-         13 ¤ (x , y , x × y , ◎)                      ∼⟨ dup₂ & dup₁ & dup₃ ⟩
-         19 ¤ (x , y , y , x , y , x × y , ◎)          ∼⟨ mul ⟩
-         24 ¤ (x × y , y , x , y , x × y , ◎)          ∼⟨ sdiv ⟩
-         29 ¤ ((x × y) ÷ y , x , y , x × y , ◎)        ∼⟨ eq ⟩
-         32 ¤ (((x × y) ÷ y) == x , y , x × y , ◎)     ∼⟨ iszero ⟩
-         35 ¤ (¬ (((x × y) ÷ y) == x) , y , x × y , ◎) ∼⟨ and ⟩
-         38 ¤ (×-bad? x y , x × y , ◎) ∎
+          0 ¤ (x , y , ◎)                          ∼⟨ dup₂ & dup₂ & mul ⟩
+          9 ¤ ((x × y) , x , y , ◎)                ∼⟨ swap₂ & swap₁ ⟩
+         13 ¤ (x , y , x × y , ◎)                  ∼⟨ dup₂ & dup₁ & dup₃ ⟩
+         19 ¤ (x , y , y , x , y , x × y , ◎)      ∼⟨ mul ⟩
+         24 ¤ (x × y , y , x , y , x × y , ◎)      ∼⟨ sdiv ⟩
+         29 ¤ ((x × y) ÷ y , x , y , x × y , ◎)    ∼⟨ eq ⟩
+         32 ¤ (((x × y) ÷ y) == x , y , x × y , ◎) ∼⟨ iszero & swap₁ & iszero & iszero & and ⟩
+         46 ¤ (×-bad? x y , x × y , ◎) ∎
 
   RONE = PUSH 27 ⟫ PUSH 10 ⟫ EXP
   RHALF = PUSH 2 ⟫ RONE ⟫ SDIV
   RTRUNC = RONE ⟫ SWAP 1 ⟫ SDIV
 
   RMUL = IMUL ⟫ RHALF ⟫ IADD ⟫ RTRUNC
+
+  EVEN = PUSH 1 ⟫ AND ⟫ ISZERO
+  HALF = PUSH 2 ⟫ SWAP 1 ⟫ SDIV
+  GETX = PUSH %rpowˣ ⟫ MLOAD
+  SETX = PUSH %rpowˣ ⟫ MSTORE
+  GETN = PUSH %rpowⁿ ⟫ MLOAD
+  SETN = PUSH %rpowⁿ ⟫ MSTORE
+  GETZ = PUSH %rpowᶻ ⟫ MLOAD
+  SETZ = PUSH %rpowᶻ ⟫ MSTORE
+
+  RPOW =
+    SETX ⟫ SETN ⟫ RONE ⟫ SETZ ⟫
+    GETX ⟫ ISZERO ⟫ GETN ⟫ ISZERO ⟫ AND ⟫ REVERTIF ⟫
+    LOOP GETN (
+      GETN ⟫ EVEN ⟫ ELSE (GETX ⟫ GETZ ⟫ RMUL ⟫ SETZ) ⟫
+      GETX ⟫ GETX ⟫ RMUL ⟫ SETX ⟫ GETN ⟫ HALF ⟫ SETN
+    ) ⟫ GETZ
 
     -- rpow(x, n) => z
     --   z = 1
@@ -744,14 +826,31 @@ module EVM-Math where
     --     x = rmul(x, x)
     --     n = n / 2
 
-  RPOW =
-    SWAP 1 ⟫ PUSH 1 ⟫ SWAP 1 ⟫
+  RPOW′ =
+    SWAP 1 ⟫ -- 2
+    RONE ⟫ -- 3
+    SWAP 1 ⟫ -- 3
     LOOP (DUP 1)
-      (PUSH 1 ⟫ SWAP 1 ⟫ AND ⟫
-       THEN (DUP 3 ⟫ SWAP 2 ⟫ RMUL ⟫ SWAP 1) ⟫
-       SWAP 2 ⟫ DUP 1 ⟫ RMUL ⟫ PUSH 2 ⟫ SWAP 1 ⟫ DIV ⟫
-       SWAP 1 ⟫ SWAP 2 ⟫ SWAP 1) ⟫
-    SWAP 2 ⟫ POP ⟫ POP
+      (PUSH 1 ⟫
+       DUP 2 ⟫
+       AND ⟫
+       ISZERO ⟫ ELSE (
+         DUP 3 ⟫
+         SWAP 1 ⟫
+         SWAP 2 ⟫
+         RMUL ⟫
+         SWAP 1) ⟫
+       SWAP 1 ⟫
+       SWAP 2 ⟫
+       DUP 1 ⟫
+       RMUL ⟫
+       PUSH 2 ⟫
+       SWAP 1 ⟫
+       DIV ⟫
+       SWAP 1 ⟫
+       SWAP 2 ⟫
+       SWAP 1) ⟫
+     POP ⟫ SWAP 1 ⟫ POP
 
 {-
 x n
@@ -764,9 +863,11 @@ LOOP
   n&1 n z x
   THEN
     x n z x
+    n x z x
     z x n x
     z*x n x
     n z′ x
+  z′ n x
   x n z′
   x x n z′
   x*x n z′
@@ -796,16 +897,6 @@ module Sic→EVM where
   open Vectors
   open Strings
 
-  wordsize : ℕ
-  wordsize = 32
-
-  -- We use two reserved variables, for hashing.
-  %hash¹ = 0 * wordsize
-  %hash² = 1 * wordsize
-
-  -- Let mₒ be the first memory address for non-reserved variables.
-  m₀ = %hash² +ℕ wordsize
-
   ⟦_⟧⁰ᵉ : ∀ {i j} → O⁰ i j → Oᴱ
   ⟦ #ₒ n    ⟧⁰ᵉ  = PUSH n
   ⟦ timeₒ   ⟧⁰ᵉ  = TIMESTAMP
@@ -817,11 +908,17 @@ module Sic→EVM where
   ⟦ getₖₒ   ⟧⁰ᵉ  = SLOAD
   ⟦ +ₒ      ⟧⁰ᵉ  = IADD
   ⟦ −ₒ      ⟧⁰ᵉ  = ISUB
+  ⟦ ×ₒ      ⟧⁰ᵉ  = IMUL
+  ⟦ %+ₒ     ⟧⁰ᵉ  = ADD
+  ⟦ %−ₒ     ⟧⁰ᵉ  = SUB
+  ⟦ %×ₒ     ⟧⁰ᵉ  = MUL
   ⟦ ∙ₒ      ⟧⁰ᵉ  = RMUL
   ⟦ ^ₒ      ⟧⁰ᵉ  = RPOW
   ⟦ ≡ₒ      ⟧⁰ᵉ  = EQ
-  ⟦ ≥ₒ      ⟧⁰ᵉ  = SGT ⟫ ISZERO
-  ⟦ ≤ₒ      ⟧⁰ᵉ  = SLT ⟫ ISZERO
+  ⟦ ≥ₒ      ⟧⁰ᵉ  = SLT ⟫ ISZERO
+  ⟦ ≤ₒ      ⟧⁰ᵉ  = SGT ⟫ ISZERO
+  ⟦ >ₒ      ⟧⁰ᵉ  = SGT
+  ⟦ <ₒ      ⟧⁰ᵉ  = SLT
   ⟦ ¬ₒ      ⟧⁰ᵉ  = ISZERO
   ⟦ ∧ₒ      ⟧⁰ᵉ  = AND
   ⟦ ∨ₒ      ⟧⁰ᵉ  = OR
@@ -911,13 +1008,13 @@ module Sic→EVM where
   ⟦_⟧²ᵉ : O² Addrᴱ String → Oᴱ
   ⟦ seqₒ a b   ⟧²ᵉ = ⟦ a ⟧²ᵉ ⟫ ⟦ b ⟧²ᵉ
   ⟦ actₒ guy s n k ⟧²ᵉ =
-    guy-check guy ⟫ sig-check s n ⟫ AND ⟫ ISZERO ⟫
+    guy-check guy ⟫ sig-check s n ⟫ AND ⟫
       let m₁ = O¹-var-memory k
           m₂ = m₁ +ℕ (O¹-fyi-memory k)
       in
-        THEN (⟦ k with-var m₁ with-fyi m₂ ⟧¹ᵉ ⟫ return m₁ n)
+        ISZERO ⟫ ELSE (⟦ k with-var m₁ with-fyi m₂ ⟧¹ᵉ ⟫ return m₁ n)
   ⟦ caseₒ p a b ⟧²ᵉ =
-    ⟦ p ⟧⁰ᵉ ⟫ THEN ⟦ a ⟧²ᵉ ⟫ ⟦ b ⟧²ᵉ
+    ⟦ p ⟧⁰ᵉ ⟫ ELSE ⟦ b ⟧²ᵉ ⟫ ⟦ a ⟧²ᵉ
 
   open Sⁿ    using (S²)
   open Sⁿ→Oⁿ using (⟦_⟧²)
@@ -1044,7 +1141,7 @@ module EVM-Assembly where
   code′ JUMPDEST = , op B1 0x5b
   code′ (JUMP x)  = , op B1 0x61 ⦂ op B2 (+ x) ⦂ op B1 0x56
   code′ (JUMPI x) = , op B1 0x61 ⦂ op B2 (+ x) ⦂ op B1 0x57
-  code′ (THEN x) with code′ x
+  code′ (ELSE x) with code′ x
   ... | i , bs = , op B1 0x61 ⦂ Δ (+ (i +ℕ skip)) ⦂ op B1 0x57 ⦂ bs ⦂ op B1 0x5b
     where skip = 3
   code′ (LOOP p k) with code′ p
