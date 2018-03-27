@@ -726,80 +726,52 @@ module EVM where
 
 module EVM-Math where
   open EVM
-
-  module _ where
-    open Sⁿ
-    iadd-bad? : S⁰ Word → S⁰ Word → S⁰ Word
-    iadd-bad? x y =
-        (x < 0 ∧ (y < 0 ∧ ((x %+ y) > x)))
-      ∨ (x > 0 ∧ (y > 0 ∧ ((x %+ y) < x)))
-
   open Naturals
-
   open StackReasoning ℕ renaming (_⟫_ to _&_)
-
 
   IADD = snippet (impl 0 0 []) ⟫ REVERTIF
     where
       -- This overflow check formula comes from Hacker’s Delight, section 2.13.
       -- Z3 can prove it equivalent to a naïve formula; see “math.z3”.
-      bad? = λ x y → neg? (((x + y) ⊕ x) ∧ ((x + y) ⊕ y))
+      -- You can understand it by thinking about the sign bits...
+      overflow? = λ x y → neg? (((x + y) ⊕ x) ∧ ((x + y) ⊕ y))
 
-      -- bad?′ = λ x y →
-      --     ((neg? x) ∧ (neg? y) ∧ ((x + y) > x))
-      --   ∨ (¬ (neg? x) ∧ ¬ (neg? y) ∧ (x + y) < x)
-
-      gas-cost = 30 -- TODO: Optimize for eternal glory!
-
-      -- impl′ : ∀ x y ∅ → 0 ¤ (x , y , ∅) ⤇ _ ¤ (bad?′ x y , x + y , ∅)
-      -- impl′ x y ∅ = begin
-      --     0 ¤ (x , y , ∅)
-      --         ∼⟨ dup₁ & dup₃ & dup₃ & add & sgt ⟩
-      --    12 ¤ ((x + y) > x , x , y , ∅)
-      --         ∼⟨ dup₂ & isneg & dup₂ & isneg & and & and ⟩
-      --    34 ¤ ((neg? x) ∧ (neg? y) ∧ ((x + y) > x) , x , y , ∅)
-      --         ∼⟨ dup₃ & isneg & iszero & dup₃ & isneg & iszero ⟩
-      --    -- 59 ¤ (¬ (neg? x) ∧ ¬ (neg? y) , ((x + y) > x) ∧ ((neg? x) ∧ (neg? y)) , x , y , ∅)
-      --    --      ∼⟨ dup₃ & dup₅ & dup₅ & add & sgt & and & or ⟩
-      --    {!!} ¤ {!!} ∼⟨ {!!} ⟩
-      --    {!!} ¤ (((neg? x) ∧ neg? y ∧ ((x + y) > x))
-      --            ∨ (¬ (neg? x) ∧ ¬ (neg? y) ∧ (x + y) < x) , x + y , ∅) ∎
-
-      impl : ∀ x y ◎ → 0 ¤ (x , y , ◎) ⤇ gas-cost ¤ (bad? x y , x + y , ◎)
+      impl : ∀ x y ◎ → 0 ¤ (x , y , ◎) ⤇ 30 ¤ (overflow? x y , x + y , ◎)
       impl x y ◎ = begin
          0 ¤ (x , y , ◎)                                 ∼⟨ dup₂ & dup₂ & add ⟩
-         7 ¤ (x + y , x , y , ◎)                         ∼⟨ swap₂ ⟩
-         9 ¤ (y , x , x + y , ◎)                         ∼⟨ dup₃ ⟩
-        11 ¤ (x + y , y , x , x + y , ◎)                 ∼⟨ xor ⟩
-        14 ¤ ((x + y) ⊕ y , x , x + y , ◎)               ∼⟨ swap₁ & dup₃ ⟩
-        18 ¤ ((x + y) , x , (x + y) ⊕ y , x + y , ◎)     ∼⟨ xor ⟩
-        21 ¤ ((x + y) ⊕ x , (x + y) ⊕ y , x + y , ◎)     ∼⟨ and ⟩
-        24 ¤ (((x + y) ⊕ x) ∧ ((x + y) ⊕ y) , x + y , ◎) ∼⟨ isneg ⟩
-        30 ¤ (bad? x y , x + y , ◎) ∎
+         7 ¤ (x + y , x , y , ◎)                         ∼⟨ swap₂ & dup₃ & xor ⟩
+        14 ¤ ((x + y) ⊕ y , x , x + y , ◎)               ∼⟨ swap₁ & dup₃ & xor ⟩
+        21 ¤ ((x + y) ⊕ x , (x + y) ⊕ y , x + y , ◎)     ∼⟨ and & isneg ⟩
+        30 ¤ (overflow? x y , x + y , ◎) ∎
 
-  ISUB = SWAP 1 ⟫ PUSH 0 ⟫ SUB ⟫ IADD
-
-  IMUL = snippet (×-impl 0 0 []) ⟫ REVERTIF
+  IMUL = snippet (impl 0 0 []) ⟫ ISZERO ⟫ REVERTIF
     where
       -- We check for multiplication overflow by verifying the division.
-      ×-bad? = λ x y → ¬ (¬ y) ∧ (¬ (((x × y) ÷ y) == x))
+      no-overflow? = λ x y → ((x × y) ÷ y) == x ∨ y
 
-      ×-impl : ∀ x y ◎ → 0 ¤ (x , y , ◎) ⤇ 46 ¤ (×-bad? x y , (x × y) , ◎)
-      ×-impl = λ x y ◎ → begin
-          0 ¤ (x , y , ◎)                          ∼⟨ dup₂ & dup₂ & mul ⟩
-          9 ¤ ((x × y) , x , y , ◎)                ∼⟨ swap₂ & swap₁ ⟩
-         13 ¤ (x , y , x × y , ◎)                  ∼⟨ dup₂ & dup₁ & dup₃ ⟩
-         19 ¤ (x , y , y , x , y , x × y , ◎)      ∼⟨ mul ⟩
-         24 ¤ (x × y , y , x , y , x × y , ◎)      ∼⟨ sdiv ⟩
-         29 ¤ ((x × y) ÷ y , x , y , x × y , ◎)    ∼⟨ eq ⟩
-         32 ¤ (((x × y) ÷ y) == x , y , x × y , ◎) ∼⟨ iszero & swap₁ & iszero & iszero & and ⟩
-         46 ¤ (×-bad? x y , x × y , ◎) ∎
+      impl : ∀ x y ◎ → 0 ¤ (x , y , ◎) ⤇ 28 ¤ (no-overflow? x y , (x × y) , ◎)
+      impl = λ x y ◎ → begin
+          0 ¤ (x , y , ◎)                 ∼⟨ dup₂ & dup₂ & mul & swap₂ & swap₁ ⟩
+         13 ¤ (x , y , x × y , ◎)         ∼⟨ dup₂ & dup₄ & sdiv & eq & or ⟩
+         28 ¤ (no-overflow? x y , x × y , ◎) ∎
+
+  ISUB = SWAP 1 ⟫ PUSH 0 ⟫ SUB ⟫ IADD
 
   RONE = PUSH 27 ⟫ PUSH 10 ⟫ EXP
   RHALF = PUSH 2 ⟫ RONE ⟫ SDIV
   RTRUNC = RONE ⟫ SWAP 1 ⟫ SDIV
 
   RMUL = IMUL ⟫ RHALF ⟫ IADD ⟫ RTRUNC
+
+  {-
+    Pseudocode for RPOW:
+       rpow(x, n) => z
+         z = 1
+         while n
+           z = rmul(z, x) if n is odd
+           x = rmul(x, x)
+           n = n / 2
+  -}
 
   EVEN = PUSH 1 ⟫ AND ⟫ ISZERO
   HALF = PUSH 2 ⟫ SWAP 1 ⟫ SDIV
@@ -817,70 +789,6 @@ module EVM-Math where
       GETN ⟫ EVEN ⟫ ELSE (GETX ⟫ GETZ ⟫ RMUL ⟫ SETZ) ⟫
       GETX ⟫ GETX ⟫ RMUL ⟫ SETX ⟫ GETN ⟫ HALF ⟫ SETN
     ) ⟫ GETZ
-
-    -- rpow(x, n) => z
-    --   z = 1
-    --   while (n)
-    --     if n & 1
-    --       z = rmul(z, x)
-    --     x = rmul(x, x)
-    --     n = n / 2
-
-  RPOW′ =
-    SWAP 1 ⟫ -- 2
-    RONE ⟫ -- 3
-    SWAP 1 ⟫ -- 3
-    LOOP (DUP 1)
-      (PUSH 1 ⟫
-       DUP 2 ⟫
-       AND ⟫
-       ISZERO ⟫ ELSE (
-         DUP 3 ⟫
-         SWAP 1 ⟫
-         SWAP 2 ⟫
-         RMUL ⟫
-         SWAP 1) ⟫
-       SWAP 1 ⟫
-       SWAP 2 ⟫
-       DUP 1 ⟫
-       RMUL ⟫
-       PUSH 2 ⟫
-       SWAP 1 ⟫
-       DIV ⟫
-       SWAP 1 ⟫
-       SWAP 2 ⟫
-       SWAP 1) ⟫
-     POP ⟫ SWAP 1 ⟫ POP
-
-{-
-x n
-n x
-z(1) n x
-n z x
-LOOP
-  1 n z x
-  n 1 n z x
-  n&1 n z x
-  THEN
-    x n z x
-    n x z x
-    z x n x
-    z*x n x
-    n z′ x
-  z′ n x
-  x n z′
-  x x n z′
-  x*x n z′
-  2 n x′ z′
-  n 2 x′ z′
-  n/2 x′ z′
-  x′ n′ z′
-  z′ n′ x′
-  n′ z′ x′
-x′ n′ z′
-n′ z′
-z′
--}
 
 
 -- Section 7: Compiling Sic machine code to EVM assembly

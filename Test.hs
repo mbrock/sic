@@ -66,8 +66,20 @@ minint = - (2 ^ 255)
 
 smallRange = Range.linear (-100) 100
 maxRange = Range.linear 0 maxint
--- anyInt = forAll (Gen.integral maxRange)
 anyInt = forAll (Gen.integral maxRange)
+
+type Ray = Decimal E27
+
+ray x = x :: Ray
+rayRange x = (Range.linear (unfixed (ray x)) (- (unfixed (ray x))))
+
+anyRay :: PropertyT IO (Ray)
+anyRay = forAll $
+  fixed <$>
+    (Gen.choice $
+      Gen.integral maxRange :
+        map (Gen.integral . rayRange)
+          [10^n | n <- [0, 6 .. 36]])
 
 integer :: Integral a => a -> Integer
 integer x = fromIntegral x
@@ -85,10 +97,10 @@ prop_iadd =
         annotate (show z)
         assert (z > maxint || z <= minint)
 
-unfixed :: Integral a => Decimal b -> a
+unfixed :: Num a => Decimal b -> a
 unfixed (D (MkFixed i)) = fromIntegral i
 
-fixed :: Integral a => a -> Decimal E27
+fixed :: Integral a => a -> Ray
 fixed x = fromRational (fromIntegral (fromIntegral x :: Int256) % 10^27)
 
 prop_imul :: Property
@@ -110,9 +122,9 @@ prop_imul =
 prop_rmul :: Property
 prop_rmul =
   withShrinks 10 . withTests 100 . property $ do
-    x <- anyInt
+    x <- unfixed <$> anyRay
     annotate (show (fixed x))
-    y <- anyInt
+    y <- unfixed <$> anyRay
     annotate (show (fixed y))
     case run "rmul(int256,int256)" (AbiIntType 256) [AbiInt 256 x, AbiInt 256 y] of
       Right (AbiInt 256 z) -> do
@@ -129,19 +141,23 @@ prop_rmul =
 
 prop_rpow :: Property
 prop_rpow =
-  withTests 1000 . withShrinks 10 . property $ do
-    x <- anyInt
+  withTests 500 . withShrinks 10 . property $ do
+    x <- anyRay
     n <- anyInt
-    case run "rpow(int256,int256)" (AbiIntType 256) [AbiInt 256 x, AbiInt 256 n] of
+    case run "rpow(int256,int256)" (AbiIntType 256) [AbiInt 256 (unfixed x), AbiInt 256 n] of
       Right (AbiInt 256 z) -> do
         if n == 0
           then do
             assert (not (x == 0))
             fixed z === 1.0
-          else fixed z === fixed x ^ fromIntegral n
+          else fixed z === x ^ fromIntegral n
       Left Revert -> do
         assert $
-          (fixed x > fixed maxint / 10^27) || (x == 0 && n == 0)
+          -- x too big to multiply?
+             (x > fixed maxint / 10^27) || (x == 0 && n == 0)
+          -- x^n would overflow?
+          || fromIntegral n >
+               (log (realToFrac (fixed maxint)) / log (abs (realToFrac x)))
       Left e -> do
         annotate (show e)
         failure 
@@ -166,7 +182,7 @@ instance HasResolution e => Show (Decimal e) where
 
 instance HasResolution e => Num (Decimal e) where
   x@(D (MkFixed a)) * D (MkFixed b) =
-    D (MkFixed (div  (a * b + div (resolution x) 2)
+    D (MkFixed (quot (a * b + div (resolution x) 2)
                      (resolution x)))
 
   D a + D b      = D (a + b)
