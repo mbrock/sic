@@ -16,14 +16,13 @@ import EVM.Exec
 import EVM.Types
 import EVM.UnitTest
 
-import Data.DoubleWord
-
 import Control.Lens
 import Control.Monad (unless, when)
 import Control.Monad.State.Strict (execState, runState)
 import Data.Binary.Get (runGetOrFail)
 import Data.ByteString (ByteString)
 import Data.ByteString.Lazy (fromStrict)
+import Data.DoubleWord
 import Data.Fixed
 import Data.Ratio
 import Data.Text (Text)
@@ -42,6 +41,7 @@ import qualified Data.Vector as Vector
     (VMFailure problem, _) -> error (show problem)
     (VMSuccess (B runtime), vm) -> (runtime, vm)
 
+-- Some ugly code to run an ABI method and decode its return value.
 run :: Text -> AbiType -> [AbiValue] -> Either Error AbiValue
 run sig tret args = do
   let
@@ -61,19 +61,20 @@ run sig tret args = do
     (VMFailure problem, _) ->
       Left problem
 
-maxint :: Integral a => a
-maxint = 2 ^ 255 - 1
+maxInt :: Integral a => a
+maxInt = 2 ^ 255 - 1
 
-minint :: Integral a => a
-minint = - (2 ^ 255)
+minInt :: Integral a => a
+minInt = - (2 ^ 255)
 
-smallRange = Range.linear (-100) 100
-maxRange = Range.linear 0 maxint
+maxRange = Range.linear 0 maxInt
 anyInt = Gen.integral maxRange
 
 ray x = x :: Ray
 rayRange x = (Range.linear (unfixed (ray x)) (- (unfixed (ray x))))
 
+-- This generates ray fixed point numbers in a variety of magnitudes,
+-- to ensure good test coverage.
 anyRay =
   fixed <$>
     (Gen.choice $
@@ -95,7 +96,7 @@ prop_iadd =
       Left Revert -> do
         let z = integer x + integer y
         annotate (show z)
-        assert (z > maxint || z <= minint)
+        assert (z > maxInt || z <= minInt)
 
 unfixed :: Num a => Decimal b -> a
 unfixed (D (MkFixed i)) = fromIntegral i
@@ -130,11 +131,17 @@ prop_rmul =
       Right (AbiInt 256 z) -> do
         annotate (show (fixed z))
         annotate (show (abs (fixed z - fixed x * fixed y)))
+        
+        -- Note that our Haskell fixed points don't overflow,
+        -- so this tests that the result is actually correct.
         fixed z === fixed x * fixed y
+        
       Left Revert -> do
+        -- Verify the failure mode: overflow or underflow.
         if signum x * signum y > 0
-          then assert (integer x * integer y + (10^27 `div` 2) > maxint)
-          else assert (integer x * integer y + (10^27 `div` 2) < minint)
+          then assert (integer x * integer y + (10^27 `div` 2) > maxInt)
+          else assert (integer x * integer y + (10^27 `div` 2) < minInt)
+          
       Left e -> do
         annotate (show e)
         failure 
@@ -154,10 +161,10 @@ prop_rpow =
       Left Revert -> do
         assert $
           -- x too big to multiply?
-             (x > fixed maxint / 10^27) || (x == 0 && n == 0)
+             (x > fixed maxInt / 10^27) || (x == 0 && n == 0)
           -- x^n would overflow?
           || fromIntegral n >
-               (log (realToFrac (fixed maxint)) / log (abs (realToFrac x)))
+               (log (realToFrac (fixed maxInt)) / log (abs (realToFrac x)))
       Left e -> do
         annotate (show e)
         failure 
