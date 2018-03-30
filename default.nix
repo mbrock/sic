@@ -18,6 +18,8 @@ let
     fetchSubmodules = true;
   }) {};
 
+  ds-token = "${dapphub.dappsys.ds-token}/dapp/ds-token/out";
+
 in stdenv.mkDerivation rec {
   name = "sic-${version}";
   version = "1.0";
@@ -41,6 +43,7 @@ in stdenv.mkDerivation rec {
 
   doCheck = true;
   checkPhase = ''
+    export TOKEN_FACTORY_CODE=$(cat ${ds-token}/DSTokenFactory.bin | tr -d '\n')
     ./${contract} | tr -d '\n' | runghc Test.hs
   '';
 
