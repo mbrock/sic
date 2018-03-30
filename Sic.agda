@@ -198,6 +198,7 @@ module Sⁿ where
     _←_  : S⁰ Slot → S⁰ Word → S¹ easy 0
     fyi  : ∀ {n} → (xs : Vec (S⁰ Word) (suc n)) → S¹ easy (suc n)
     ext  : ∀ {n} → String → S⁰ Word → Vec (S⁰ Word) n → S¹ hard 0
+    move_of_from_to_ : S⁰ Word → S⁰ Word → S⁰ Word → S⁰ Word → S¹ hard 0
     _│_  : ∀ {m n i₁ i₂}
          → S¹ i₁ m → S¹ i₂ n → {_ : fyi-ok m n}
          → S¹ (i₁ ⊔ᵉ i₂) (m ⊔ n)
@@ -481,6 +482,9 @@ module Sⁿ→Oⁿ where
   ⟦ i ≜ x ⟧¹  = defₒ i ⟦ x ⟧⁰
   ⟦ k ← x ⟧¹  = setₖₒ ⟦ k ⟧⁰ ⟦ x ⟧⁰
   ⟦ x │ y ⟧¹  = ⟦ x ⟧¹ ∥ ⟦ y ⟧¹
+  ⟦ move wad of gem from src to dst ⟧¹ =
+    extₒ "transferFrom(address,address,uint256)" ⟦ gem ⟧⁰
+      (mapᵛ ⟦_⟧⁰ (src ∷ᵛ dst ∷ᵛ wad ∷ᵛ []ᵛ))
 
   -- Compiling signature dispatch sequences
   ⟦_⟧² : ∀ {ease Guy Act} → S² Guy Act ease → O² Guy Act
