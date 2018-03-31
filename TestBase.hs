@@ -37,6 +37,8 @@ import System.IO.Unsafe as X
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
 
+performIO = unsafePerformIO
+
 root :: Integral a => a
 root = cast ethrunAddress
 
@@ -56,7 +58,10 @@ maxRange :: Integral a => Range a
 maxRange = Range.linear 0 maxInt
 
 anyInt :: Integral a => Gen a
-anyInt = Gen.integral maxRange
+anyInt =
+  Gen.choice $
+    map (\x -> Gen.integral (Range.linear (-x) x))
+       [2^n | n <- [0..255]]
 
 ray x = x :: Ray
 rayRange x = (Range.linear (unfixed (ray x)) (- (unfixed (ray x))))
@@ -88,8 +93,10 @@ anyRay =
   fixed <$>
     (Gen.choice $
       Gen.integral maxRange :
+      Gen.integral (Range.linear (10^49) maxInt) :
+      Gen.integral (Range.linear minInt (-10^49)) :
         map (Gen.integral . rayRange)
-          [10^n | n <- [0, 6 .. 36]])
+          [10^n | n <- [0..49]])
 
 integer :: Integral a => a -> Integer
 integer x = cast x
@@ -154,3 +161,7 @@ instance HasResolution e => Fractional (Decimal e) where
 
   recip (D a)     = D (recip a)
   fromRational r  = D (fromRational r)
+
+{-# NOINLINE testCount #-}
+testCount :: TestLimit
+testCount = cast (read (performIO (getEnv "count")))

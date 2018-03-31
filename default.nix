@@ -48,6 +48,14 @@ in stdenv.mkDerivation rec {
     export DAPP_ROOT=${ds-token}
     export DAPP_FILE=${ds-token}/out/factory.sol.json
     runghc Test.hs
+    output=$(set -x; runghc TestFail.hs) || true
+    if message=$(grep passed <<<"$output"); then
+      echo $'\e[31m'"$message"$'\e[0m'
+      exit 1
+    else
+      message=$(grep -E -o '[0-9]+ failed.' <<<"$output")
+      echo $'\e[32m'"  ✓ $message"$'\e[0m'
+    fi
   '';
 
   installPhase = ''

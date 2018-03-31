@@ -26,13 +26,13 @@ main = do
     ]
     
   check "Sic basic math"
-    [ ("iadd", prop_iadd)
-    , ("imul", prop_imul)
-    , ("rmul", prop_rmul)
-    , ("rpow", prop_rpow)
+    [ ("iadd", prop_iadd (+))
+    , ("imul", prop_imul (*))
+    , ("rmul", prop_rmul (*))
+    , ("rpow", prop_rpow (^))
     ]
 
-prop_token = withShrinks 100 . withTests 500 . property $ do
+prop_token = withTests testCount . property $ do
   ref <- liftIO (newIORef vm1)
   acts <-
     forAll $ Gen.sequential (Range.linear 0 100) initialState
@@ -42,7 +42,7 @@ prop_token = withShrinks 100 . withTests 500 . property $ do
       , cmdTransferGood ref
       , cmdBalanceOf ref
       ]
-      
+    
   executeSequential initialState acts
   debugIfFailed
 
