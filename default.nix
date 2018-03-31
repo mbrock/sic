@@ -18,7 +18,7 @@ let
     fetchSubmodules = true;
   }) {};
 
-  ds-token = "${dapphub.dappsys.ds-token}/dapp/ds-token/out";
+  ds-token = "${dapphub.dappsys.ds-token}/dapp/ds-token";
 
 in stdenv.mkDerivation rec {
   name = "sic-${version}";
@@ -43,8 +43,11 @@ in stdenv.mkDerivation rec {
 
   doCheck = true;
   checkPhase = ''
-    export TOKEN_FACTORY_CODE=$(cat ${ds-token}/DSTokenFactory.bin | tr -d '\n')
-    ./${contract} | tr -d '\n' | runghc Test.hs
+    export EXAMPLE_CODE=$(./${contract} | tr -d '\n')
+    export TOKEN_FACTORY_CODE=$(cat ${ds-token}/out/DSTokenFactory.bin | tr -d '\n')
+    export DAPP_ROOT=${ds-token}
+    export DAPP_FILE=${ds-token}/out/factory.sol.json
+    runghc Test.hs
   '';
 
   installPhase = ''
