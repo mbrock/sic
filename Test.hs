@@ -20,7 +20,7 @@ import           Data.ByteString.Lazy (fromStrict)
 import           Data.DoubleWord
 import           Data.Fixed
 import           Data.IORef
-import           Data.Map (Map)
+import           Data.Map (Map, (!))
 import qualified Data.Map as Map
 import           Data.Ratio
 import           Data.Set (Set)
@@ -48,13 +48,23 @@ import qualified Hedgehog.Range as Range
 import           System.Environment (getEnv)
 import           System.Exit (exitFailure)
 import           System.IO.Unsafe
+import           Data.String (fromString)
 
 main :: IO ()
 main = do
-  good <- checkSequential $ Group "Tokens"
-    [ ("token", prop_token)
+  let
+    check s ps = do
+      good <- checkSequential $ Group s ps
+      unless good exitFailure
+      putStrLn ""
+
+  check "Dependencies" [("DSToken", prop_token)]
+  check "Sic basic math"
+    [ ("iadd", prop_iadd)
+    , ("imul", prop_imul)
+    , ("rmul", prop_rmul)
+    , ("rpow", prop_rpow)
     ]
-  unless good exitFailure
 
 cast :: (Integral a, Num b) => a -> b
 cast = fromIntegral
@@ -77,7 +87,7 @@ data Gem = DAI | MKR
 allGems :: [Gem]
 allGems = enumFrom DAI
 
-load :: VM -> IO ((Word160, Gem -> Word160), VM)
+load :: VM -> IO ((Addr, Gem -> Addr), VM)
 load vm = do
   exampleCode <-
     hexByteString "code" . encodeUtf8 . pack <$> getEnv "EXAMPLE_CODE"
@@ -93,8 +103,8 @@ load vm = do
       call (Call root factory "make(bytes32,bytes32)" (Just AbiAddressType)
         [AbiBytes 32 (padRight 32 "MKR"), AbiBytes 32 (padRight 32 "Maker")])
     return
-      ( example
-      , \case DAI -> dai; MKR -> mkr
+      ( cast example
+      , cast . \case DAI -> dai; MKR -> mkr
       )
 
 create :: Num t => ByteString -> EVM t
@@ -154,10 +164,7 @@ run :: Text -> AbiType -> [AbiValue] -> Either Error AbiValue
 run sig ret args = do
   let
     continue = do
-      resetState
-      assign (state . gas) 0xffffffffffffff
-      loadContract (cast example)
-      assign (state . calldata) (B (abiCalldata sig (Vector.fromList args)))
+      setupCall $ Call root example sig (Just ret) args
       exec
   case runState continue vm1 of
     (VMSuccess (B out), _) ->
@@ -325,21 +332,18 @@ instance HasResolution e => Fractional (Decimal e) where
 -- Smart contract model testing ----------------------------------------
 ------------------------------------------------------------------------
 
-newtype Account = Account Word160
-  deriving (Eq, Ord, Show, Num, Integral, Real, Enum)
-
 data Model (v :: * -> *) = Model
-  { accounts :: Set Account
-  , balances :: Map (Gem, Account) Word256
+  { accounts :: Set Addr
+  , balances :: Map (Gem, Addr) Word256
   } deriving (Eq, Show)
 
-zeroBalancesFor :: Account -> Map (Gem, Account) Word256
+zeroBalancesFor :: Addr -> Map (Gem, Addr) Word256
 zeroBalancesFor x = Map.fromList [((g, x), 0) | g <- allGems]
 
 totalSupply :: Model v -> Word256
 totalSupply = sum . Map.elems . balances
 
-balanceOf :: Gem -> Account -> Model v -> Word256
+balanceOf :: Gem -> Addr -> Model v -> Word256
 balanceOf g x s =
   case Map.lookup (g, x) (balances s) of
     Nothing -> 0
@@ -358,23 +362,37 @@ performReversion vm0 vm1 =
     _ ->
       vm1
 
-send ref c@(Call src dst sig _ xs) = do 
+send ref c@(Call src dst sig ret xs) = do 
   vm <- liftIO (readIORef ref)
   let vm' = performReversion vm (execState (call c) vm)
   liftIO (writeIORef ref vm')
-  pure vm'
+  pure $ case (ret, view result vm') of
+    (Just t, Just (VMSuccess (B out))) ->
+      case runGetOrFail (getAbi t) (fromStrict out) of
+        Right ("", _, x) -> (vm', Just x)
+        _ -> error "ABI return value decoding error"
+    (Nothing, Just (VMSuccess (B ""))) -> (vm', Nothing)
+    (Nothing, Just (VMSuccess _)) -> error "unexpected return value"
+    (_, Just (VMFailure _)) -> (vm', Nothing)
+    (_, Nothing) -> error "weird VM state"
 
 data Spawn (v :: * -> *) =
-  Spawn Account
+  Spawn Addr
   deriving (Eq, Show)
 
 data Mint (v :: * -> *) =
-  Mint Gem Account Account Word256
+  Mint Gem Addr Addr Word256
   deriving (Eq, Show)
 
 data Transfer (v :: * -> *) =
-  Transfer Gem Account Account Word256
+  Transfer Gem Addr Addr Word256
   deriving (Eq, Show)
+
+data BalanceOf (v :: * -> *) =
+  BalanceOf Addr Gem Addr
+  deriving (Eq, Show)
+
+
 
 instance HTraversable Spawn where
   htraverse f (Spawn x) = pure (Spawn x)
@@ -384,6 +402,10 @@ instance HTraversable Mint where
 
 instance HTraversable Transfer where
   htraverse f (Transfer a b c d) = pure (Transfer a b c d)
+
+instance HTraversable BalanceOf where
+  htraverse f (BalanceOf a b c) = pure (BalanceOf a b c)
+
 
 spawn :: Monad m => Command Gen m Model
 spawn =
@@ -409,7 +431,7 @@ failedVmStop = unsafePerformIO (newIORef True)
 debug :: (MonadIO m, Show a) => IORef VM -> a -> Call -> m VM
 debug ref cmd c = do
   vm0 <- liftIO (readIORef ref)
-  vm1 <- send ref c
+  (vm1, _) <- send ref c
   case view result vm1 of
     Just (VMFailure Revert) -> do
       stop <- liftIO (readIORef failedVmStop)
@@ -427,6 +449,9 @@ debug ref cmd c = do
 below x = Range.linear 0 (if x == 0 then 0 else x - 1)
 above x = Range.linear (if x == maxBound then maxBound else x + 1) maxBound
 
+someAccount = Gen.element . Set.toList . accounts
+someGem = Gen.element allGems
+
 mintGood :: IORef VM -> Command Gen (PropertyT IO) Model
 mintGood ref =
   let
@@ -434,15 +459,15 @@ mintGood ref =
       if Set.null (accounts s)
       then Nothing
       else Just $ do
-        gem <- Gen.element [DAI, MKR]
-        dst <- Gen.element (Set.toList (accounts s))
+        gem <- someGem
+        dst <- someAccount s
         let dstWad = balanceOf gem dst s
-        wad <- Gen.integral (below (min (maxBound - totalSupply s) (maxBound - dstWad)))
+        wad <- someUpTo (min (maxBound - totalSupply s) (maxBound - dstWad))
         pure (Mint gem root dst wad)
       
     execute cmd@(Mint gem src dst wad) = do
       send ref $ Call
-        (cast src) (cast (gemAddress gem))
+        src (gemAddress gem)
         "mint(address,uint256)"
         Nothing
         [AbiAddress (cast dst), AbiUInt 256 wad]
@@ -465,13 +490,13 @@ mintUnauthorized ref =
       else Just $ do
         gem <- Gen.element [DAI, MKR]
         src <- Gen.element (Set.toList (Set.delete root (accounts s)))
-        dst <- Gen.element (Set.toList (accounts s))
-        wad <- anyInt
+        dst <- someAccount s
+        wad <- someUpTo maxBound
         pure (Mint gem src dst wad)
       
     execute (Mint gem src dst wad) = do
       send ref $ Call
-        (cast src) (cast (gemAddress gem))
+        src (gemAddress gem)
         "mint(address,uint256)"
         Nothing
         [AbiAddress (cast dst), AbiUInt 256 wad]
@@ -482,33 +507,39 @@ mintUnauthorized ref =
       ]
 
 ensureRevert =
-  Ensure $ \_ i _ vm -> do
+  Ensure $ \_ i _ (vm, _) -> do
     case view result vm of
       Just (VMFailure Revert) -> pure ()
       _ -> annotate (show i) >> failure
 
-ensureVoidSuccess :: Callback i VM s
 ensureVoidSuccess =
-  Ensure $ \_ _ _ vm -> do
+  Ensure $ \_ _ _ (vm, _) -> do
     case view result vm of
       Just (VMSuccess (B "")) -> pure ()
       _ -> failure
+
+
+someUpTo x = Gen.integral (Range.linear 0 x)
+someGreaterThan x =
+  if x == maxBound
+  then Gen.integral (Range.linear x maxBound)
+  else Gen.integral (Range.linear (x + 1) maxBound)
 
 transferGood ref =
   let
     gen s =
       Just $ do
-        gem <- Gen.element allGems
-        src <- Gen.element (Set.toList (accounts s))
-        dst <- Gen.element (Set.toList (accounts s))
-        let srcWad = balances s Map.! (gem, src)
-        let dstWad = balances s Map.! (gem, dst)
-        wad <- Gen.integral (below (min srcWad (maxWord - dstWad)))
+        gem <- someGem
+        src <- someAccount s
+        dst <- someAccount s
+        let srcWad = balances s ! (gem, src)
+        let dstWad = balances s ! (gem, dst)
+        wad <- someUpTo (min srcWad (maxWord - dstWad))
         pure (Transfer gem src dst wad)
 
     run cmd@(Transfer gem src dst wad) = do
       send ref $ Call
-        (cast src) (cast (gemAddress gem))
+        src (gemAddress gem)
         "push(address,uint256)"
         Nothing
         [AbiAddress (cast dst), AbiUInt 256 wad]
@@ -528,28 +559,54 @@ transferGood ref =
 transferOverflow ref =
   let
     gen s =
-      Just $ do
-        gem <- Gen.element allGems
-        src <- Gen.element (Set.toList (accounts s))
-        dst <- Gen.element (Set.toList (accounts s))
-        let srcWad = balances s Map.! (gem, src)
-        let dstWad = balances s Map.! (gem, dst)
-        wad <- 
-          Gen.integral
-            (above (max srcWad (maxWord - dstWad)))
+      if Set.size (accounts s) < 2 then Nothing
+      else Just $ do
+        gem <- someGem
+        src <- someAccount s
+        dst <- Gen.filter (/= src) (someAccount s)
+        let srcWad = balances s ! (gem, src)
+        let dstWad = balances s ! (gem, dst)
+        wad <- someGreaterThan (maxWord - dstWad)
         pure (Transfer gem src dst wad)
 
     run cmd@(Transfer gem src dst wad) = do
       send ref $
-        Call (cast src) (cast (gemAddress gem))
+        Call src (gemAddress gem)
           "push(address,uint256)"
           Nothing
           [AbiAddress (cast dst), AbiUInt 256 wad]
 
   in Command gen run
-       [ 
-         ensureRevert
-       ]
+      [ Require $ \s (Transfer gem src dst wad) ->
+          balanceOf gem src s >= wad
+            && addOverflow (balanceOf gem dst s) wad
+      , ensureRevert
+      ]
+
+cmdBalanceOf ref =
+  let
+    gen s =
+      Just $ do
+        gem <- someGem
+        src <- someAccount s
+        guy <- someAccount s
+        pure (BalanceOf src gem guy)
+        
+    run (BalanceOf src gem guy) =
+      send ref $
+        Call src (gemAddress gem)
+          "balanceOf(address)"
+          (Just (AbiUIntType 256))
+          [AbiAddress (cast guy)]
+  in
+    Command gen run
+      [ Ensure $ \s _ (BalanceOf _ gem guy) (vm, out) -> do
+          case out of
+            Just (AbiUInt 256 x) ->
+              x === balanceOf gem guy s
+            _ ->
+              failure
+      ]
 
 addOverflow :: Word256 -> Word256 -> Bool
 addOverflow x y = x + y < x
@@ -557,18 +614,18 @@ addOverflow x y = x + y < x
 supply gem s =
   sum [x | ((g, _), x) <- Map.assocs (balances s), g == gem]
 
-prop_token = withShrinks 0 . withTests 500 . property $ do
+prop_token = withShrinks 100 . withTests 500 . property $ do
   ref <- liftIO (newIORef vm1)
   acts <-
-    forAll $ Gen.sequential (Range.linear 0 10) initialState
+    forAll $ Gen.sequential (Range.linear 0 25) initialState
       [ spawn
       , mintGood ref
       , mintUnauthorized ref
       , transferGood ref
       , transferOverflow ref
+      , cmdBalanceOf ref
       ]
   executeSequential initialState acts
-  liftIO (writeIORef ref vm1)
   liftIO (readIORef failedVm) >>=
     \case
       Nothing -> pure ()
