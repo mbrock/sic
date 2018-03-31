@@ -35,12 +35,11 @@ main = do
 prop_token = withShrinks 100 . withTests 500 . property $ do
   ref <- liftIO (newIORef vm1)
   acts <-
-    forAll $ Gen.sequential (Range.linear 0 25) initialState
+    forAll $ Gen.sequential (Range.linear 0 100) initialState
       [ cmdSpawn
       , cmdMintGood ref
       , cmdMintUnauthorized ref
       , cmdTransferGood ref
-      , cmdTransferOverflow ref
       , cmdBalanceOf ref
       ]
       
@@ -154,55 +153,27 @@ cmdTransferGood ref =
         src <- someAccount s
         dst <- someAccount s
         let srcWad = balances s ! (gem, src)
-        let dstWad = balances s ! (gem, dst)
-        wad <- someUpTo (min srcWad (maxWord - dstWad))
+        wad <- someUpTo srcWad
         pure (Transfer gem src dst wad)
 
     run cmd@(Transfer gem src dst wad) = do
-      send ref $ Call
+      debug ref cmd $ Call
         src (gemAddress gem)
-        "push(address,uint256)"
-        Nothing
+        "transfer(address,uint256)"
+        (Just AbiBoolType)
         [AbiAddress (cast dst), AbiUInt 256 wad]
 
   in Command gen run
       [ Require $ \s (Transfer gem src dst wad) ->
           balanceOf gem src s >= wad
       , Update $ \s (Transfer gem src dst wad) _ ->
-             s { balances =
-                   Map.adjust (subtract wad) (gem, src) .
-                   Map.adjust (+ wad) (gem, dst) $
-                     balances s
-               }
-       , ensureVoidSuccess
+          s { balances =
+                Map.adjust (subtract wad) (gem, src) .
+                Map.adjust (+ wad) (gem, dst) $
+                  balances s
+            }
+       , ensureSuccess (AbiBool True)
        ]
-
-cmdTransferOverflow ref =
-  let
-    gen s =
-      if Set.size (accounts s) < 2 then Nothing
-      else Just $ do
-        gem <- someGem
-        src <- someAccount s
-        dst <- Gen.filter (/= src) (someAccount s)
-        let srcWad = balances s ! (gem, src)
-        let dstWad = balances s ! (gem, dst)
-        wad <- someGreaterThan (maxWord - dstWad)
-        pure (Transfer gem src dst wad)
-
-    run cmd@(Transfer gem src dst wad) = do
-      send ref $
-        Call src (gemAddress gem)
-          "push(address,uint256)"
-          Nothing
-          [AbiAddress (cast dst), AbiUInt 256 wad]
-
-  in Command gen run
-      [ Require $ \s (Transfer gem src dst wad) ->
-          balanceOf gem src s >= wad
-            && addOverflow (balanceOf gem dst s) wad
-      , ensureRevert
-      ]
 
 cmdBalanceOf ref =
   let

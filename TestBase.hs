@@ -61,19 +61,19 @@ anyInt = Gen.integral maxRange
 ray x = x :: Ray
 rayRange x = (Range.linear (unfixed (ray x)) (- (unfixed (ray x))))
 
-below x = Range.linear 0 (if x == 0 then 0 else x - 1)
-above x = Range.linear (if x == maxBound then maxBound else x + 1) maxBound
-someUpTo x = Gen.integral (Range.linear 0 x)
-someGreaterThan x =
-  if x == maxBound
-  then Gen.integral (Range.linear x maxBound)
-  else Gen.integral (Range.linear (x + 1) maxBound)
+someBelow 0 = error "too big"
+someBelow x = Range.linear 0 (x - 1)
 
+someAbove x | x == maxBound = error "too big"
+someAbove x = Range.linear (x + 1) maxBound
+
+someUpTo x = Gen.integral (Range.linear 0 x)
+
+someGreaterThan x | x == maxBound = error "too big"
+someGreaterThan x = Gen.integral (Range.linear (x + 1) maxBound)
 
 addOverflow :: Word256 -> Word256 -> Bool
 addOverflow x y = x + y < x
-
-
 
 unfixed :: Num a => Decimal b -> a
 unfixed (D (MkFixed i)) = cast i
@@ -106,6 +106,16 @@ ensureVoidSuccess =
   Ensure $ \_ _ _ (vm, _) -> do
     case view result vm of
       Just (VMSuccess (B "")) -> pure ()
+      _ -> failure
+
+ensureSuccess :: AbiValue -> Callback a (VM, Maybe AbiValue) c
+ensureSuccess x =
+  Ensure $ \_ _ _ (vm, _) -> do
+    case view result vm of
+      Just (VMSuccess (B out)) -> do
+        case runGetOrFail (getAbi (abiValueType x)) (fromStrict out) of
+          Right ("", _, x) -> pure ()
+          _ -> error ("return value decoding error")
       _ -> failure
 
 -- Fixed point number support

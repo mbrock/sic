@@ -18,10 +18,10 @@ failedVmStop :: IORef Bool
 {-# NOINLINE failedVmStop #-}
 failedVmStop = unsafePerformIO (newIORef True)
 
-debug :: (MonadIO m, Show a) => IORef VM -> a -> Call -> m VM
+debug :: (MonadIO m, Show a) => IORef VM -> a -> Call -> m (VM, Maybe AbiValue)
 debug ref cmd c = do
   vm0 <- liftIO (readIORef ref)
-  (vm1, _) <- send ref c
+  (vm1, x) <- send ref c
   case view result vm1 of
     Just (VMFailure Revert) -> do
       stop <- liftIO (readIORef failedVmStop)
@@ -34,7 +34,7 @@ debug ref cmd c = do
         liftIO (writeIORef failedVmStop False)
     _ ->
       pure ()
-  pure vm1
+  pure (vm1, x)
 
 runFromVM :: VM -> Text -> IO VM
 runFromVM vm msg = do
