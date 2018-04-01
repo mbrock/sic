@@ -23,4 +23,10 @@ main = do
     , ("imul +", prop_imul (+))
     , ("imul -", prop_imul (-))
     , ("imul x+1", prop_imul (\x _ -> x + 1))
+    , ("rmul +", prop_rmul (+))
+    , ("rmul -", prop_rmul (-))
+    , ("rmul x+1", prop_rmul (\x _ -> x + 1))
+    , ("rpow *", prop_rpow (*))
+    , ("rpow +", prop_rpow (+))
+    , ("rpow ^+1", prop_rpow (\x y -> x ^ y + 1))
     ]
