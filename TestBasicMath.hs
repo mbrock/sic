@@ -30,7 +30,9 @@ prop_imul (*) =
       Right (AbiInt 256 z) -> do
         integer z === integer x * integer y
       Left Revert -> do
-        assert (x Prelude.* y `div` y /= x)
+        assert $
+          (x == minInt && y < 0) ||
+          (x Prelude.* y `div` y /= x)
       Left e -> do
         annotate (show e)
         failure
@@ -71,13 +73,17 @@ prop_rpow (^) =
           then do
             assert (not (x == 0))
             fixed z === 1.0
-          else
+          else do
             assert $ (x == 0 && z == 0) ||
-              fixed z == x ^ cast n
+              fixed z == 1 * (x ^ cast n)
       Left Revert -> do
         annotate (show (x, n))
-        assert $ (x == 0 && n == 0) || n < 0 || x > fixed maxInt / 1e27
-          || cast n > (log (realToFrac (fixed maxInt)) / log (abs (realToFrac x)))
+        assert $ or
+          [ x == 0 && n == 0
+          , n < 0
+          , unfixed x Prelude.^ 2 > (maxInt :: Integer)
+          , cast n > (log (realToFrac (fixed maxInt)) / log (abs (realToFrac x)))
+          ]
       Left e -> do
         annotate (show e)
         failure

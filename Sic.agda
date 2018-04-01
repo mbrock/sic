@@ -531,6 +531,7 @@ module StackReasoning (A : Set) where
     _+_ _×_ _÷_ _%_ _<_ _>_ _==_ _⊕_ _∨_ _∧_ : A → A → A
     ¬ neg? : A → A
     two : A
+    minInt : A
 
   infixr 1 _⤇_
   infixr 2 _⟫_
@@ -602,6 +603,9 @@ module StackReasoning (A : Set) where
 
     isneg  : ∀ {a s g} → g ¤ (a , s) ⤇ verylow+ (verylow+ g) ¤ (neg? a , s)
     iszero : ∀ {a s g} → g ¤ (a , s) ⤇ verylow+ g ¤ (¬ a , s)
+
+    -- XXX: this gas cost is a lie until we implement big word pushing
+    minint : ∀ {s g} → g ¤ s ⤇ verylow+ g ¤ (minInt , s)
 
     dup₁  : ∀ {g a s} → g ¤ (a , s) ⤇ base+ g ¤ (a , a , s)
     dup₂  : ∀ {g a b s} → g ¤ (a , b , s) ⤇ base+ g ¤ (b , a , b , s)
@@ -705,6 +709,7 @@ module EVM where
     ⟦ and ⟧     = AND
     ⟦ iszero ⟧  = ISZERO
     ⟦ isneg ⟧   = PUSH 0 ⟫ SGT
+    ⟦ minint ⟧  = PUSH 255 ⟫ PUSH 2 ⟫ EXP
     ⟦ swap₁ ⟧   = SWAP 1
     ⟦ swap₂ ⟧   = SWAP 2
     ⟦ swap₃ ⟧   = SWAP 3
@@ -751,18 +756,22 @@ module EVM-Math where
   IMUL = snippet (impl 0 0 []) ⟫ ISZERO ⟫ REVERTIF
     where
       -- We check for multiplication overflow by verifying the division.
-      no-overflow? = λ x y → ¬ y ∨ ((x × y) ÷ y) == x
+      no-overflow? = λ x y → (¬ (neg? y) ∨ (minInt < x)) ∧ (¬ y ∨ ((x × y) ÷ y) == x)
 
       impl : ∀ x y ◎ →
             0 ¤ (x , y , ◎)
-        ⤇ 33 ¤ (no-overflow? x y , (x × y) , ◎)
+        ⤇ 62 ¤ (no-overflow? x y , (x × y) , ◎)
       impl =
         λ x y ◎ → begin
           0 ¤ (x , y , ◎)
             ∼⟨ dup₂ & dup₂ & mul & swap₂ & swap₁ ⟩
-         13 ¤ (x , y , x × y , ◎)
-            ∼⟨ dup₂ & dup₄ & sdiv & eq & swap₁ & iszero & or ⟩
-         33 ¤ (no-overflow? x y , x × y , ◎) ∎
+          13 ¤ (x , y , (x × y) , ◎)
+            ∼⟨ dup₁ & dup₃ & dup₅ & sdiv & eq ⟩
+          27 ¤ ((((x × y) ÷ y) == x) , x , y , (x × y) , ◎)
+            ∼⟨ dup₃ & iszero & or & swap₂ & swap₁ ⟩
+          39 ¤ (x , y , ¬ y ∨ (((x × y) ÷ y) == x) , (x × y) , ◎)
+            ∼⟨ minint & slt & swap₁ & isneg & iszero & or & and ⟩
+          62 ¤ (no-overflow? x y , x × y , ◎) ∎
 
   ISUB = SWAP 1 ⟫ PUSH 0 ⟫ SUB ⟫ IADD
 
