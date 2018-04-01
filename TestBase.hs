@@ -9,6 +9,7 @@ import Control.Monad as X (unless, when, void)
 import Control.Monad.IO.Class as X
 import Control.Monad.State.Class as X (MonadState, get, modify)
 import Control.Monad.State.Strict as X (execState, runState)
+import Data.Monoid as X
 import Data.Binary.Get as X (runGetOrFail)
 import Data.ByteString as X (ByteString)
 import Data.ByteString.Lazy as X (fromStrict)
@@ -58,13 +59,17 @@ maxRange :: Integral a => Range a
 maxRange = Range.linear 0 maxInt
 
 anyInt :: Integral a => Gen a
-anyInt =
-  Gen.choice $
-    map (\x -> Gen.integral (Range.linear (-x) x))
-       [2^n | n <- [0..255]]
+anyInt = Gen.frequency
+  [ (1, pure 0)
+  , (1, pure 1)
+  , (1, pure (-1))
+  , (1, pure maxInt)
+  , (1, pure minInt)
+  , (3, Gen.integral (Range.exponential 0 maxInt))
+  , (3, Gen.integral (Range.exponential 0 minInt))
+  ]
 
 ray x = x :: Ray
-rayRange x = (Range.linear (unfixed (ray x)) (- (unfixed (ray x))))
 
 someBelow 0 = error "too big"
 someBelow x = Range.linear 0 (x - 1)
@@ -86,17 +91,11 @@ unfixed (D (MkFixed i)) = cast i
 fixed :: Integral a => a -> Ray
 fixed x = fromRational (cast (cast x :: Int256) % 10^27)
 
--- This generates ray fixed point numbers in a variety of magnitudes,
--- to ensure good test coverage.
 anyRay :: Gen Ray
-anyRay =
-  fixed <$>
-    (Gen.choice $
-      Gen.integral maxRange :
-      Gen.integral (Range.linear (10^49) maxInt) :
-      Gen.integral (Range.linear minInt (-10^49)) :
-        map (Gen.integral . rayRange)
-          [10^n | n <- [0..49]])
+anyRay = Gen.frequency
+  [ (1, fixed <$> anyInt)
+  , (1, fixed <$> Gen.integral (Range.linear (10^27) (10^30)))
+  ]
 
 integer :: Integral a => a -> Integer
 integer x = cast x
