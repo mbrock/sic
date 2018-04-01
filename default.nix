@@ -43,13 +43,10 @@ in stdenv.mkDerivation rec {
 
   doCheck = true;
   checkPhase = ''
-    export EXAMPLE_CODE=$(./${contract} | tr -d '\n')
-    export TOKEN_FACTORY_CODE=$(cat ${ds-token}/out/DSTokenFactory.bin | tr -d '\n')
-    export DAPP_ROOT=${ds-token}
-    export DAPP_FILE=${ds-token}/out/factory.sol.json
+    ${envPhase}
     runghc Test.hs
     output=$(set -x; runghc TestFail.hs) || true
-    if message=$(grep passed <<<"$output"); then
+    if message=$(grep ✓ <<<"$output"); then
       echo $'\e[31m'"$message"$'\e[0m'
       exit 1
     else
@@ -57,6 +54,18 @@ in stdenv.mkDerivation rec {
       grep ✗ <<<"$output"
       echo -n $'\e[0m'
     fi
+  '';
+
+  envPhase = ''
+    export EXAMPLE_CODE=$(./${contract} | tr -d '\n')
+    export TOKEN_FACTORY_CODE=$(cat ${ds-token}/out/DSTokenFactory.bin | tr -d '\n')
+    export DAPP_ROOT=${ds-token}
+    export DAPP_FILE=${ds-token}/out/factory.sol.json
+  '';
+
+  ghci = ''
+    ${envPhase}
+    ghci Test.hs
   '';
 
   installPhase = ''
