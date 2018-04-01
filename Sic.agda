@@ -776,6 +776,8 @@ module EVM-Math where
     Pseudocode for RPOW:
        rpow(x, n) => z
          z = 1
+         revert if (x, n) == (0, 0)
+         revert if n < 0
          while n
            z = rmul(z, x) if n is odd
            x = rmul(x, x)
@@ -794,6 +796,7 @@ module EVM-Math where
   RPOW =
     SETX ⟫ SETN ⟫ RONE ⟫ SETZ ⟫
     GETX ⟫ ISZERO ⟫ GETN ⟫ ISZERO ⟫ AND ⟫ REVERTIF ⟫
+    PUSH 0 ⟫ GETN ⟫ SLT ⟫ REVERTIF ⟫
     LOOP GETN (
       GETN ⟫ EVEN ⟫ ELSE (GETX ⟫ GETZ ⟫ RMUL ⟫ SETZ) ⟫
       GETX ⟫ GETX ⟫ RMUL ⟫ SETX ⟫ GETN ⟫ HALF ⟫ SETN

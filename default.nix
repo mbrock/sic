@@ -53,8 +53,9 @@ in stdenv.mkDerivation rec {
       echo $'\e[31m'"$message"$'\e[0m'
       exit 1
     else
-      message=$(grep -E -o '[0-9]+ failed.' <<<"$output")
-      echo $'\e[32m'"  ✓ $message"$'\e[0m'
+      echo -n $'\e[32m'
+      grep ✗ <<<"$output"
+      echo -n $'\e[0m'
     fi
   '';
 
