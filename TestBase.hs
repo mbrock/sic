@@ -1,11 +1,12 @@
 {-# Language OverloadedStrings #-}
+{-# Language LambdaCase #-}
 {-# Language GeneralizedNewtypeDeriving #-}
 
 module TestBase (module TestBase, module X) where
 
 import Data.Fixed as X
 import Control.Lens as X hiding (below, Indexed)
-import Control.Monad as X (unless, when, void)
+import Control.Monad as X
 import Control.Monad.IO.Class as X
 import Control.Monad.State.Class as X (MonadState, get, modify)
 import Control.Monad.State.Strict as X (execState, runState)
@@ -58,16 +59,116 @@ minInt = - (2 ^ 255)
 maxRange :: Integral a => Range a
 maxRange = Range.linear 0 maxInt
 
+data X
+  = XMega Int | XMax
+  | XRange X X
+  | XSum X X | XProduct X X | XNegate X
+  | XSqrt X
+  | XConst Integer
+  deriving (Eq, Show)
+
+rangeX :: MonadGen m => X -> m Integer
+rangeX x =
+  case x of
+    XConst i -> pure i
+    XMega n -> rangeX (reduce x)
+    XMax -> rangeX (reduce x)
+    XRange a b ->
+      (Range.linear <$> rangeX a <*> rangeX b) >>= Gen.integral_
+    XSum a b ->
+      liftM2 (+) (rangeX a) (rangeX b)
+    XProduct a b ->
+      (`div` 10^27) <$> liftM2 (*) (rangeX a) (rangeX b)
+    XNegate a ->
+      liftM negate (rangeX a)
+    XSqrt a ->
+      fixedSqrt <$> rangeX a
+
+fixedSqrt :: Integer -> Integer
+fixedSqrt = unfixed . f . fixed
+  where f :: Ray -> Ray
+        f = realToFrac . sqrt . realToFrac
+
+px :: X -> Text
+px = \case
+  XConst i -> pack (show i)
+  XMega n -> "10^(9*" <> pack (show n) <> ")"
+  XMax -> "2^255-1"
+  XRange a b -> "(" <> px a <> ".." <> px b <> ")"
+  XSum a b -> "(" <> px a <> " + " <> px b <> ")"
+  XProduct a b -> "(" <> px a <> " * " <> px b <> ")"
+  XNegate a -> "-(" <> px a <> ")"
+  XSqrt a -> "sqrt(" <> px a <> ")"
+
+reduce :: X -> X
+reduce = \case
+  XConst i -> XConst i
+  XMega n -> XConst (10 ^ (9 * n))
+  XMax -> XConst (2^255 - 1)
+  XSum a b ->
+    case (reduce a, reduce b) of
+      (XConst a', XConst b') -> XConst (a' + b')
+      (a', b') -> XSum a' b'
+  XProduct a b ->
+    case (reduce a, reduce b) of
+      (XConst a', XConst b') -> XConst (a' * b')
+      (a', b') -> XProduct a' b'
+  XNegate a ->
+    case reduce a of
+      XConst a' -> XConst (-a')
+      a' -> a'
+  XRange a b ->
+    XRange (reduce a) (reduce b)
+
+isRange (XRange _ _) = True
+isRange _ = False
+
+foo = do
+  x <- Gen.sample (Gen.resize 100 genX)
+  putStrLn (unpack (px x))
+  y <- Gen.sample (Gen.resize 100 (rangeX x))
+  print (fixed y)
+
+recursive :: MonadGen m => ([(Int, m a)] -> m a) -> [(Int, m a)] -> [(Int, m a)] -> m a
+recursive f nonrec rec =
+  Gen.sized $ \n ->
+    if n <= 1 then
+      f nonrec
+    else
+      f $ nonrec ++ fmap (\(i, x) -> (i, Gen.small x)) rec
+
+genX :: MonadGen m => m X
+genX = recursive Gen.frequency simple complex
+  where
+    simple =
+      [ (1, pure (XConst 0))
+      , (3, pure (XConst 1))
+      , (5, pure (XConst 10))
+      , (5, pure (XConst (10^27)))
+      , (1, pure XMax)
+      , (5, XMega <$> Gen.integral_ (Range.linear 1 5))
+      ]
+    complex =
+      [ (2, Gen.subterm2 genX genX XSum)
+      , (2, Gen.subterm2 genX genX XProduct)
+      , (4, Gen.subterm2 genX genX XRange)
+      , (2, Gen.subterm       genX XNegate)
+      , (2, Gen.subterm       genX XSqrt)
+      ]
+
 anyInt :: Integral a => Gen a
-anyInt = Gen.frequency
-  [ (1, pure 0)
-  , (1, pure 1)
-  , (1, pure (-1))
-  , (1, pure maxInt)
-  , (1, pure minInt)
-  , (3, Gen.integral (Range.exponential 0 maxInt))
-  , (3, Gen.integral (Range.exponential 0 minInt))
-  ]
+anyInt = fromIntegral <$> (genX >>= rangeX)
+
+-- anyInt :: Integral a => Gen a
+-- anyInt = Gen.frequency
+--   [ (1, pure 0)
+--   , (1, pure 1)
+--   , (1, pure (-1))
+--   , (1, pure maxInt)
+--   , (1, pure minInt)
+--   , (3, Gen.integral (Range.exponential 0 maxInt))
+--   , (3, Gen.integral (Range.exponential 0 minInt))
+--   ]
 
 ray x = x :: Ray
 
@@ -92,10 +193,7 @@ fixed :: Integral a => a -> Ray
 fixed x = fromRational (cast (cast x :: Int256) % 10^27)
 
 anyRay :: Gen Ray
-anyRay = Gen.frequency
-  [ (1, fixed <$> anyInt)
-  , (1, fixed <$> Gen.integral (Range.linear (10^27) (10^30)))
-  ]
+anyRay = fixed <$> anyInt
 
 integer :: Integral a => a -> Integer
 integer x = cast x

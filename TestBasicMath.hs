@@ -1,4 +1,5 @@
 {-# Language OverloadedStrings #-}
+{-# Language LambdaCase #-}
 {-# Language RankNTypes #-}
 
 module TestBasicMath where
@@ -9,6 +10,39 @@ import TestLoad
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
 import qualified Data.Vector as Vector
+
+-- data WxDai
+--   = WBalanceOf Addr
+--   deriving Show
+
+-- data RxDai
+--   = RYearly Rational
+--   deriving Show
+
+-- type WDai = W WxDai RxDai
+-- type RDai = R RxDai
+
+-- data W wx rx
+--   = WOne
+--   | WNil
+--   | WMax
+--   | WMin
+--   | WScale (W wx rx) (R rx)
+--   | WSum (W wx rx) (W wx rx)
+--   | Wx wx
+--   deriving Show
+
+-- data R rx
+--   = ROne
+--   | RNil
+--   | RHalf
+--   | RMax
+--   | RMega
+--   | RMilli
+--   | RInverse (R rx)
+--   | RProduct (R rx) (R rx)
+--   | Rx rx
+--   deriving Show
 
 prop_iadd (+) =
   withTests testCount . property $ do
@@ -62,8 +96,10 @@ prop_rmul (*) =
         annotate (show e)
         failure
 
-prop_rpow (^) =
-  withTests testCount . withShrinks 1 . property $ do
+rpowMaxResult = sqrt (realToFrac (fixed maxInt / 1e27))
+
+prop_rpow (^) maxResult =
+  withTests (10 * testCount) . withShrinks 1 . property $ do
     x <- forAll anyRay
     n <- forAll anyInt
     case run "rpow(int256,int256)" (AbiIntType 256) [AbiInt 256 (unfixed x), AbiInt 256 n] of
@@ -81,8 +117,12 @@ prop_rpow (^) =
         assert $ or
           [ x == 0 && n == 0
           , n < 0
-          , unfixed x Prelude.^ 2 > (maxInt :: Integer)
-          , cast n > (log (realToFrac (fixed maxInt)) / log (abs (realToFrac x)))
+          , n > 10 Prelude.^ 9
+
+              -- x^n > a
+              -- log (x^n) > log a
+              -- n * log x > log a
+          , realToFrac n * log (realToFrac (abs x)) > log maxResult
           ]
       Left e -> do
         annotate (show e)

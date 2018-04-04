@@ -26,7 +26,8 @@ main = do
     , ("rmul +", prop_rmul (+))
     , ("rmul -", prop_rmul (-))
     , ("rmul x+1", prop_rmul (\x _ -> x + 1))
-    , ("rpow *", prop_rpow (*))
-    , ("rpow +", prop_rpow (+))
-    , ("rpow ^+1", prop_rpow (\x y -> x ^ y + 1))
+    , ("rpow *", prop_rpow (*) rpowMaxResult)
+    , ("rpow +", prop_rpow (+) rpowMaxResult)
+    , ("rpow ^+1", prop_rpow (\x y -> x ^ y + 1) rpowMaxResult)
+    , ("rpow max", prop_rpow (^) (rpowMaxResult * 2))
     ]

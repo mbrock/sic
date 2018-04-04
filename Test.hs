@@ -29,7 +29,7 @@ main = do
     [ ("iadd", prop_iadd (+))
     , ("imul", prop_imul (*))
     , ("rmul", prop_rmul (*))
-    , ("rpow", prop_rpow (^))
+    , ("rpow", prop_rpow (^) rpowMaxResult)
     ]
 
 do_math x y name =
@@ -43,6 +43,14 @@ do_iadd x y = do_math x y "iadd"
 do_imul x y = do_math x y "imul"
 do_rmul x y = fixed <$> do_math (unfixed x) (unfixed y) "rmul"
 do_rpow x n = fixed <$> do_math (unfixed (ray x)) n "rpow"
+
+debug_rpow x n =
+  let
+    c =
+      Call root example "rpow(int256,int256)" (Just (AbiIntType 256))
+        [AbiInt 256 (unfixed x), AbiInt 256 n]
+  in
+    runFromVM (execState (setupCall c) vm1) "rpow"
 
 prop_token = withTests testCount . property $ do
   ref <- liftIO (newIORef vm1)

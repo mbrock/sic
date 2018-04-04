@@ -789,8 +789,8 @@ module EVM-Math where
          revert if n < 0
          while n
            z = rmul(z, x) if n is odd
-           x = rmul(x, x)
            n = n / 2
+           x = rmul(x, x) if n > 0
   -}
 
   EVEN = PUSH 1 ⟫ AND ⟫ ISZERO
@@ -808,7 +808,8 @@ module EVM-Math where
     PUSH 0 ⟫ GETN ⟫ SLT ⟫ REVERTIF ⟫
     LOOP GETN (
       GETN ⟫ EVEN ⟫ ELSE (GETX ⟫ GETZ ⟫ RMUL ⟫ SETZ) ⟫
-      GETX ⟫ GETX ⟫ RMUL ⟫ SETX ⟫ GETN ⟫ HALF ⟫ SETN
+      GETN ⟫ HALF ⟫ SETN ⟫
+      GETN ⟫ ISZERO ⟫ ELSE (GETX ⟫ GETX ⟫ RMUL ⟫ SETX)
     ) ⟫ GETZ
 
 
