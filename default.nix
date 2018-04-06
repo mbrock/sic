@@ -13,12 +13,29 @@ let
   dapphub = import (fetchFromGitHub {
     owner = "dapphub";
     repo = "nixpkgs-dapphub";
-    rev = "bd743f6a4a864325cd22a2bc766aa4881972b3be";
-    sha256 = "0gh5d5a88gx3j7xlwgqw07mh9l0s2mbrbrris324dpkbj365sskx";
+    rev = "56ad3e95da873ad3a24a9b76fe5391832b5c138c";
+    sha256 = "0dazyfwkanh4jcmb9ylphb22j4snj9v07yrx4a36gdkz0bfh31zb";
     fetchSubmodules = true;
   }) {};
 
-  ds-token = "${dapphub.dappsys.ds-token}/dapp/ds-token";
+  coins =
+    let repo = fetchFromGitHub {
+      owner = "rainbreak";
+      repo = "coins";
+      rev = "245952cc906d3fbb94981115d374e742c6748e07";
+      sha256 = "13jfl3fn5kjdsaa16wq8k7801kvn3ks9i954bwavkw3587h0ij10";
+    }; in
+      dapphub.callSolidityPackage (
+        { dappsys }: dapphub.solidityPackage {
+          name = "coins";
+          deps = with dappsys; [ds-test ds-token];
+          src = "${}/src";
+        }
+      ) {}
+    );
+
+  ds-token-root = "${dapphub.dappsys.ds-token}/dapp/ds-token";
+  coins-root = "${coins}/dapp/coins";
 
 in stdenv.mkDerivation rec {
   name = "sic-${version}";
@@ -58,9 +75,10 @@ in stdenv.mkDerivation rec {
 
   envPhase = ''
     export EXAMPLE_CODE=$(./${contract} | tr -d '\n')
-    export TOKEN_FACTORY_CODE=$(cat ${ds-token}/out/DSTokenFactory.bin | tr -d '\n')
-    export DAPP_ROOT=${ds-token}
-    export DAPP_FILE=${ds-token}/out/factory.sol.json
+    export TOKEN_FACTORY_CODE=$(cat ${ds-token-root}/out/DSTokenFactory.bin | tr -d '\n')
+    export DAPP_ROOT=${ds-token-root}
+    export DAPP_FILE=${ds-token-root}/out/factory.sol.json
+    export COINS_ROOT=${coins-root}
   '';
 
   ghci = ''
