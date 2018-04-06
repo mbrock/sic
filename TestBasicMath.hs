@@ -111,7 +111,7 @@ prop_rpow (^) maxResult =
             fixed z === 1.0
           else do
             assert $ (x == 0 && z == 0) ||
-              fixed z == 1 * (x ^ cast n)
+              fixed z == x ^ cast n
       Left Revert -> do
         annotate (show (x, n))
         assert $ or

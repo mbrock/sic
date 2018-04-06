@@ -59,6 +59,15 @@ minInt = - (2 ^ 255)
 maxRange :: Integral a => Range a
 maxRange = Range.linear 0 maxInt
 
+
+
+
+
+
+
+
+
+
 data X
   = XMega Int | XMax
   | XRange X X
@@ -159,17 +168,6 @@ genX = recursive Gen.frequency simple complex
 anyInt :: Integral a => Gen a
 anyInt = fromIntegral <$> (genX >>= rangeX)
 
--- anyInt :: Integral a => Gen a
--- anyInt = Gen.frequency
---   [ (1, pure 0)
---   , (1, pure 1)
---   , (1, pure (-1))
---   , (1, pure maxInt)
---   , (1, pure minInt)
---   , (3, Gen.integral (Range.exponential 0 maxInt))
---   , (3, Gen.integral (Range.exponential 0 minInt))
---   ]
-
 ray x = x :: Ray
 
 someBelow 0 = error "too big"
@@ -241,8 +239,8 @@ instance HasResolution e => Show (Decimal e) where
 instance HasResolution e => Num (Decimal e) where
   x@(D (MkFixed a)) * D (MkFixed b) =
     -- Using quot here instead of div is necessary for compatibility
-    -- with the EVM's SDIV opcode, which negatives towards zero.
-    D (MkFixed (quot (a * b + div (resolution x) 2)
+    -- with the EVM's SDIV opcode, which rounds negatives towards zero.
+    D (MkFixed (quot (a * b + div (resolution x) 2 * signum (a * b))
                      (resolution x)))
 
   D a + D b      = D (a + b)

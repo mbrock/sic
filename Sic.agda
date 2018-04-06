@@ -779,7 +779,7 @@ module EVM-Math where
   RHALF = PUSH 2 ⟫ RONE ⟫ SDIV
   RTRUNC = RONE ⟫ SWAP 1 ⟫ SDIV
 
-  RMUL = IMUL ⟫ RHALF ⟫ IADD ⟫ RTRUNC
+  RMUL = IMUL ⟫ RHALF ⟫ PUSH 0 ⟫ DUP 3 ⟫ SLT ⟫ PUSH 0 ⟫ NOT ⟫ MUL ⟫ MUL ⟫ IADD ⟫ RTRUNC
 
   {-
     Pseudocode for RPOW:
