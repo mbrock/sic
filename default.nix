@@ -24,15 +24,14 @@ let
       repo = "coins";
       rev = "245952cc906d3fbb94981115d374e742c6748e07";
       sha256 = "13jfl3fn5kjdsaa16wq8k7801kvn3ks9i954bwavkw3587h0ij10";
-    }; in
-      dapphub.callSolidityPackage (
-        { dappsys }: dapphub.solidityPackage {
-          name = "coins";
-          deps = with dappsys; [ds-test ds-token];
-          src = "${}/src";
-        }
-      ) {}
-    );
+    };
+    in dapphub.callSolidityPackage ({ dappsys }: 
+      dapphub.solidityPackage {
+        name = "coins";
+        deps = with dappsys; [ds-test ds-token];
+        src = "${repo}/src";
+      }
+    ) {};
 
   ds-token-root = "${dapphub.dappsys.ds-token}/dapp/ds-token";
   coins-root = "${coins}/dapp/coins";
