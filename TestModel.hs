@@ -14,17 +14,17 @@ allGems :: [Gem]
 allGems = enumFrom DAI
 
 data Model (v :: * -> *) = Model
-  { accounts :: Set Addr
-  , balances :: Map (Gem, Addr) Word256
+  { accounts :: Set Word160
+  , balances :: Map (Gem, Word160) Word256
   } deriving (Eq, Show)
 
-zeroBalancesFor :: Addr -> Map (Gem, Addr) Word256
+zeroBalancesFor :: Word160 -> Map (Gem, Word160) Word256
 zeroBalancesFor x = Map.fromList [((g, x), 0) | g <- allGems]
 
 totalSupply :: Model v -> Word256
 totalSupply = sum . Map.elems . balances
 
-balanceOf :: Gem -> Addr -> Model v -> Word256
+balanceOf :: Gem -> Word160 -> Model v -> Word256
 balanceOf g x s =
   case Map.lookup (g, x) (balances s) of
     Nothing -> 0

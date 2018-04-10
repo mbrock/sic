@@ -25,12 +25,12 @@ main = do
     [ ("DSToken", prop_token)
     ]
     
-  check "Sic basic math"
-    [ ("iadd", prop_iadd (+))
-    , ("imul", prop_imul (*))
-    , ("rmul", prop_rmul (*))
-    , ("rpow", prop_rpow (^) rpowMaxResult)
-    ]
+  -- check "Sic basic math"
+  --   [ ("iadd", prop_iadd (+))
+  --   , ("imul", prop_imul (*))
+  --   , ("rmul", prop_rmul (*))
+  --   , ("rpow", prop_rpow (^) rpowMaxResult)
+  --   ]
 
 do_math x y name =
   case run (name <> "(int256,int256)") (AbiIntType 256) [AbiInt 256 x, AbiInt 256 y] of
@@ -66,26 +66,26 @@ prop_token = withTests testCount . property $ do
   executeSequential initialState acts
   debugIfFailed
 
-someAccount :: Model v -> Gen Addr
+someAccount :: Model v -> Gen Word160
 someAccount = Gen.element . Set.toList . accounts
 
 someGem :: Gen Gem
 someGem = Gen.element allGems
 
 data Spawn (v :: * -> *) =
-  Spawn Addr
+  Spawn Word160
   deriving (Eq, Show)
 
 data Mint (v :: * -> *) =
-  Mint Gem Addr Addr Word256
+  Mint Gem Word160 Word160 Word256
   deriving (Eq, Show)
 
 data Transfer (v :: * -> *) =
-  Transfer Gem Addr Addr Word256
+  Transfer Gem Word160 Word160 Word256
   deriving (Eq, Show)
 
 data BalanceOf (v :: * -> *) =
-  BalanceOf Addr Gem Addr
+  BalanceOf Word160 Gem Word160
   deriving (Eq, Show)
 
 instance HTraversable Spawn where
@@ -148,7 +148,7 @@ cmdMintUnauthorized ref =
       then Nothing
       else Just $ do
         gem <- Gen.element [DAI, MKR]
-        src <- Gen.element (Set.toList (Set.delete root (accounts s)))
+        src <- Gen.filter (/= root) (someAccount s)
         dst <- someAccount s
         wad <- someUpTo maxBound
         pure (Mint gem src dst wad)

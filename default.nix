@@ -19,17 +19,10 @@ let
   }) {};
 
   coins =
-    let repo = fetchFromGitHub {
-      owner = "rainbreak";
-      repo = "coins";
-      rev = "245952cc906d3fbb94981115d374e742c6748e07";
-      sha256 = "13jfl3fn5kjdsaa16wq8k7801kvn3ks9i954bwavkw3587h0ij10";
-    };
-    in dapphub.callSolidityPackage ({ dappsys }: 
+    dapphub.callSolidityPackage ({ }: 
       dapphub.solidityPackage {
         name = "coins";
-        deps = with dappsys; [ds-test ds-token];
-        src = "${repo}/src";
+        src = ./solidity;
       }
     ) {};
 

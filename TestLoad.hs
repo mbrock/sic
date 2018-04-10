@@ -17,7 +17,7 @@ global = unsafePerformIO (load emptyVm)
 emptyVm :: VM
 emptyVm = vmForEthrunCreation ""
 
-load :: VM -> IO ((Addr, Gem -> Addr), VM)
+load :: VM -> IO ((Word160, Gem -> Word160), VM)
 load vm = do
   exampleCode <-
     hexByteString "code" . encodeUtf8 . pack <$> getEnv "EXAMPLE_CODE"
@@ -60,8 +60,8 @@ data CallResult
   deriving (Show)
 
 data Call = Call
-  { callSrc :: Addr
-  , callDst :: Addr
+  { callSrc :: Word160
+  , callDst :: Word160
   , callSig :: Text
   , callRet :: Maybe AbiType
   , callArg :: [AbiValue]
@@ -70,8 +70,8 @@ data Call = Call
 setupCall :: Call -> EVM ()
 setupCall (Call src dst sig ret xs) = do
   resetState
-  loadContract dst
-  assign (state . caller) src
+  loadContract (Addr dst)
+  assign (state . caller) (Addr src)
   assign (state . gas) 0xffffffffffffff
   assign (state . calldata) (B (abiCalldata sig (Vector.fromList xs)))
 
