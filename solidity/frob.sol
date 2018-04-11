@@ -7,7 +7,7 @@ contract PieLike {
 }
 
 contract GemLike {
-    function move(address,address,int) public;
+    function move(address,address,uint) public;
     function approve(address) public;
 }
 
@@ -113,6 +113,10 @@ contract Bin {
         ilks[ilk].flip = Flippy(flip);
         GemLike(ilks[ilk].gem).approve(flip);
     }
+    function flux(address gem, address lad, int wad) internal {
+        if (wad > 0) GemLike(gem).move(address(this), lad, uint( wad));
+        if (wad < 0) GemLike(gem).move(lad, address(this), uint(-wad));
+    }
     function frob(bytes32 ilk, uint ink, uint art) public {
         Urn storage u = urns[ilk][msg.sender];
         Ilk storage i = ilks[ilk];
@@ -125,19 +129,15 @@ contract Bin {
         u.art = art;
         i.Art = addi(i.Art, dart);
 
-        require(good(i, dart, art, art_, ink, ink_));
-
-        pie.flex(msg.sender, rmuli(i.rate, dart));
-        GemLike(i.gem).move(msg.sender, this, isub(ink_, ink));
-    }
-
-    function good(Ilk storage i, int dart, uint art, uint art_, uint ink, uint ink_) private view returns (bool) {
         bool calm = rmul(i.rate, i.Art) <= i.line;
         bool cool = dart <= 0;
         bool nice = rmul(ink, art_)   >= rmul(ink_, art);
         bool safe = rmul(ink, i.spot) >= rmul(art, i.rate);
 
-        return (( calm || cool ) && ( nice || safe ) && live);
+        require(( calm || cool ) && ( nice || safe ) && live);
+
+        pie.flex(msg.sender, rmuli(i.rate, dart));
+        flux(i.gem, msg.sender, isub(ink_, ink));
     }
 
     function bite(bytes32 ilk, address lad) public returns (uint) {
@@ -157,9 +157,9 @@ contract Bin {
         woe = add(woe, tab);
         return i.flip.kick({lad: lad, gal: this, tab: tab, lot: ink, bid: 0});
     }
-    function bump(bytes32 ilk, address lad, int wad) public {
+    function bump(bytes32 ilk, address lad, uint wad) public {
         GemLike(ilks[ilk].gem).move(msg.sender, this, wad);
-        urns[ilk][lad].ink = addi(urns[ilk][lad].ink, wad);
+        urns[ilk][lad].ink = add(urns[ilk][lad].ink, wad);
     }
 
     uint256 public woe;

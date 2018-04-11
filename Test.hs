@@ -69,23 +69,23 @@ prop_token = withTests testCount . property $ do
 someAccount :: Model v -> Gen Word160
 someAccount = Gen.element . Set.toList . accounts
 
-someGem :: Gen Gem
-someGem = Gen.element allGems
+someToken :: Gen Token
+someToken = Gen.element allTokens
 
 data Spawn (v :: * -> *) =
   Spawn Word160
   deriving (Eq, Show)
 
 data Mint (v :: * -> *) =
-  Mint Gem Word160 Word160 Word256
+  Mint Token Word160 Word160 Word256
   deriving (Eq, Show)
 
 data Transfer (v :: * -> *) =
-  Transfer Gem Word160 Word160 Word256
+  Transfer Token Word160 Word160 Word256
   deriving (Eq, Show)
 
 data BalanceOf (v :: * -> *) =
-  BalanceOf Word160 Gem Word160
+  BalanceOf Word160 Token Word160
   deriving (Eq, Show)
 
 instance HTraversable Spawn where
@@ -118,15 +118,15 @@ cmdMintGood ref =
   let
     gen s =
       Just $ do
-        gem <- someGem
+        token <- someToken
         dst <- someAccount s
-        let dstWad = balanceOf gem dst s
+        let dstWad = balanceOf token dst s
         wad <- someUpTo (min (maxBound - totalSupply s) (maxBound - dstWad))
-        pure (Mint gem root dst wad)
+        pure (Mint token root dst wad)
       
-    execute cmd@(Mint gem src dst wad) = do
+    execute cmd@(Mint token src dst wad) = do
       send ref $ Call
-        src (gemAddress gem)
+        src (tokenAddress token)
         "mint(address,uint256)"
         Nothing
         [AbiAddress (cast dst), AbiUInt 256 wad]
@@ -134,9 +134,9 @@ cmdMintGood ref =
   in
     Command gen execute
       [ Require $ \s _  -> do True
-      , Update $ \s (Mint gem src dst wad) _ ->
+      , Update $ \s (Mint token src dst wad) _ ->
           s { balances =
-                Map.adjust (+ wad) (gem, dst) (balances s) }
+                Map.adjust (+ wad) (token, dst) (balances s) }
       , ensureVoidSuccess
       ]
 
@@ -147,15 +147,15 @@ cmdMintUnauthorized ref =
       if Set.size (accounts s) < 2
       then Nothing
       else Just $ do
-        gem <- Gen.element [DAI, MKR]
+        token <- Gen.element [DAI, MKR]
         src <- Gen.filter (/= root) (someAccount s)
         dst <- someAccount s
         wad <- someUpTo maxBound
-        pure (Mint gem src dst wad)
+        pure (Mint token src dst wad)
       
-    execute (Mint gem src dst wad) = do
+    execute (Mint token src dst wad) = do
       send ref $ Call
-        src (gemAddress gem)
+        src (tokenAddress token)
         "mint(address,uint256)"
         Nothing
         [AbiAddress (cast dst), AbiUInt 256 wad]
@@ -165,53 +165,55 @@ cmdMintUnauthorized ref =
       [ ensureRevert
       ]
 
+cmdTransferGood :: IORef VM -> Command Gen (PropertyT IO) Model
 cmdTransferGood ref =
   let
     gen s =
       Just $ do
-        gem <- someGem
+        token <- someToken
         src <- someAccount s
         dst <- someAccount s
-        let srcWad = balances s ! (gem, src)
+        let srcWad = balances s ! (token, src)
         wad <- someUpTo srcWad
-        pure (Transfer gem src dst wad)
+        pure (Transfer token src dst wad)
 
-    run cmd@(Transfer gem src dst wad) = do
+    run cmd@(Transfer token src dst wad) = do
       debug ref cmd $ Call
-        src (gemAddress gem)
+        src (tokenAddress token)
         "transfer(address,uint256)"
         (Just AbiBoolType)
         [AbiAddress (cast dst), AbiUInt 256 wad]
 
   in Command gen run
-      [ Require $ \s (Transfer gem src dst wad) ->
-          balanceOf gem src s >= wad
-      , Update $ \s (Transfer gem src dst wad) _ ->
+      [ Require $ \s (Transfer token src dst wad) ->
+          balanceOf token src s >= wad
+      , Update $ \s (Transfer token src dst wad) _ ->
           s { balances =
-                Map.adjust (subtract wad) (gem, src) .
-                Map.adjust (+ wad) (gem, dst) $
+                Map.adjust (subtract wad) (token, src) .
+                Map.adjust (+ wad) (token, dst) $
                   balances s
             }
        , ensureSuccess (AbiBool True)
        ]
 
+cmdBalanceOf :: IORef VM -> Command Gen (PropertyT IO) Model
 cmdBalanceOf ref =
   let
     gen s =
-      Just (BalanceOf <$> someAccount s <*> someGem <*> someAccount s)
+      Just (BalanceOf <$> someAccount s <*> someToken <*> someAccount s)
         
-    run (BalanceOf src gem guy) =
-      send ref $ Call src (gemAddress gem)
+    run (BalanceOf src token guy) =
+      send ref $ Call src (tokenAddress token)
         "balanceOf(address)"
         (Just (AbiUIntType 256))
         [AbiAddress (cast guy)]
         
   in
     Command gen run
-      [ Ensure $ \s _ (BalanceOf _ gem guy) (vm, out) -> do
+      [ Ensure $ \s _ (BalanceOf _ token guy) (vm, out) -> do
           case out of
             Just (AbiUInt 256 x) ->
-              x === balanceOf gem guy s
+              x === balanceOf token guy s
             _ ->
               failure
       ]

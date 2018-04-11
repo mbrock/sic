@@ -10,8 +10,9 @@ import TestModel
 import qualified Data.Vector as Vector
 
 data Global = Global
-  { globalExample    :: Word160
-  , globalGemAddress :: Gem -> Word160
+  { globalExample :: Word160
+  , globalBinFactory :: Word160
+  , globalTokenAddress :: Token -> Word160
   , globalInitialVm  :: VM
   }
 
@@ -21,9 +22,10 @@ global = unsafePerformIO (load (vmForEthrunCreation ""))
 
 -- Rebind some names...
 Global
-  { globalExample    = example
-  , globalGemAddress = gemAddress
-  , globalInitialVm  = initialVm
+  { globalExample = example
+  , globalBinFactory = binFactory
+  , globalTokenAddress = tokenAddress
+  , globalInitialVm = initialVm
   } = global
 
 load :: VM -> IO Global
@@ -33,25 +35,36 @@ load vm = do
     loadFromEnv x =
       hexByteString "code" . encodeUtf8 . pack <$> getEnv x
 
-  exampleCode <- loadFromEnv "EXAMPLE_CODE"
-  factoryCode <- loadFromEnv "TOKEN_FACTORY_CODE"
+  exampleCode <-
+    loadFromEnv "EXAMPLE_CODE"
+  tokenFactoryCode <-
+    loadFromEnv "TOKEN_FACTORY_CODE"
+  binFactoryCode <-
+    loadFromEnv "BIN_FACTORY_CODE"
 
   pure . flip evalState vm $ do
-    example <- create exampleCode
-    factory <- create factoryCode
+    example <-
+      create exampleCode
+    tokenFactory <-
+      create tokenFactoryCode
+    binFactory <-
+      create binFactoryCode
 
     let
       makeToken symbol name =
-        call (Call root factory "make(bytes32,bytes32)" (Just AbiAddressType)
+        call (Call root tokenFactory "make(bytes32,bytes32)" (Just AbiAddressType)
           [AbiBytes 32 (padRight 32 symbol), AbiBytes 32 (padRight 32 name)])
 
-    Returned (AbiAddress dai) <- makeToken "DAI" "Dai"
-    Returned (AbiAddress mkr) <- makeToken "MKR" "Maker"
+    Returned (AbiAddress dai) <-
+      makeToken "DAI" "Dai"
+    Returned (AbiAddress mkr) <-
+      makeToken "MKR" "Maker"
 
     vm' <- get
     return Global
       { globalExample = cast example
-      , globalGemAddress =
+      , globalBinFactory = cast binFactory
+      , globalTokenAddress =
           cast . \case DAI -> dai
                        MKR -> mkr
       , globalInitialVm = vm'
