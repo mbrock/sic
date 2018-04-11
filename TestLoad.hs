@@ -1,5 +1,6 @@
-{-# Language OverloadedStrings #-}
 {-# Language LambdaCase #-}
+{-# Language NamedFieldPuns #-}
+{-# Language OverloadedStrings #-}
 
 module TestLoad where
 
@@ -8,34 +9,53 @@ import TestModel
 
 import qualified Data.Vector as Vector
 
+data Global = Global
+  { globalExample    :: Word160
+  , globalGemAddress :: Gem -> Word160
+  , globalInitialVm  :: VM
+  }
+
 -- Top-level global I/O!
 {-# NOINLINE global #-}
-global = unsafePerformIO (load emptyVm)
+global = unsafePerformIO (load (vmForEthrunCreation ""))
 
-((example, gemAddress), vm1) = global
+-- Rebind some names...
+Global
+  { globalExample    = example
+  , globalGemAddress = gemAddress
+  , globalInitialVm  = initialVm
+  } = global
 
-emptyVm :: VM
-emptyVm = vmForEthrunCreation ""
-
-load :: VM -> IO ((Word160, Gem -> Word160), VM)
+load :: VM -> IO Global
 load vm = do
-  exampleCode <-
-    hexByteString "code" . encodeUtf8 . pack <$> getEnv "EXAMPLE_CODE"
-  factoryCode <-
-    hexByteString "code" . encodeUtf8 . pack <$> getEnv "TOKEN_FACTORY_CODE"
-  pure . flip runState vm $ do
+
+  let
+    loadFromEnv x =
+      hexByteString "code" . encodeUtf8 . pack <$> getEnv x
+
+  exampleCode <- loadFromEnv "EXAMPLE_CODE"
+  factoryCode <- loadFromEnv "TOKEN_FACTORY_CODE"
+
+  pure . flip evalState vm $ do
     example <- create exampleCode
     factory <- create factoryCode
-    Returned (AbiAddress dai) <-
-      call (Call root factory "make(bytes32,bytes32)" (Just AbiAddressType)
-        [AbiBytes 32 (padRight 32 "DAI"), AbiBytes 32 (padRight 32 "Dai")])
-    Returned (AbiAddress mkr) <-
-      call (Call root factory "make(bytes32,bytes32)" (Just AbiAddressType)
-        [AbiBytes 32 (padRight 32 "MKR"), AbiBytes 32 (padRight 32 "Maker")])
-    return
-      ( cast example
-      , cast . \case DAI -> dai; MKR -> mkr
-      )
+
+    let
+      makeToken symbol name =
+        call (Call root factory "make(bytes32,bytes32)" (Just AbiAddressType)
+          [AbiBytes 32 (padRight 32 symbol), AbiBytes 32 (padRight 32 name)])
+
+    Returned (AbiAddress dai) <- makeToken "DAI" "Dai"
+    Returned (AbiAddress mkr) <- makeToken "MKR" "Maker"
+
+    vm' <- get
+    return Global
+      { globalExample = cast example
+      , globalGemAddress =
+          cast . \case DAI -> dai
+                       MKR -> mkr
+      , globalInitialVm = vm'
+      }
 
 create :: Num t => ByteString -> EVM t
 create x = do
@@ -96,7 +116,7 @@ run sig ret args = do
     continue = do
       setupCall $ Call root example sig (Just ret) args
       exec
-  case runState continue vm1 of
+  case runState continue initialVm of
     (VMSuccess (B out), _) ->
       case runGetOrFail (getAbi ret) (fromStrict out) of
         Right ("", _, x) -> Right x
@@ -104,6 +124,7 @@ run sig ret args = do
     (VMFailure problem, _) ->
       Left problem
 
+performReversion :: VM -> VM -> VM
 performReversion vm0 vm1 =
   case view result vm1 of
     Just (VMFailure _) ->
@@ -111,16 +132,29 @@ performReversion vm0 vm1 =
     _ ->
       vm1
 
+send :: MonadIO m => IORef VM -> Call -> m (VM, Maybe AbiValue)
 send ref c@(Call src dst sig ret xs) = do
   vm <- liftIO (readIORef ref)
   let vm' = performReversion vm (execState (call c) vm)
   liftIO (writeIORef ref vm')
+
   pure $ case (ret, view result vm') of
+
     (Just t, Just (VMSuccess (B out))) ->
       case runGetOrFail (getAbi t) (fromStrict out) of
-        Right ("", _, x) -> (vm', Just x)
-        _ -> error "ABI return value decoding error"
-    (Nothing, Just (VMSuccess (B ""))) -> (vm', Nothing)
-    (Nothing, Just (VMSuccess _)) -> error "unexpected return value"
-    (_, Just (VMFailure _)) -> (vm', Nothing)
-    (_, Nothing) -> error "weird VM state"
+        Right ("", _, x) ->
+          (vm', Just x)
+        _ ->
+          error "ABI return value decoding error"
+
+    (Nothing, Just (VMSuccess (B ""))) ->
+      (vm', Nothing)
+
+    (Nothing, Just (VMSuccess _)) ->
+      error "unexpected return value"
+
+    (_, Just (VMFailure _)) ->
+      (vm', Nothing)
+
+    (_, Nothing) ->
+      error "weird VM state"

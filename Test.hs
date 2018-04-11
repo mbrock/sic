@@ -50,10 +50,10 @@ debug_rpow x n =
       Call root example "rpow(int256,int256)" (Just (AbiIntType 256))
         [AbiInt 256 (unfixed x), AbiInt 256 n]
   in
-    runFromVM (execState (setupCall c) vm1) "rpow"
+    runFromVM (execState (setupCall c) initialVm) "rpow"
 
 prop_token = withTests testCount . property $ do
-  ref <- liftIO (newIORef vm1)
+  ref <- liftIO (newIORef initialVm)
   acts <-
     forAll $ Gen.sequential (Range.linear 0 100) initialState
       [ cmdSpawn

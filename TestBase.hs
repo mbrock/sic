@@ -9,7 +9,7 @@ import Control.Lens as X hiding (below, Indexed)
 import Control.Monad as X
 import Control.Monad.IO.Class as X
 import Control.Monad.State.Class as X (MonadState, get, modify)
-import Control.Monad.State.Strict as X (execState, runState)
+import Control.Monad.State.Strict as X (execState, evalState, runState)
 import Data.Monoid as X
 import Data.Binary.Get as X (runGetOrFail)
 import Data.ByteString as X (ByteString)

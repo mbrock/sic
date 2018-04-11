@@ -19,9 +19,10 @@ let
   }) {};
 
   coins =
-    dapphub.callSolidityPackage ({ }: 
+    dapphub.callSolidityPackage ({ dappsys }:
       dapphub.solidityPackage {
         name = "coins";
+        deps = [dappsys.ds-token];
         src = ./solidity;
       }
     ) {};
