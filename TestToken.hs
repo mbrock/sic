@@ -14,6 +14,7 @@ import qualified Data.Set as Set
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
 
+prop_token :: Property
 prop_token = withTests testCount . property $ do
   ref <- liftIO (newIORef initialVm)
   acts <-
@@ -28,12 +29,6 @@ prop_token = withTests testCount . property $ do
 
   executeSequential initialState acts
   debugIfFailed
-
-someAccount :: Model v -> Gen Word160
-someAccount = Gen.element . Set.toList . accounts
-
-someToken :: Gen Token
-someToken = Gen.element allTokens
 
 data Spawn (v :: * -> *) =
   Spawn Word160
@@ -87,6 +82,24 @@ instance AsCall (BalanceOf v) where
       (Just (AbiUIntType 256))
       [AbiAddress (cast guy)]
 
+mkSendCommand ref f = Command f (send ref . asCall)
+
+
+someAccount :: Model v -> Gen Word160
+someAccount = Gen.element . Set.toList . accounts
+
+someToken :: Gen Token
+someToken = Gen.element allTokens
+
+
+-- This command only affects the model.
+--
+-- It generates a random new account with zero balances.
+-- In the EVM, all such accounts exist implicitly.
+--
+-- If we want to run these tests against a real node,
+-- we might have to generate private/public keys here...
+--
 cmdSpawn :: Monad m => Command Gen m Model
 cmdSpawn =
   Command
@@ -100,93 +113,72 @@ cmdSpawn =
           }
     ]
 
-cmdMintGood :: IORef VM -> Command Gen (PropertyT IO) Model
-cmdMintGood ref =
-  let
-    gen s =
-      Just $ do
-        token <- someToken
-        dst <- someAccount s
-        let dstWad = balanceOf token dst s
-        wad <- someUpTo (min (maxBound - totalSupply s) (maxBound - dstWad))
-        pure (Mint token root dst wad)
+cmdMintGood ref = mkSendCommand ref
+  (\s ->
+     Just $ do
+       token <- someToken
+       dst <- someAccount s
+       let dstWad = balanceOf token dst s
+       wad <- someUpTo (min (maxBound - totalSupply s) (maxBound - dstWad))
+       pure (Mint token root dst wad))
 
-  in
-    Command gen (send ref . asCall)
-      [ Require $ \s _  -> do True
-      , Update $ \s (Mint token src dst wad) _ ->
-          s { balances =
-                Map.adjust (+ wad) (token, dst) (balances s) }
-      , ensureVoidSuccess
-      ]
+  [ ensureVoidSuccess
+  , Update $ \s (Mint token src dst wad) _ ->
+      s { balances =
+            Map.adjust (+ wad) (token, dst) (balances s) }
+  ]
 
-cmdMintUnauthorized :: IORef VM -> Command Gen (PropertyT IO) Model
-cmdMintUnauthorized ref =
-  let
-    gen s =
-      if Set.size (accounts s) < 2
-      then Nothing
-      else Just $ do
-        token <- Gen.element [DAI, MKR]
-        src <- Gen.filter (/= root) (someAccount s)
-        dst <- someAccount s
-        wad <- someUpTo maxBound
-        pure (Mint token src dst wad)
+cmdMintUnauthorized ref = mkSendCommand ref
+  (\s ->
+     if Set.size (accounts s) < 2
+     then Nothing
+     else Just $ do
+       token <- Gen.element [DAI, MKR]
+       src <- Gen.filter (/= root) (someAccount s)
+       dst <- someAccount s
+       wad <- someUpTo maxBound
+       pure (Mint token src dst wad))
+  [ensureRevert]
 
-  in
-    Command gen (send ref . asCall)
-      [ ensureRevert
-      ]
+cmdTransferGood ref = mkSendCommand ref
+  (\s ->
+     Just $ do
+       token <- someToken
+       src <- someAccount s
+       dst <- someAccount s
+       let srcWad = balances s ! (token, src)
+       wad <- someUpTo srcWad
+       pure (Transfer token src dst wad))
 
-cmdTransferGood :: IORef VM -> Command Gen (PropertyT IO) Model
-cmdTransferGood ref =
-  let
-    gen s =
-      Just $ do
-        token <- someToken
-        src <- someAccount s
-        dst <- someAccount s
-        let srcWad = balances s ! (token, src)
-        wad <- someUpTo srcWad
-        pure (Transfer token src dst wad)
+  [ ensureSuccess (AbiBool True)
+  , Require $ \s (Transfer token src dst wad) ->
+      balanceOf token src s >= wad
+  , Update $ \s (Transfer token src dst wad) _ ->
+      s { balances =
+            Map.adjust (subtract wad) (token, src) .
+            Map.adjust (+ wad) (token, dst) $
+              balances s
+        }
+  ]
 
-  in Command gen (send ref . asCall)
-      [ Require $ \s (Transfer token src dst wad) ->
-          balanceOf token src s >= wad
-      , Update $ \s (Transfer token src dst wad) _ ->
-          s { balances =
-                Map.adjust (subtract wad) (token, src) .
-                Map.adjust (+ wad) (token, dst) $
-                  balances s
-            }
-       , ensureSuccess (AbiBool True)
-       ]
+cmdTransferTooMuch ref = mkSendCommand ref
+  (\s ->
+     Just $ do
+       token <- someToken
+       src <- someAccount s
+       dst <- someAccount s
+       let srcWad = balances s ! (token, src)
+       wad <- Gen.integral (someAbove srcWad)
+       pure (Transfer token src dst wad))
+  [ensureRevert]
 
-cmdTransferTooMuch ref =
-  let
-    gen s =
-      Just $ do
-        token <- someToken
-        src <- someAccount s
-        dst <- someAccount s
-        let srcWad = balances s ! (token, src)
-        wad <- Gen.integral (someAbove srcWad)
-        pure (Transfer token src dst wad)
-
-  in Command gen (send ref . asCall) [ ensureRevert ]
-
-cmdBalanceOf :: IORef VM -> Command Gen (PropertyT IO) Model
-cmdBalanceOf ref =
-  let
-    gen s =
-      Just (BalanceOf <$> someAccount s <*> someToken <*> someAccount s)
-
-  in
-    Command gen (send ref . asCall)
-      [ Ensure $ \s _ (BalanceOf _ token guy) (vm, out) -> do
-          case out of
-            Just (AbiUInt 256 x) ->
-              x === balanceOf token guy s
-            _ ->
-              failure
-      ]
+cmdBalanceOf ref = mkSendCommand ref
+  (\s ->
+     Just (BalanceOf <$> someAccount s <*> someToken <*> someAccount s))
+  [ Ensure $ \s _ (BalanceOf _ token guy) (vm, out) -> do
+      case out of
+        Just (AbiUInt 256 x) ->
+          x === balanceOf token guy s
+        _ ->
+          failure
+  ]
