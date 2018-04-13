@@ -1,3 +1,4 @@
+{-# LANGUAGE StandaloneDeriving #-}
 {-# Language KindSignatures #-}
 {-# Language LambdaCase #-}
 {-# Language OverloadedStrings #-}
@@ -16,7 +17,7 @@ import qualified Hedgehog.Range as Range
 
 prop_token :: Property
 prop_token = withTests testCount . property $ do
-  ref <- liftIO (newIORef initialVm)
+  ref <- liftIO (newIORef undefined)
   acts <-
     forAll $ Gen.sequential (Range.linear 1 100) initialState
       [ gen_spawn
@@ -28,8 +29,11 @@ prop_token = withTests testCount . property $ do
       , bad_transfer_tooMuch ref
 
       , check_balanceOf ref
+
+      , good_form ref
       ]
 
+  liftIO (writeIORef ref initialVm)
   executeSequential initialState acts
   debugIfFailed
 
@@ -49,6 +53,10 @@ data BalanceOf (v :: * -> *) =
   BalanceOf Word160 Token Word160
   deriving (Eq, Show)
 
+data Form (v :: * -> *) =
+  Form Word160 Word160 Token
+  deriving (Eq, Show)
+
 instance HTraversable Spawn where
   htraverse f (Spawn x) = pure (Spawn x)
 
@@ -61,39 +69,41 @@ instance HTraversable Transfer where
 instance HTraversable BalanceOf where
   htraverse f (BalanceOf a b c) = pure (BalanceOf a b c)
 
-class AsCall a where
-  asCall :: a -> Call
+instance HTraversable Form where
+  htraverse f (Form a b c) = pure (Form a b c)
 
-instance AsCall (Transfer v) where
+class AsCall a where
+  asCall :: a Concrete -> Call
+
+instance AsCall Transfer where
   asCall (Transfer token src dst wad) =
     Call "transfer(address,uint256)"
       src (tokenAddress token)
       (Just AbiBoolType)
       [AbiAddress (cast dst), AbiUInt 256 wad]
 
-instance AsCall (Mint v) where
+instance AsCall Mint where
   asCall (Mint token src dst wad) =
     Call "mint(address,uint256)"
       src (tokenAddress token)
       Nothing
       [AbiAddress (cast dst), AbiUInt 256 wad]
 
-instance AsCall (BalanceOf v) where
+instance AsCall BalanceOf where
   asCall (BalanceOf src token guy) =
     Call "balanceOf(address)"
       src (tokenAddress token)
       (Just (AbiUIntType 256))
       [AbiAddress (cast guy)]
 
-mkSendCommand ref f = Command f (send ref . asCall)
+instance AsCall Form where
+  asCall (Form src dst token) =
+    Call "form(address)"
+    src dst
+    (Just (AbiBytesType 32))
+    [AbiAddress (cast (tokenAddress token))]
 
-
-someAccount :: Model v -> Gen Word160
-someAccount = Gen.element . Set.toList . accounts
-
-someToken :: Gen Token
-someToken = Gen.element allTokens
-
+mkSendCommand ref g f = Command f (fmap g . send ref . asCall)
 
 -- This command only affects the model.
 --
@@ -115,7 +125,22 @@ gen_spawn =
           }
     ]
 
-good_mint ref = mkSendCommand ref
+good_form ref = mkSendCommand ref
+  (\(_, out) ->
+     case out of
+       Just (AbiBytes 32 x) -> Id x
+       _ -> error "bad result of form(address)")
+
+  (\s ->
+     Just $ do
+       token <- someToken
+       pure (Form root vatAddress token))
+
+  [ Update $ \s (Form _ _ gem) o ->
+      s { ilks = Map.insert o (emptyIlk gem) (ilks s) }
+  ]
+
+good_mint ref = mkSendCommand ref id
   (\s ->
      Just $ do
        token <- someToken
@@ -126,7 +151,7 @@ good_mint ref = mkSendCommand ref
        -- or maxing out the destination's balance.
        wad <-
          someUpTo
-           (min (maxBound - totalSupply s)
+           (min (maxBound - totalSupply token s)
                 (maxBound - dstWad))
 
        pure (Mint token root dst wad))
@@ -137,7 +162,7 @@ good_mint ref = mkSendCommand ref
             Map.adjust (+ wad) (token, dst) (balances s) }
   ]
 
-bad_mint_unauthorized ref = mkSendCommand ref
+bad_mint_unauthorized ref = mkSendCommand ref id
   (\s ->
      if Set.size (accounts s) < 2
      then Nothing
@@ -149,7 +174,7 @@ bad_mint_unauthorized ref = mkSendCommand ref
        pure (Mint token src dst wad))
   [ensureRevert]
 
-good_transfer ref = mkSendCommand ref
+good_transfer ref = mkSendCommand ref id
   (\s ->
      Just $ do
        token <- someToken
@@ -170,7 +195,7 @@ good_transfer ref = mkSendCommand ref
         }
   ]
 
-bad_transfer_tooMuch ref = mkSendCommand ref
+bad_transfer_tooMuch ref = mkSendCommand ref id
   (\s ->
      Just $ do
        token <- someToken
@@ -181,7 +206,7 @@ bad_transfer_tooMuch ref = mkSendCommand ref
        pure (Transfer token src dst wad))
   [ensureRevert]
 
-check_balanceOf ref = mkSendCommand ref
+check_balanceOf ref = mkSendCommand ref id
   (\s ->
      Just (BalanceOf <$> someAccount s <*> someToken <*> someAccount s))
   [ Ensure $ \s _ (BalanceOf _ token guy) (vm, out) -> do

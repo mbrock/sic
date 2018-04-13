@@ -10,6 +10,7 @@ import Control.Monad as X
 import Control.Monad.IO.Class as X
 import Control.Monad.State.Class as X (MonadState, get, modify)
 import Control.Monad.State.Strict as X (execState, evalState, runState)
+import Data.Maybe as X
 import Data.Monoid as X
 import Data.Binary.Get as X (runGetOrFail)
 import Data.ByteString as X (ByteString)
@@ -69,11 +70,11 @@ maxRange = Range.linear 0 maxInt
 
 
 data X
-  = XMega Int | XMax
-  | XRange X X
-  | XSum X X | XProduct X X | XNegate X
-  | XSqrt X
-  | XConst Integer
+  = XMega !Int | XMax
+  | XRange !X !X
+  | XSum !X !X | XProduct !X !X | XNegate !X
+  | XSqrt !X
+  | XConst !Integer
   deriving (Eq, Show)
 
 rangeX :: MonadGen m => X -> m Integer

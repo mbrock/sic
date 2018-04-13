@@ -8,10 +8,11 @@ import TestBase
 import TestModel
 
 import qualified Data.Vector as Vector
+import qualified Data.ByteString as BS
 
 data Global = Global
   { globalExample :: Word160
-  , globalBinFactory :: Word160
+  , globalVatAddress :: Word160
   , globalTokenAddress :: Token -> Word160
   , globalInitialVm  :: VM
   }
@@ -23,7 +24,7 @@ global = unsafePerformIO (load (vmForEthrunCreation ""))
 -- Rebind some names...
 Global
   { globalExample = example
-  , globalBinFactory = binFactory
+  , globalVatAddress = vatAddress
   , globalTokenAddress = tokenAddress
   , globalInitialVm = initialVm
   } = global
@@ -37,52 +38,57 @@ load vm = do
 
   exampleCode <-
     loadFromEnv "EXAMPLE_CODE"
-  tokenFactoryCode <-
-    loadFromEnv "TOKEN_FACTORY_CODE"
-  binFactoryCode <-
-    loadFromEnv "BIN_FACTORY_CODE"
+  tokenCode <-
+    loadFromEnv "TOKEN_CODE"
+  binCode <-
+    loadFromEnv "BIN_CODE"
 
   pure . flip evalState vm $ do
     example <-
-      create exampleCode
-    tokenFactory <-
-      create tokenFactoryCode
-    binFactory <-
-      create binFactoryCode
+      create exampleCode []
 
     let
       makeToken symbol =
-        call (Call "make(bytes32,bytes32)" root tokenFactory
-                (Just AbiAddressType)
-                [ AbiBytes 32 (padRight 32 symbol)
-                , AbiBytes 32 (padRight 32 (symbol <> " token"))
-                ])
+        create tokenCode
+          [ AbiBytes 32 (padRight 32 symbol)
+          , AbiBytes 32 (padRight 32 (symbol <> " token"))
+          ]
 
-    Returned (AbiAddress dai) <- makeToken "DAI"
-    Returned (AbiAddress mkr) <- makeToken "MKR"
-    Returned (AbiAddress eth) <- makeToken "ETH"
-    Returned (AbiAddress dgx) <- makeToken "DGX"
-    Returned (AbiAddress omg) <- makeToken "OMG"
+    dai <- makeToken "DAI"
+    mkr <- makeToken "MKR"
+    eth <- makeToken "ETH"
+    dgx <- makeToken "DGX"
+    omg <- makeToken "OMG"
+
+    vat <-
+      create binCode
+        [AbiAddress dai, AbiAddress 0, AbiAddress 0]
 
     vm' <- get
     return Global
       { globalExample = cast example
-      , globalBinFactory = cast binFactory
+      , globalVatAddress = cast vat
       , globalTokenAddress =
           cast .
             \case DAI -> dai; MKR -> mkr; ETH -> eth; DGX -> dgx; OMG -> omg
       , globalInitialVm = vm'
       }
 
-create :: Num t => ByteString -> EVM t
-create x = do
+create :: Num t => ByteString -> [AbiValue] -> EVM t
+create x args = do
   resetState
   assign (state . gas) 0xffffffffffffff
   assign (state . caller) root
   Just i <- preuse (env . contracts . ix ethrunAddress . nonce)
   let a = newContractAddress ethrunAddress (cast i)
   env . contracts . ix ethrunAddress . nonce += 1
-  env . contracts . at a .= Just (initialContract x)
+
+  let
+    calldata =
+      BS.drop 4 (abiCalldata "foo()" (Vector.fromList args))
+
+  env . contracts . at a .=
+    Just (initialContract (x <> calldata))
   loadContract a
   exec >>= \case
     VMFailure e -> error (show e)

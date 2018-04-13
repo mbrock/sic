@@ -56,7 +56,6 @@ contract Bin {
 
     function era() internal view returns (uint48) { return uint48(now); }
 
-    uint constant WAD = 10 ** 18;
     uint constant RAY = 10 ** 27;
     function add(uint x, uint y) internal pure returns (uint z) {
         require((z = x + y) >= x);
@@ -66,9 +65,6 @@ contract Bin {
     }
     function mul(uint x, uint y) internal pure returns (uint z) {
         require(y == 0 || (z = x * y) / y == x);
-    }
-    function wmul(uint x, uint y) internal pure returns (uint z) {
-        z = add(mul(x, y), WAD / 2) / WAD;
     }
     function rmul(uint x, uint y) internal pure returns (uint z) {
         z = add(mul(x, y), RAY / 2) / RAY;

@@ -68,8 +68,8 @@ in stdenv.mkDerivation rec {
 
   envPhase = ''
     export EXAMPLE_CODE=$(./${contract} | tr -d '\n')
-    export TOKEN_FACTORY_CODE=$(cat ${ds-token-root}/out/DSTokenFactory.bin | tr -d '\n')
-    export BIN_FACTORY_CODE=$(cat ${coins-root}/out/FrobFactory.bin | tr -d '\n')
+    export TOKEN_CODE=$(cat ${ds-token-root}/out/DSToken.bin | tr -d '\n')
+    export BIN_CODE=$(cat ${coins-root}/out/Bin.bin | tr -d '\n')
     export DAPP_ROOT=${ds-token-root}
     export DAPP_FILE=${ds-token-root}/out/factory.sol.json
   '';
