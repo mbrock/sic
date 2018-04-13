@@ -7,11 +7,14 @@ import TestBase
 import qualified Data.Set as Set
 import qualified Data.Map as Map
 
-data Token = DAI | MKR
+data Token = DAI | MKR | ETH | DGX | OMG
   deriving (Eq, Ord, Show, Enum)
 
 allTokens :: [Token]
 allTokens = enumFrom DAI
+
+allGems :: [Token]
+allGems = enumFrom ETH
 
 data Model (v :: * -> *) = Model
   { accounts :: Set Word160

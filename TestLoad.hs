@@ -51,22 +51,26 @@ load vm = do
       create binFactoryCode
 
     let
-      makeToken symbol name =
-        call (Call root tokenFactory "make(bytes32,bytes32)" (Just AbiAddressType)
-          [AbiBytes 32 (padRight 32 symbol), AbiBytes 32 (padRight 32 name)])
+      makeToken symbol =
+        call (Call "make(bytes32,bytes32)" root tokenFactory
+                (Just AbiAddressType)
+                [ AbiBytes 32 (padRight 32 symbol)
+                , AbiBytes 32 (padRight 32 (symbol <> " token"))
+                ])
 
-    Returned (AbiAddress dai) <-
-      makeToken "DAI" "Dai"
-    Returned (AbiAddress mkr) <-
-      makeToken "MKR" "Maker"
+    Returned (AbiAddress dai) <- makeToken "DAI"
+    Returned (AbiAddress mkr) <- makeToken "MKR"
+    Returned (AbiAddress eth) <- makeToken "ETH"
+    Returned (AbiAddress dgx) <- makeToken "DGX"
+    Returned (AbiAddress omg) <- makeToken "OMG"
 
     vm' <- get
     return Global
       { globalExample = cast example
       , globalBinFactory = cast binFactory
       , globalTokenAddress =
-          cast . \case DAI -> dai
-                       MKR -> mkr
+          cast .
+            \case DAI -> dai; MKR -> mkr; ETH -> eth; DGX -> dgx; OMG -> omg
       , globalInitialVm = vm'
       }
 
@@ -93,15 +97,15 @@ data CallResult
   deriving (Show)
 
 data Call = Call
-  { callSrc :: Word160
+  { callSig :: Text
+  , callSrc :: Word160
   , callDst :: Word160
-  , callSig :: Text
   , callRet :: Maybe AbiType
   , callArg :: [AbiValue]
   } deriving (Eq, Show)
 
 setupCall :: Call -> EVM ()
-setupCall (Call src dst sig ret xs) = do
+setupCall (Call sig src dst ret xs) = do
   resetState
   loadContract (Addr dst)
   assign (state . caller) (Addr src)
@@ -109,7 +113,7 @@ setupCall (Call src dst sig ret xs) = do
   assign (state . calldata) (B (abiCalldata sig (Vector.fromList xs)))
 
 call :: Call -> EVM CallResult
-call info@(Call src dst sig ret xs) = do
+call info@(Call sig src dst ret xs) = do
   setupCall info
   exec >>= \case
     VMSuccess (B out) ->
@@ -127,7 +131,7 @@ run :: Text -> AbiType -> [AbiValue] -> Either Error AbiValue
 run sig ret args = do
   let
     continue = do
-      setupCall $ Call root example sig (Just ret) args
+      setupCall $ Call sig root example (Just ret) args
       exec
   case runState continue initialVm of
     (VMSuccess (B out), _) ->
@@ -146,7 +150,7 @@ performReversion vm0 vm1 =
       vm1
 
 send :: MonadIO m => IORef VM -> Call -> m (VM, Maybe AbiValue)
-send ref c@(Call src dst sig ret xs) = do
+send ref c@(Call sig src dst ret xs) = do
   vm <- liftIO (readIORef ref)
   let vm' = performReversion vm (execState (call c) vm)
   liftIO (writeIORef ref vm')
