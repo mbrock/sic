@@ -18,13 +18,16 @@ prop_token :: Property
 prop_token = withTests testCount . property $ do
   ref <- liftIO (newIORef initialVm)
   acts <-
-    forAll $ Gen.sequential (Range.linear 0 100) initialState
-      [ cmdSpawn
-      , cmdMintGood ref
-      , cmdMintUnauthorized ref
-      , cmdTransferGood ref
-      , cmdTransferTooMuch ref
-      , cmdBalanceOf ref
+    forAll $ Gen.sequential (Range.linear 1 100) initialState
+      [ gen_spawn
+
+      , good_mint ref
+      , bad_mint_unauthorized ref
+
+      , good_transfer ref
+      , bad_transfer_tooMuch ref
+
+      , check_balanceOf ref
       ]
 
   executeSequential initialState acts
@@ -100,10 +103,9 @@ someToken = Gen.element allTokens
 -- If we want to run these tests against a real node,
 -- we might have to generate private/public keys here...
 --
-cmdSpawn :: Monad m => Command Gen m Model
-cmdSpawn =
+gen_spawn =
   Command
-    (const (pure (Spawn . cast <$> anyInt)))
+    (const (pure (Spawn . cast <$> someUpTo 100000)))
     (const (pure ()))
     [ Require $ \s (Spawn x) ->
         Set.notMember x (accounts s)
@@ -113,13 +115,20 @@ cmdSpawn =
           }
     ]
 
-cmdMintGood ref = mkSendCommand ref
+good_mint ref = mkSendCommand ref
   (\s ->
      Just $ do
        token <- someToken
        dst <- someAccount s
        let dstWad = balanceOf token dst s
-       wad <- someUpTo (min (maxBound - totalSupply s) (maxBound - dstWad))
+
+       -- We can mint only up to maxing out the total supply
+       -- or maxing out the destination's balance.
+       wad <-
+         someUpTo
+           (min (maxBound - totalSupply s)
+                (maxBound - dstWad))
+
        pure (Mint token root dst wad))
 
   [ ensureVoidSuccess
@@ -128,7 +137,7 @@ cmdMintGood ref = mkSendCommand ref
             Map.adjust (+ wad) (token, dst) (balances s) }
   ]
 
-cmdMintUnauthorized ref = mkSendCommand ref
+bad_mint_unauthorized ref = mkSendCommand ref
   (\s ->
      if Set.size (accounts s) < 2
      then Nothing
@@ -140,7 +149,7 @@ cmdMintUnauthorized ref = mkSendCommand ref
        pure (Mint token src dst wad))
   [ensureRevert]
 
-cmdTransferGood ref = mkSendCommand ref
+good_transfer ref = mkSendCommand ref
   (\s ->
      Just $ do
        token <- someToken
@@ -161,7 +170,7 @@ cmdTransferGood ref = mkSendCommand ref
         }
   ]
 
-cmdTransferTooMuch ref = mkSendCommand ref
+bad_transfer_tooMuch ref = mkSendCommand ref
   (\s ->
      Just $ do
        token <- someToken
@@ -172,7 +181,7 @@ cmdTransferTooMuch ref = mkSendCommand ref
        pure (Transfer token src dst wad))
   [ensureRevert]
 
-cmdBalanceOf ref = mkSendCommand ref
+check_balanceOf ref = mkSendCommand ref
   (\s ->
      Just (BalanceOf <$> someAccount s <*> someToken <*> someAccount s))
   [ Ensure $ \s _ (BalanceOf _ token guy) (vm, out) -> do
