@@ -10,6 +10,7 @@ import Control.Monad as X
 import Control.Monad.IO.Class as X
 import Control.Monad.State.Class as X (MonadState, get, modify)
 import Control.Monad.State.Strict as X (execState, evalState, runState)
+import Data.Foldable as X (Foldable, toList, find)
 import Data.Maybe as X
 import Data.Monoid as X
 import Data.Binary.Get as X (runGetOrFail)
@@ -23,6 +24,7 @@ import Data.Set as X (Set)
 import Data.String as X (fromString)
 import Data.Text as X (Text, pack, unpack)
 import Data.Text.Encoding as X (encodeUtf8)
+import Data.Vector as X (Vector)
 import EVM as X
 import EVM.ABI as X
 import EVM.Concrete as X (Blob (B))

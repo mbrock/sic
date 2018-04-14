@@ -33,6 +33,10 @@ prop_token = withTests testCount . property $ do
 
       , good_form ref
       , good_getIlk ref
+
+      , good_file_spot ref
+      , good_file_rate ref
+      , good_file_line ref
       ]
 
   -- It's important that we initialize the reference here, and not
@@ -67,23 +71,37 @@ data GetIlk (v :: * -> *) =
   GetIlk Word160 Word160 (Var (Id Ilk) v)
   deriving (Eq, Show)
 
+data File (v :: * -> *) =
+  File Word160 Word160 (Var (Id Ilk) v) ByteString Word256
+  deriving (Eq, Show)
+
 instance HTraversable Spawn where
-  htraverse f (Spawn x) = pure (Spawn x)
+  htraverse f (Spawn x) =
+    pure (Spawn x)
 
 instance HTraversable Mint where
-  htraverse f (Mint a b c d) = pure (Mint a b c d)
+  htraverse f (Mint a b c d) =
+    pure (Mint a b c d)
 
 instance HTraversable Transfer where
-  htraverse f (Transfer a b c d) = pure (Transfer a b c d)
+  htraverse f (Transfer a b c d) =
+    pure (Transfer a b c d)
 
 instance HTraversable BalanceOf where
-  htraverse f (BalanceOf a b c) = pure (BalanceOf a b c)
+  htraverse f (BalanceOf a b c) =
+    pure (BalanceOf a b c)
 
 instance HTraversable Form where
-  htraverse f (Form a b c) = pure (Form a b c)
+  htraverse f (Form a b c) =
+    pure (Form a b c)
 
 instance HTraversable GetIlk where
-  htraverse f (GetIlk a b c) = GetIlk a b <$> htraverse f c
+  htraverse f (GetIlk a b c) =
+    GetIlk a b <$> htraverse f c
+
+instance HTraversable File where
+  htraverse f (File a b c d e) =
+    File a b <$> htraverse f c <*> pure d <*> pure e
 
 class AsCall a where
   asCall :: a Concrete -> Call
@@ -123,6 +141,13 @@ instance AsCall GetIlk where
       (Just (AbiArrayType 6 (AbiUIntType 256)))
       [AbiBytes 32 i]
 
+instance AsCall File where
+  asCall (File src dst (Var (Concrete (Id i))) what risk) =
+    Call "file(bytes32,bytes32,uint256)"
+      src dst
+      Nothing
+      [AbiBytes 32 i, AbiBytes 32 what, AbiUInt 256 risk]
+
 mkSendCommand ref g f = Command f (fmap g . send ref . asCall)
 
 -- This command only affects the model.
@@ -160,6 +185,27 @@ good_form ref = mkSendCommand ref
       s { ilks = Map.insert o (emptyIlk gem) (ilks s) }
   ]
 
+tokenFromAddress :: Word160 -> Token
+tokenFromAddress x =
+  case find ((== x) . tokenAddress) allTokens of
+    Just t -> t
+    _ -> error "invalid token address"
+
+ilkFromStruct :: Foldable v => v AbiValue -> Ilk
+ilkFromStruct v =
+  case toList v of
+    [AbiUInt 256 a, AbiUInt 256 b, AbiUInt 256 c,
+     AbiUInt 256 d, AbiUInt 256 e, AbiUInt 256 _] ->
+      Ilk
+        { spot = fixed a
+        , rate = fixed b
+        , line = cast c
+        , arts = cast d
+        , gem = tokenFromAddress (cast e)
+        }
+    _ ->
+      error "invalid ilk struct"
+
 -- This command runs the getter for an existing ilk ID
 -- and verifies that the struct's data matches the model.
 good_getIlk ref = mkSendCommand ref id
@@ -175,27 +221,46 @@ good_getIlk ref = mkSendCommand ref id
 
   , Ensure $ \model _ (GetIlk _ _ i) (vm, out) -> do
       case out of
-        Just (AbiArray 6 (AbiUIntType 256) v) ->
-
-          -- Assert that the EVM ilk struct matches the model.
-          case Vector.toList v of
-            [AbiUInt 256 evmSpot,
-             AbiUInt 256 evmRate,
-             AbiUInt 256 evmLine,
-             AbiUInt 256 evmArts,
-             AbiUInt 256 evmGem,
-             _] -> do
-
-              let Just ilk = Map.lookup i (ilks model)
-              fixed evmSpot === spot ilk
-              fixed evmRate === rate ilk
-              cast evmLine  === line ilk
-              cast evmArts  === arts ilk
-              cast evmGem   === tokenAddress (gem ilk)
-
+        Just (AbiArray _ _ v) -> do
+          Just (ilkFromStruct v) === Map.lookup i (ilks model)
         _ ->
           failure
   ]
+
+-- Parameterized command for randomly altering an ilk parameter.
+good_file what gen f ref = mkSendCommand ref id
+  (\model ->
+     if Map.null (ilks model)
+     then Nothing
+     else Just $ do
+       i <- Gen.element (Map.keys (ilks model))
+       x <- gen
+       pure (File root vatAddress i (padRight 32 what) x))
+
+  [ Require $ \model (File _ _ i _ _) ->
+      Map.member i (ilks model)
+
+  , ensureVoidSuccess
+
+  , Update $ \model (File _ _ i _ x) _ ->
+      model
+        { ilks = Map.adjust (f x) i (ilks model) }
+  ]
+
+good_file_spot =
+  good_file "spot"
+    (unfixed <$> anyRay)
+    (\x ilk -> ilk { spot = fixed x })
+
+good_file_rate =
+  good_file "rate"
+    (unfixed <$> anyRay)
+    (\x ilk -> ilk { rate = fixed x })
+
+good_file_line =
+  good_file "line"
+    anyInt
+    (\x ilk -> ilk { line = cast x })
 
 good_mint ref = mkSendCommand ref id
   (\s ->
