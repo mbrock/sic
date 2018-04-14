@@ -16,7 +16,7 @@ main = do
       putStrLn ""
 
   check "Dependencies"
-    [ ("DSToken", prop_token)
+    [ ("Full test suite", prop_allCommands)
     ]
     
   -- check "Sic basic math"

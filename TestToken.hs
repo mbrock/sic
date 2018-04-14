@@ -1,4 +1,4 @@
-{-# LANGUAGE StandaloneDeriving #-}
+{-# Language StandaloneDeriving #-}
 {-# Language KindSignatures #-}
 {-# Language LambdaCase #-}
 {-# Language OverloadedStrings #-}
@@ -16,28 +16,27 @@ import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
 import qualified Data.Vector as Vector
 
-prop_token :: Property
-prop_token = withTests testCount . property $ do
+allCommands ref =
+  [ gen_spawn
+  , good_mint ref
+  , fail_mint_unauthorized ref
+  , good_transfer ref
+  , fail_transfer_tooMuch ref
+  , check_balanceOf ref
+  , good_form ref
+  , good_getIlk ref
+  , good_file_spot ref
+  , good_file_rate ref
+  , good_file_line ref
+  ]
+
+prop_allCommands :: Property
+prop_allCommands = withTests testCount . property $ do
   ref <- liftIO (newIORef undefined)
   acts <-
-    forAll $ Gen.sequential (Range.linear 1 100) initialState
-      [ gen_spawn
-
-      , good_mint ref
-      , fail_mint_unauthorized ref
-
-      , good_transfer ref
-      , fail_transfer_tooMuch ref
-
-      , check_balanceOf ref
-
-      , good_form ref
-      , good_getIlk ref
-
-      , good_file_spot ref
-      , good_file_rate ref
-      , good_file_line ref
-      ]
+    forAll $
+      Gen.sequential (Range.linear 1 100)
+        initialState (allCommands ref)
 
   -- It's important that we initialize the reference here, and not
   -- before selecting the acts, because of how shrinking works
@@ -258,7 +257,7 @@ good_file_rate =
     (\x ilk -> ilk { rate = fixed x })
 
 good_file_line =
-  good_file "line"
+  good_file "linee"
     anyInt
     (\x ilk -> ilk { line = cast x })
 
