@@ -30,7 +30,7 @@ data Ilk = Ilk
 emptyIlk :: Token -> Ilk
 emptyIlk t = Ilk
   { spot = 0
-  , rate = 0
+  , rate = 1
   , line = 0
   , arts = 0
   , gem = t

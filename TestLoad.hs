@@ -11,10 +11,10 @@ import qualified Data.Vector as Vector
 import qualified Data.ByteString as BS
 
 data Global = Global
-  { globalExample :: Word160
-  , globalVatAddress :: Word160
-  , globalTokenAddress :: Token -> Word160
-  , globalInitialVm  :: VM
+  { globalExample :: !Word160
+  , globalVatAddress :: !Word160
+  , globalTokenAddress :: !(Token -> Word160)
+  , globalInitialVm  :: !VM
   }
 
 -- Top-level global I/O!

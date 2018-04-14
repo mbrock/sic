@@ -14,6 +14,7 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
+import qualified Data.Vector as Vector
 
 prop_token :: Property
 prop_token = withTests testCount . property $ do
@@ -23,17 +24,22 @@ prop_token = withTests testCount . property $ do
       [ gen_spawn
 
       , good_mint ref
-      , bad_mint_unauthorized ref
+      , fail_mint_unauthorized ref
 
       , good_transfer ref
-      , bad_transfer_tooMuch ref
+      , fail_transfer_tooMuch ref
 
       , check_balanceOf ref
 
       , good_form ref
+      , good_getIlk ref
       ]
 
+  -- It's important that we initialize the reference here, and not
+  -- before selecting the acts, because of how shrinking works
+  -- in the Property monad...
   liftIO (writeIORef ref initialVm)
+
   executeSequential initialState acts
   debugIfFailed
 
@@ -57,6 +63,10 @@ data Form (v :: * -> *) =
   Form Word160 Word160 Token
   deriving (Eq, Show)
 
+data GetIlk (v :: * -> *) =
+  GetIlk Word160 Word160 (Var (Id Ilk) v)
+  deriving (Eq, Show)
+
 instance HTraversable Spawn where
   htraverse f (Spawn x) = pure (Spawn x)
 
@@ -71,6 +81,9 @@ instance HTraversable BalanceOf where
 
 instance HTraversable Form where
   htraverse f (Form a b c) = pure (Form a b c)
+
+instance HTraversable GetIlk where
+  htraverse f (GetIlk a b c) = GetIlk a b <$> htraverse f c
 
 class AsCall a where
   asCall :: a Concrete -> Call
@@ -99,9 +112,16 @@ instance AsCall BalanceOf where
 instance AsCall Form where
   asCall (Form src dst token) =
     Call "form(address)"
-    src dst
-    (Just (AbiBytesType 32))
-    [AbiAddress (cast (tokenAddress token))]
+      src dst
+      (Just (AbiBytesType 32))
+      [AbiAddress (cast (tokenAddress token))]
+
+instance AsCall GetIlk where
+  asCall (GetIlk src dst (Var (Concrete (Id i)))) =
+    Call "ilks(bytes32)"
+      src dst
+      (Just (AbiArrayType 6 (AbiUIntType 256)))
+      [AbiBytes 32 i]
 
 mkSendCommand ref g f = Command f (fmap g . send ref . asCall)
 
@@ -140,6 +160,43 @@ good_form ref = mkSendCommand ref
       s { ilks = Map.insert o (emptyIlk gem) (ilks s) }
   ]
 
+-- This command runs the getter for an existing ilk ID
+-- and verifies that the struct's data matches the model.
+good_getIlk ref = mkSendCommand ref id
+  (\model ->
+     if Map.null (ilks model)
+     then Nothing
+     else Just $ do
+       i <- Gen.element (Map.keys (ilks model))
+       pure (GetIlk root vatAddress i))
+
+  [ Require $ \model (GetIlk _ _ i) ->
+      Map.member i (ilks model)
+
+  , Ensure $ \model _ (GetIlk _ _ i) (vm, out) -> do
+      case out of
+        Just (AbiArray 6 (AbiUIntType 256) v) ->
+
+          -- Assert that the EVM ilk struct matches the model.
+          case Vector.toList v of
+            [AbiUInt 256 evmSpot,
+             AbiUInt 256 evmRate,
+             AbiUInt 256 evmLine,
+             AbiUInt 256 evmArts,
+             AbiUInt 256 evmGem,
+             _] -> do
+
+              let Just ilk = Map.lookup i (ilks model)
+              fixed evmSpot === spot ilk
+              fixed evmRate === rate ilk
+              cast evmLine  === line ilk
+              cast evmArts  === arts ilk
+              cast evmGem   === tokenAddress (gem ilk)
+
+        _ ->
+          failure
+  ]
+
 good_mint ref = mkSendCommand ref id
   (\s ->
      Just $ do
@@ -162,7 +219,7 @@ good_mint ref = mkSendCommand ref id
             Map.adjust (+ wad) (token, dst) (balances s) }
   ]
 
-bad_mint_unauthorized ref = mkSendCommand ref id
+fail_mint_unauthorized ref = mkSendCommand ref id
   (\s ->
      if Set.size (accounts s) < 2
      then Nothing
@@ -195,7 +252,7 @@ good_transfer ref = mkSendCommand ref id
         }
   ]
 
-bad_transfer_tooMuch ref = mkSendCommand ref id
+fail_transfer_tooMuch ref = mkSendCommand ref id
   (\s ->
      Just $ do
        token <- someToken
