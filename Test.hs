@@ -49,7 +49,7 @@ main = do
     [ ("Full test suite", prop_allCommands (pure initialVm))
     ]
 
-  forM_ [1..100] $ \i ->
+  forM_ [1..25] $ \i ->
     checkFail ("system mutation " <> show i)
       [ ("Full test suite", prop_allCommands (mutate initialVm))
       ]
