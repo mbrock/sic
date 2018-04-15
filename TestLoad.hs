@@ -115,7 +115,7 @@ setupCall (Call sig src dst ret xs) = do
   resetState
   loadContract (Addr dst)
   assign (state . caller) (Addr src)
-  assign (state . gas) 0xffffffffffffff
+  assign (state . gas) 100000
   assign (state . calldata) (B (abiCalldata sig (Vector.fromList xs)))
 
 call :: Call -> EVM CallResult

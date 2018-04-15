@@ -30,18 +30,20 @@ allCommands ref =
   , good_file_line ref
   ]
 
-prop_allCommands :: Property
-prop_allCommands = withTests testCount . property $ do
+prop_allCommands :: PropertyT IO VM -> Property
+prop_allCommands vm0 = withTests testCount . property $ do
   ref <- liftIO (newIORef undefined)
   acts <-
     forAll $
       Gen.sequential (Range.linear 1 100)
         initialState (allCommands ref)
 
+  vm <- vm0
+
   -- It's important that we initialize the reference here, and not
   -- before selecting the acts, because of how shrinking works
   -- in the Property monad...
-  liftIO (writeIORef ref initialVm)
+  liftIO (writeIORef ref vm)
 
   executeSequential initialState acts
   debugIfFailed
@@ -257,7 +259,7 @@ good_file_rate =
     (\x ilk -> ilk { rate = fixed x })
 
 good_file_line =
-  good_file "linee"
+  good_file "line"
     anyInt
     (\x ilk -> ilk { line = cast x })
 

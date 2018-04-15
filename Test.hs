@@ -7,24 +7,91 @@ import TestBasicMath
 import TestDebug
 import TestToken
 
+import Hedgehog.Internal.Runner
+import Hedgehog.Internal.Config (Verbosity (Quiet))
+import qualified Hedgehog.Gen as Gen
+import qualified Hedgehog.Range as Range
+
+import System.IO.Silently (hSilence)
+import System.IO (stdout, stderr)
+import System.Random
+
+import qualified Data.ByteString as BS
+import Data.Word (Word8)
+
 main :: IO ()
 main = do
   let
-    check s ps = do
+    checkGood s ps = do
       good <- checkSequential $ Group s ps
       unless good exitFailure
       putStrLn ""
 
-  check "Dependencies"
-    [ ("Full test suite", prop_allCommands)
+    checkFail s ps = do
+      putStr ("Verifying failure of " <> s <> "... ")
+      good <-
+        hSilence [stdout, stderr] $
+          checkGroup
+            RunnerConfig
+              { runnerWorkers = Just 1
+              , runnerColor = Nothing
+              , runnerVerbosity = Just Quiet
+              }
+            (Group "" [(x, withShrinks 0 y) | (x, y) <- ps])
+      if good
+        then do
+          putStrLn "unfortunately, all tests passed!"
+          exitFailure
+        else do
+          putStrLn "tests failed, as expected."
+
+  checkGood "System"
+    [ ("Full test suite", prop_allCommands (pure initialVm))
     ]
-    
+
+  forM_ [1..100] $ \i ->
+    checkFail ("system mutation " <> show i)
+      [ ("Full test suite", prop_allCommands (mutate initialVm))
+      ]
+
+  putStrLn ""
+
   -- check "Sic basic math"
   --   [ ("iadd", prop_iadd (+))
   --   , ("imul", prop_imul (*))
   --   , ("rmul", prop_rmul (*))
   --   , ("rpow", prop_rpow (^) rpowMaxResult)
   --   ]
+
+
+
+-- This bytecode mutation testing code is very prototype.
+-- Right now it just alters one random opcode according to
+-- a stupid scheme given below.
+
+mutate :: MonadIO m => VM -> m VM
+mutate vm = do
+  let
+    code = vm ^. env . contracts . ix (cast vatAddress) . bytecode
+  i <- liftIO (randomRIO (0, BS.length code))
+  pure $
+    vm & env . contracts . ix (cast vatAddress) . bytecode . ix i %~ mutateOp
+
+mutateOp :: Word8 -> Word8
+mutateOp x =
+  case x of
+    1 -> 3
+    2 -> 4
+    3 -> 1
+    4 -> 2
+    5 -> 7
+    6 -> 4
+    7 -> 5
+    0x10 -> 0x12
+    0x11 -> 0x13
+    0x12 -> 0x10
+    0x13 -> 0x11
+    _ -> 0x00
 
 do_math x y name =
   case run (name <> "(int256,int256)") (AbiIntType 256) [AbiInt 256 x, AbiInt 256 y] of

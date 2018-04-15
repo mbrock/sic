@@ -55,7 +55,7 @@ in stdenv.mkDerivation rec {
     [z3
      (dapphub.haskellPackages.ghcWithPackages (x: with x; [
        ieee754 text hevm bytestring base16-bytestring lens
-       hedgehog
+       hedgehog silently
      ]))
     ];
 
