@@ -16,19 +16,39 @@ import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
 import qualified Data.Vector as Vector
 
-allCommands ref =
-  [ gen_spawn
-  , good_mint ref
-  , fail_mint_unauthorized ref
+----------------------------------------------------------------------------
+
+type ModelCommand =
+  Command Gen (PropertyT IO) Model
+
+goodCommands :: IORef VM -> [ModelCommand]
+goodCommands ref =
+  [ good_mint ref
   , good_transfer ref
-  , fail_transfer_tooMuch ref
-  , check_balanceOf ref
   , good_form ref
-  , good_getIlk ref
   , good_file_spot ref
   , good_file_rate ref
   , good_file_line ref
   ]
+
+failCommands :: IORef VM -> [ModelCommand]
+failCommands ref =
+  [ fail_mint_unauthorized ref
+  , fail_transfer_tooMuch ref
+  ]
+
+checkCommands :: IORef VM -> [ModelCommand]
+checkCommands ref =
+  [ check_balanceOf ref
+  , check_getIlk ref
+  ]
+
+allCommands :: IORef VM -> [ModelCommand]
+allCommands ref =
+  gen_spawn : concat
+    [goodCommands ref, failCommands ref, checkCommands ref]
+
+----------------------------------------------------------------------------
 
 prop_allCommands :: PropertyT IO VM -> Property
 prop_allCommands vm0 = withTests testCount . property $ do
@@ -48,108 +68,103 @@ prop_allCommands vm0 = withTests testCount . property $ do
   executeSequential initialState acts
   debugIfFailed
 
-data Spawn (v :: * -> *) =
-  Spawn Word160
-  deriving (Eq, Show)
+----------------------------------------------------------------------------
 
-data Mint (v :: * -> *) =
-  Mint Token Word160 Word160 Word256
-  deriving (Eq, Show)
+data Target = Box Word160 | Token Token deriving (Eq, Show)
+data C (c :: (* -> *) -> *) (v :: * -> *)
+  = C Word160 Target (c v) deriving (Eq, Show)
 
-data Transfer (v :: * -> *) =
-  Transfer Token Word160 Word160 Word256
-  deriving (Eq, Show)
+instance HTraversable c => HTraversable (C c) where
+  htraverse f (C x y c) = C <$> pure x <*> pure y <*> htraverse f c
 
-data BalanceOf (v :: * -> *) =
-  BalanceOf Word160 Token Word160
-  deriving (Eq, Show)
+----------------------------------------------------------------------------
 
-data Form (v :: * -> *) =
-  Form Word160 Word160 Token
-  deriving (Eq, Show)
-
-data GetIlk (v :: * -> *) =
-  GetIlk Word160 Word160 (Var (Id Ilk) v)
-  deriving (Eq, Show)
-
-data File (v :: * -> *) =
-  File Word160 Word160 (Var (Id Ilk) v) ByteString Word256
-  deriving (Eq, Show)
+data Spawn (v :: * -> *) = Spawn Word160               deriving (Eq, Show)
+data Mint (v :: * -> *) = Mint Word160 Word256         deriving (Eq, Show)
+data Transfer (v :: * -> *) = Transfer Word160 Word256 deriving (Eq, Show)
+data BalanceOf (v :: * -> *) = BalanceOf Word160       deriving (Eq, Show)
+data Form (v :: * -> *) = Form Token                   deriving (Eq, Show)
+data GetIlk v = GetIlk (Var (Id Ilk) v)                deriving (Eq, Show)
+data File v = File (Var (Id Ilk) v) ByteString Word256 deriving (Eq, Show)
 
 instance HTraversable Spawn where
-  htraverse f (Spawn x) =
-    pure (Spawn x)
-
+  htraverse f (Spawn x) = pure (Spawn x)
 instance HTraversable Mint where
-  htraverse f (Mint a b c d) =
-    pure (Mint a b c d)
-
+  htraverse f (Mint a b) = pure (Mint a b)
 instance HTraversable Transfer where
-  htraverse f (Transfer a b c d) =
-    pure (Transfer a b c d)
-
+  htraverse f (Transfer a b) = pure (Transfer a b)
 instance HTraversable BalanceOf where
-  htraverse f (BalanceOf a b c) =
-    pure (BalanceOf a b c)
-
+  htraverse f (BalanceOf a) = pure (BalanceOf a)
 instance HTraversable Form where
-  htraverse f (Form a b c) =
-    pure (Form a b c)
-
+  htraverse f (Form a) = pure (Form a)
 instance HTraversable GetIlk where
-  htraverse f (GetIlk a b c) =
-    GetIlk a b <$> htraverse f c
-
+  htraverse f (GetIlk a) = GetIlk <$> htraverse f a
 instance HTraversable File where
-  htraverse f (File a b c d e) =
-    File a b <$> htraverse f c <*> pure d <*> pure e
+  htraverse f (File a b c) = File <$> htraverse f a <*> pure b <*> pure c
 
-class AsCall a where
-  asCall :: a Concrete -> Call
+----------------------------------------------------------------------------
 
-instance AsCall Transfer where
-  asCall (Transfer token src dst wad) =
-    Call "transfer(address,uint256)"
-      src (tokenAddress token)
-      (Just AbiBoolType)
-      [AbiAddress (cast dst), AbiUInt 256 wad]
+class ToABI a where
+  toABI :: a Concrete -> (Text, Maybe AbiType, [AbiValue])
 
-instance AsCall Mint where
-  asCall (Mint token src dst wad) =
-    Call "mint(address,uint256)"
-      src (tokenAddress token)
-      Nothing
-      [AbiAddress (cast dst), AbiUInt 256 wad]
+toCall (C src target c) =
+  let
+    (sig, t, xs) = toABI c
+    dst =
+      case target of
+        Box x -> x
+        Token x -> tokenAddress x
+  in
+    Call sig src dst t xs
 
-instance AsCall BalanceOf where
-  asCall (BalanceOf src token guy) =
-    Call "balanceOf(address)"
-      src (tokenAddress token)
-      (Just (AbiUIntType 256))
-      [AbiAddress (cast guy)]
+mkSendCommand ref g f = Command f (fmap g . send ref . toCall)
 
-instance AsCall Form where
-  asCall (Form src dst token) =
-    Call "form(address)"
-      src dst
-      (Just (AbiBytesType 32))
-      [AbiAddress (cast (tokenAddress token))]
+----------------------------------------------------------------------------
 
-instance AsCall GetIlk where
-  asCall (GetIlk src dst (Var (Concrete (Id i)))) =
-    Call "ilks(bytes32)"
-      src dst
-      (Just (AbiArrayType 6 (AbiUIntType 256)))
-      [AbiBytes 32 i]
+instance ToABI Transfer where
+  toABI (Transfer dst wad) =
+    ( "transfer(address,uint256)"
+    , Just AbiBoolType
+    , [AbiAddress (cast dst), AbiUInt 256 wad]
+    )
 
-instance AsCall File where
-  asCall (File src dst (Var (Concrete (Id i))) what risk) =
-    Call "file(bytes32,bytes32,uint256)"
-      src dst
-      Nothing
-      [AbiBytes 32 i, AbiBytes 32 what, AbiUInt 256 risk]
+instance ToABI Mint where
+  toABI (Mint guy wad) =
+    ( "mint(address,uint256)"
+    , Nothing
+    , [AbiAddress (cast guy), AbiUInt 256 wad]
+    )
 
-mkSendCommand ref g f = Command f (fmap g . send ref . asCall)
+instance ToABI BalanceOf where
+  toABI (BalanceOf guy) =
+    ( "balanceOf(address)"
+    , Just (AbiUIntType 256)
+    , [AbiAddress (cast guy)]
+    )
+
+instance ToABI Form where
+  toABI (Form token) =
+    ( "form(address)"
+    , Just (AbiBytesType 32)
+    , [AbiAddress (cast (tokenAddress token))]
+    )
+
+instance ToABI GetIlk where
+  toABI (GetIlk (Var (Concrete (Id i)))) =
+    ( "ilks(bytes32)"
+    , Just (AbiArrayType 6 (AbiUIntType 256))
+    , [AbiBytes 32 i]
+    )
+
+instance ToABI File where
+  toABI (File (Var (Concrete (Id i))) what risk) =
+    ( "file(bytes32,bytes32,uint256)"
+    , Nothing
+    , [AbiBytes 32 i, AbiBytes 32 what, AbiUInt 256 risk]
+    )
+
+----------------------------------------------------------------------------
+
 
 -- This command only affects the model.
 --
@@ -180,9 +195,9 @@ good_form ref = mkSendCommand ref
   (\s ->
      Just $ do
        token <- someToken
-       pure (Form root vatAddress token))
+       pure (C root (Box vatAddress) (Form token)))
 
-  [ Update $ \s (Form _ _ gem) o ->
+  [ Update $ \s (C _ _ (Form gem)) o ->
       s { ilks = Map.insert o (emptyIlk gem) (ilks s) }
   ]
 
@@ -209,18 +224,18 @@ ilkFromStruct v =
 
 -- This command runs the getter for an existing ilk ID
 -- and verifies that the struct's data matches the model.
-good_getIlk ref = mkSendCommand ref id
+check_getIlk ref = mkSendCommand ref id
   (\model ->
      if Map.null (ilks model)
      then Nothing
      else Just $ do
        i <- Gen.element (Map.keys (ilks model))
-       pure (GetIlk root vatAddress i))
+       pure (C root (Box vatAddress) (GetIlk i)))
 
-  [ Require $ \model (GetIlk _ _ i) ->
+  [ Require $ \model (C _ _ (GetIlk i)) ->
       Map.member i (ilks model)
 
-  , Ensure $ \model _ (GetIlk _ _ i) (vm, out) -> do
+  , Ensure $ \model _ (C _ _ (GetIlk i)) (vm, out) -> do
       case out of
         Just (AbiArray _ _ v) -> do
           Just (ilkFromStruct v) === Map.lookup i (ilks model)
@@ -236,14 +251,14 @@ good_file what gen f ref = mkSendCommand ref id
      else Just $ do
        i <- Gen.element (Map.keys (ilks model))
        x <- gen
-       pure (File root vatAddress i (padRight 32 what) x))
+       pure (C root (Box vatAddress) (File i (padRight 32 what) x)))
 
-  [ Require $ \model (File _ _ i _ _) ->
+  [ Require $ \model (C _ _ (File i _ _)) ->
       Map.member i (ilks model)
 
   , ensureVoidSuccess
 
-  , Update $ \model (File _ _ i _ x) _ ->
+  , Update $ \model (C _ _ (File i _ x)) _ ->
       model
         { ilks = Map.adjust (f x) i (ilks model) }
   ]
@@ -277,10 +292,10 @@ good_mint ref = mkSendCommand ref id
            (min (maxBound - totalSupply token s)
                 (maxBound - dstWad))
 
-       pure (Mint token root dst wad))
+       pure (C root (Token token) (Mint dst wad)))
 
   [ ensureVoidSuccess
-  , Update $ \s (Mint token src dst wad) _ ->
+  , Update $ \s (C src (Token token) (Mint dst wad)) _ ->
       s { balances =
             Map.adjust (+ wad) (token, dst) (balances s) }
   ]
@@ -294,7 +309,7 @@ fail_mint_unauthorized ref = mkSendCommand ref id
        src <- Gen.filter (/= root) (someAccount s)
        dst <- someAccount s
        wad <- someUpTo maxBound
-       pure (Mint token src dst wad))
+       pure (C src (Token token) (Mint dst wad)))
   [ensureRevert]
 
 good_transfer ref = mkSendCommand ref id
@@ -305,12 +320,12 @@ good_transfer ref = mkSendCommand ref id
        dst <- someAccount s
        let srcWad = balances s ! (token, src)
        wad <- someUpTo srcWad
-       pure (Transfer token src dst wad))
+       pure (C src (Token token) (Transfer dst wad)))
 
   [ ensureSuccess (AbiBool True)
-  , Require $ \s (Transfer token src dst wad) ->
+  , Require $ \s (C src (Token token) (Transfer dst wad)) ->
       balanceOf token src s >= wad
-  , Update $ \s (Transfer token src dst wad) _ ->
+  , Update $ \s (C src (Token token) (Transfer dst wad)) _ ->
       s { balances =
             Map.adjust (subtract wad) (token, src) .
             Map.adjust (+ wad) (token, dst) $
@@ -326,13 +341,17 @@ fail_transfer_tooMuch ref = mkSendCommand ref id
        dst <- someAccount s
        let srcWad = balances s ! (token, src)
        wad <- Gen.integral (someAbove srcWad)
-       pure (Transfer token src dst wad))
+       pure (C src (Token token) (Transfer dst wad)))
   [ensureRevert]
 
 check_balanceOf ref = mkSendCommand ref id
   (\s ->
-     Just (BalanceOf <$> someAccount s <*> someToken <*> someAccount s))
-  [ Ensure $ \s _ (BalanceOf _ token guy) (vm, out) -> do
+     Just $ do
+       src <- someAccount s
+       guy <- someAccount s
+       token <- someToken
+       pure (C src (Token token) (BalanceOf guy)))
+  [ Ensure $ \s _ (C _ (Token token) (BalanceOf guy)) (vm, out) -> do
       case out of
         Just (AbiUInt 256 x) ->
           x === balanceOf token guy s

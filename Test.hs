@@ -7,8 +7,6 @@ import TestBasicMath
 import TestDebug
 import TestToken
 
-import Hedgehog.Internal.Runner
-import Hedgehog.Internal.Config (Verbosity (Quiet))
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
 
@@ -31,12 +29,7 @@ main = do
       putStr ("Verifying failure of " <> s <> "... ")
       good <-
         hSilence [stdout, stderr] $
-          checkGroup
-            RunnerConfig
-              { runnerWorkers = Just 1
-              , runnerColor = Nothing
-              , runnerVerbosity = Just Quiet
-              }
+          checkSequential
             (Group "" [(x, withShrinks 0 y) | (x, y) <- ps])
       if good
         then do
@@ -94,7 +87,10 @@ mutateOp x =
     _ -> 0x00
 
 do_math x y name =
-  case run (name <> "(int256,int256)") (AbiIntType 256) [AbiInt 256 x, AbiInt 256 y] of
+  case
+    run (name <> "(int256,int256)") (AbiIntType 256)
+      [AbiInt 256 x, AbiInt 256 y]
+  of
     Right (AbiInt 256 z) ->
       Right z
     Left e ->
