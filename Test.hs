@@ -19,6 +19,8 @@ import Data.Word (Word8)
 
 main :: IO ()
 main = do
+  resetDebug
+
   let
     checkGood s ps = do
       good <- checkSequential $ Group s ps
