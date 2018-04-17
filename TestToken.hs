@@ -19,35 +19,38 @@ import qualified Data.Vector as Vector
 ----------------------------------------------------------------------------
 
 type ModelCommand =
-  Command Gen (PropertyT IO) Model
+  IORef VM -> Command Gen (PropertyT IO) Model
 
-goodCommands :: IORef VM -> [ModelCommand]
-goodCommands ref =
-  [ good_mint ref
-  , good_transfer ref
-  , good_form ref
-  , good_file_spot ref
-  , good_file_rate ref
-  , good_file_line ref
-  , good_frob ref
+goodCommands :: [ModelCommand]
+goodCommands =
+  [ good_mint
+  , good_transfer
+  , good_form
+  , good_file_spot
+  , good_file_rate
+  , good_file_line
+  , good_frob
   ]
 
-failCommands :: IORef VM -> [ModelCommand]
-failCommands ref =
-  [ fail_mint_unauthorized ref
-  , fail_transfer_tooMuch ref
+failCommands :: [ModelCommand]
+failCommands =
+  [ fail_mint_unauthorized
+  , fail_transfer_tooMuch
   ]
 
-checkCommands :: IORef VM -> [ModelCommand]
-checkCommands ref =
-  [ check_balanceOf ref
-  , check_getIlk ref
+checkCommands :: [ModelCommand]
+checkCommands =
+  [ check_balanceOf
+  , check_getIlk
   ]
 
-allCommands :: IORef VM -> [ModelCommand]
-allCommands ref =
-  gen_spawn : concat
-    [goodCommands ref, failCommands ref, checkCommands ref]
+allCommands :: [ModelCommand]
+allCommands =
+  const gen_spawn : concat
+    [ goodCommands
+    , failCommands
+    , checkCommands
+    ]
 
 ----------------------------------------------------------------------------
 
@@ -57,7 +60,7 @@ prop_allCommands vm0 = withTests testCount . property $ do
   acts <-
     forAll $
       Gen.sequential (Range.linear 1 100)
-        initialState (allCommands ref)
+        initialState (map ($ ref) allCommands)
 
   vm <- vm0
 
