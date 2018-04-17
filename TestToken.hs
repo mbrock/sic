@@ -29,6 +29,7 @@ goodCommands ref =
   , good_file_spot ref
   , good_file_rate ref
   , good_file_line ref
+  , good_frob ref
   ]
 
 failCommands :: IORef VM -> [ModelCommand]
@@ -66,7 +67,6 @@ prop_allCommands vm0 = withTests testCount . property $ do
   liftIO (writeIORef ref vm)
 
   executeSequential initialState acts
-  debugIfFailed
 
 ----------------------------------------------------------------------------
 
@@ -86,6 +86,7 @@ data BalanceOf (v :: * -> *) = BalanceOf Word160       deriving (Eq, Show)
 data Form (v :: * -> *) = Form Token                   deriving (Eq, Show)
 data GetIlk v = GetIlk (Var (Id Ilk) v)                deriving (Eq, Show)
 data File v = File (Var (Id Ilk) v) ByteString Word256 deriving (Eq, Show)
+data Frob v = Frob (Var (Id Ilk) v) Word256 Word256    deriving (Eq, Show)
 
 instance HTraversable Spawn where
   htraverse f (Spawn x) = pure (Spawn x)
@@ -101,6 +102,8 @@ instance HTraversable GetIlk where
   htraverse f (GetIlk a) = GetIlk <$> htraverse f a
 instance HTraversable File where
   htraverse f (File a b c) = File <$> htraverse f a <*> pure b <*> pure c
+instance HTraversable Frob where
+  htraverse f (Frob a b c) = Frob <$> htraverse f a <*> pure b <*> pure c
 
 ----------------------------------------------------------------------------
 
@@ -117,7 +120,8 @@ toCall (C src target c) =
   in
     Call sig src dst t xs
 
-mkSendCommand ref g f = Command f (fmap g . send ref . toCall)
+mkSendCommand ref g f =
+  Command f (\c@(C _ _ x) -> fmap g (sendDebug ref x (toCall c)))
 
 ----------------------------------------------------------------------------
 
@@ -145,7 +149,7 @@ instance ToABI BalanceOf where
 instance ToABI Form where
   toABI (Form token) =
     ( "form(address)"
-    , Just (AbiBytesType 32)
+    , Just (AbiUIntType 256)
     , [AbiAddress (cast (tokenAddress token))]
     )
 
@@ -153,14 +157,21 @@ instance ToABI GetIlk where
   toABI (GetIlk (Var (Concrete (Id i)))) =
     ( "ilks(bytes32)"
     , Just (AbiArrayType 6 (AbiUIntType 256))
-    , [AbiBytes 32 i]
+    , [AbiUInt 256 (cast i)]
     )
 
 instance ToABI File where
   toABI (File (Var (Concrete (Id i))) what risk) =
     ( "file(bytes32,bytes32,uint256)"
     , Nothing
-    , [AbiBytes 32 i, AbiBytes 32 what, AbiUInt 256 risk]
+    , [AbiUInt 256 (cast i), AbiBytes 32 what, AbiUInt 256 risk]
+    )
+
+instance ToABI Frob where
+  toABI (Frob (Var (Concrete (Id i))) ink art) =
+    ( "frob(bytes32,uint256,uint256)"
+    , Nothing
+    , [AbiUInt 256 (cast i), AbiUInt 256 ink, AbiUInt 256 art]
     )
 
 ----------------------------------------------------------------------------
@@ -189,7 +200,7 @@ gen_spawn =
 good_form ref = mkSendCommand ref
   (\(_, out) ->
      case out of
-       Just (AbiBytes 32 x) -> Id x
+       Just (AbiUInt 256 x) -> Id (cast x)
        _ -> error "bad result of form(address)")
 
   (\s ->
@@ -358,3 +369,14 @@ check_balanceOf ref = mkSendCommand ref id
         _ ->
           failure
   ]
+
+good_frob ref = mkSendCommand ref id
+  (\model -> do
+      guard . not . empty $ ilks model
+      Just $ do
+        src <- someAccount model
+        ilk <- someIlk model
+        x <- anyInt
+
+        pure (C src (Box vatAddress) (Frob ilk x 0)))
+  [ensureVoidSuccess]

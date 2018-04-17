@@ -33,17 +33,18 @@ let
       }
   ) {};
 
-  # coins =
-  #   dapphub.callSolidityPackage ({ dappsys }:
-  #     dapphub.solidityPackage {
-  #       name = "coins";
-  #       deps = [dappsys.ds-token];
-  #       src = ./solidity;
-  #     }
-  #   ) {};
+  aux =
+    dapphub.callSolidityPackage ({ dappsys }:
+      dapphub.solidityPackage {
+        name = "aux";
+        deps = [dappsys.ds-token];
+        src = ./solidity;
+      }
+    ) {};
 
   ds-token-root = "${dapphub.dappsys.ds-token}/dapp/ds-token";
   coins-root = "${coins}/dapp/coins";
+  aux-root = "${aux}/dapp/aux";
 
 in stdenv.mkDerivation rec {
   name = "sic-${version}";
@@ -81,13 +82,18 @@ in stdenv.mkDerivation rec {
     fi
   '';
 
-  envPhase = ''
-    export EXAMPLE_CODE=$(./${contract} | tr -d '\n')
-    export TOKEN_CODE=$(cat ${ds-token-root}/out/DSToken.bin | tr -d '\n')
-    export BIN_CODE=$(cat ${coins-root}/out/Bin.bin | tr -d '\n')
-    export DAPP_ROOT=${ds-token-root}
-    export DAPP_FILE=${ds-token-root}/out/factory.sol.json
-  '';
+  envPhase =
+    let
+      solidity = root: name:
+        "$(cat ${root}/out/${name}.bin | tr -d '\n')";
+    in ''
+      export EXAMPLE_CODE=$(./${contract} | tr -d '\n')
+      export TOKEN_CODE=${solidity ds-token-root "DSToken"}
+      export BIN_CODE=${solidity coins-root "Bin"}
+      export PIE_CODE=${solidity aux-root "Pie"}
+      export DAPP_ROOT=${coins-root}
+      export DAPP_FILE=${coins-root}/out/frob.t.sol.json
+    '';
 
   ghci = ''
     ${envPhase}

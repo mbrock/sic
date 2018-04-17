@@ -62,7 +62,8 @@ minInt = - (2 ^ 255)
 maxRange :: Integral a => Range a
 maxRange = Range.linear 0 maxInt
 
-
+empty :: Foldable t => t a -> Bool
+empty = null . toList
 
 
 

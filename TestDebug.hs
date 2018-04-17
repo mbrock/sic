@@ -18,8 +18,10 @@ failedVmStop :: IORef Bool
 {-# NOINLINE failedVmStop #-}
 failedVmStop = unsafePerformIO (newIORef True)
 
-debug :: (MonadIO m, Show a) => IORef VM -> a -> Call -> m (VM, Maybe AbiValue)
-debug ref cmd c = do
+sendDebug
+  :: (MonadIO m, Show a) => IORef VM -> a -> Call
+  -> m (VM, Maybe AbiValue)
+sendDebug ref cmd c = do
   vm0 <- liftIO (readIORef ref)
   (vm1, x) <- send ref c
   case view result vm1 of
@@ -31,7 +33,7 @@ debug ref cmd c = do
             setupCall c
             pushTrace (EntryTrace (pack (show cmd)))
         liftIO (writeIORef failedVm (Just (vm', pack (show cmd))))
-        liftIO (writeIORef failedVmStop False)
+--        liftIO (writeIORef failedVmStop False)
     _ ->
       pure ()
   pure (vm1, x)
@@ -72,8 +74,8 @@ runFromVM vm msg = do
     UiVmScreen ui -> return (view uiVm ui)
     _ -> error "internal error: customMain returned prematurely"
 
-debugIfFailed :: MonadIO m => m ()
-debugIfFailed = do
+debug :: MonadIO m => m ()
+debug = do
   liftIO (readIORef failedVm) >>=
     \case
       Nothing -> pure ()

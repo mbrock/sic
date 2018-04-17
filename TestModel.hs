@@ -41,7 +41,7 @@ data Urn = Urn
   , art :: !Integer
   } deriving (Eq, Show)
 
-newtype Id a = Id ByteString
+newtype Id a = Id Integer
   deriving (Ord, Eq, Show)
 
 data Model v =
@@ -49,6 +49,7 @@ data Model v =
     { accounts :: !(Set Word160)
     , balances :: !(Map (Token, Word160) Word256)
     , ilks     :: !(Map (Var (Id Ilk) v) Ilk)
+    , urns     :: !(Map (Var (Id Ilk) v, Word160) Urn)
     }
 
 deriving instance Show1 v => Show (Model v)
@@ -58,6 +59,7 @@ initialState = Model
   { accounts = Set.fromList [root]
   , balances = zeroBalancesFor root
   , ilks     = Map.empty
+  , urns     = Map.empty
   }
 
 someAccount :: Model v -> Gen Word160
@@ -65,6 +67,9 @@ someAccount = Gen.element . Set.toList . accounts
 
 someToken :: Gen Token
 someToken = Gen.element allTokens
+
+someIlk :: Model v -> Gen (Var (Id Ilk) v)
+someIlk = Gen.element . Map.keys . ilks
 
 zeroBalancesFor :: Word160 -> Map (Token, Word160) Word256
 zeroBalancesFor x = Map.fromList [((g, x), 0) | g <- allTokens]

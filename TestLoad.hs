@@ -39,7 +39,7 @@ load vm = do
   exampleCode <-
     loadFromEnv "EXAMPLE_CODE"
   tokenCode <-
-    loadFromEnv "TOKEN_CODE"
+    loadFromEnv "PIE_CODE"
   binCode <-
     loadFromEnv "BIN_CODE"
 
