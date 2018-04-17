@@ -1,7 +1,8 @@
-{-# Language StandaloneDeriving #-}
+{-# Language ConstraintKinds #-}
 {-# Language KindSignatures #-}
 {-# Language LambdaCase #-}
 {-# Language OverloadedStrings #-}
+{-# Language StandaloneDeriving #-}
 
 module TestToken where
 
@@ -21,6 +22,14 @@ import qualified Data.Vector as Vector
 type ModelCommand =
   IORef VM -> Command Gen (PropertyT IO) Model
 
+-- These commands have no effect on the real system;
+-- they only affect the model in some preparatory way.
+pseudoCommands :: [ModelCommand]
+pseudoCommands =
+  [ const gen_spawn
+  ]
+
+-- These commands should succeed and update the model.
 goodCommands :: [ModelCommand]
 goodCommands =
   [ good_mint
@@ -33,12 +42,14 @@ goodCommands =
   , good_frob
   ]
 
+-- These commands exercise the system's error cases.
 failCommands :: [ModelCommand]
 failCommands =
   [ fail_mint_unauthorized
   , fail_transfer_tooMuch
   ]
 
+-- These commands verify getters against the model's data.
 checkCommands :: [ModelCommand]
 checkCommands =
   [ check_balanceOf
@@ -47,51 +58,57 @@ checkCommands =
 
 allCommands :: [ModelCommand]
 allCommands =
-  const gen_spawn : concat
-    [ goodCommands
+  concat
+    [ pseudoCommands
+    , goodCommands
     , failCommands
     , checkCommands
     ]
 
 ----------------------------------------------------------------------------
 
-prop_allCommands :: PropertyT IO VM -> Property
-prop_allCommands vm0 = withTests testCount . property $ do
-  ref <- liftIO (newIORef undefined)
-  acts <-
-    forAll $
-      Gen.sequential (Range.linear 1 100)
-        initialState (map ($ ref) allCommands)
+prop_system :: PropertyT IO VM -> Property
+prop_system generateInitialVm =
+  withTests testCount . property $ do
 
-  vm <- vm0
+    vmRef <- liftIO (newIORef undefined)
+    acts <-
+      forAll $
+        Gen.sequential (Range.linear 1 100)
+          initialState (map ($ vmRef) allCommands)
 
-  -- It's important that we initialize the reference here, and not
-  -- before selecting the acts, because of how shrinking works
-  -- in the Property monad...
-  liftIO (writeIORef ref vm)
-
-  executeSequential initialState acts
+    -- It's important that we initialize the reference here, and not
+    -- before selecting the acts, because of how shrinking works
+    -- in the Property monad.
+    generateInitialVm >>= liftIO . writeIORef vmRef
+    executeSequential initialState acts
 
 ----------------------------------------------------------------------------
 
-data Target = Box Word160 | Token Token deriving (Eq, Show)
-data C (c :: (* -> *) -> *) (v :: * -> *)
-  = C Word160 Target (c v) deriving (Eq, Show)
+data Target = ToContract Word160 | ToToken Token
+  deriving (Eq, Show)
+
+data C (c :: (* -> *) -> *) v = C Word160 Target (c v)
+  deriving (Eq, Show)
 
 instance HTraversable c => HTraversable (C c) where
   htraverse f (C x y c) = C <$> pure x <*> pure y <*> htraverse f c
 
 ----------------------------------------------------------------------------
 
-data Spawn (v :: * -> *) = Spawn Word160               deriving (Eq, Show)
-data Mint (v :: * -> *) = Mint Word160 Word256         deriving (Eq, Show)
-data Transfer (v :: * -> *) = Transfer Word160 Word256 deriving (Eq, Show)
-data BalanceOf (v :: * -> *) = BalanceOf Word160       deriving (Eq, Show)
-data Approve (v :: * -> *) = Approve Word160           deriving (Eq, Show)
-data Form (v :: * -> *) = Form Token                   deriving (Eq, Show)
-data GetIlk v = GetIlk (Var (Id Ilk) v)                deriving (Eq, Show)
-data File v = File (Var (Id Ilk) v) ByteString Word256 deriving (Eq, Show)
-data Frob v = Frob (Var (Id Ilk) v) Word256 Word256    deriving (Eq, Show)
+-- Action types that don't refer to ilk IDs need an explicit kind signature
+-- because the type parameter is unused and so not inferrable.
+
+data Spawn     (v :: * -> *) = Spawn Word160              deriving (Eq, Show)
+data Mint      (v :: * -> *) = Mint Word160 Word256       deriving (Eq, Show)
+data Transfer  (v :: * -> *) = Transfer Word160 Word256   deriving (Eq, Show)
+data BalanceOf (v :: * -> *) = BalanceOf Word160          deriving (Eq, Show)
+data Approve   (v :: * -> *) = Approve Word160            deriving (Eq, Show)
+data Form      (v :: * -> *) = Form Token                 deriving (Eq, Show)
+
+data GetIlk v = GetIlk (Var (Id Ilk) v)                   deriving (Eq, Show)
+data File   v = File (Var (Id Ilk) v) ByteString Word256  deriving (Eq, Show)
+data Frob   v = Frob (Var (Id Ilk) v) Word256 Word256     deriving (Eq, Show)
 
 instance HTraversable Spawn where
   htraverse f (Spawn x) = pure (Spawn x)
@@ -122,13 +139,29 @@ toCall (C src target c) =
     (sig, t, xs) = toABI c
     dst =
       case target of
-        Box x -> x
-        Token x -> tokenAddress x
+        ToContract x -> x
+        ToToken x -> tokenAddress x
   in
     Call sig src dst t xs
 
+type AbiAction t =
+  ( HTraversable t
+  , Show (t Symbolic)
+  , Show (t Concrete)
+  , ToABI t
+  )
+
+mkSendCommand
+  :: (AbiAction t, MonadIO m, Typeable output)
+  => IORef VM
+  -> ((VM, Maybe AbiValue) -> output)
+  -> (state Symbolic -> Maybe (a (C t Symbolic)))
+  -> [Callback (C t) output state]
+  -> Command a m state
 mkSendCommand ref g f =
-  Command f (\c@(C _ _ x) -> fmap g (sendDebug ref x (toCall c)))
+  Command f $
+    \c@(C _ _ x) ->
+      fmap g (sendDebug ref x (toCall c))
 
 ----------------------------------------------------------------------------
 
@@ -190,7 +223,6 @@ instance ToABI Frob where
 
 ----------------------------------------------------------------------------
 
-
 -- This command only affects the model.
 --
 -- It generates a random new account with zero balances.
@@ -218,9 +250,9 @@ good_form ref = mkSendCommand ref
        _ -> error "bad result of form(address)")
 
   (\s ->
-     Just $ do
+     pure $ do
        token <- someToken
-       pure (C root (Box vatAddress) (Form token)))
+       pure (C root (ToContract vatAddress) (Form token)))
 
   [ Update $ \s (C _ _ (Form gem)) o ->
       s { ilks = Map.insert o (emptyIlk gem) (ilks s) }
@@ -250,12 +282,11 @@ ilkFromStruct v =
 -- This command runs the getter for an existing ilk ID
 -- and verifies that the struct's data matches the model.
 check_getIlk ref = mkSendCommand ref id
-  (\model ->
-     if Map.null (ilks model)
-     then Nothing
-     else Just $ do
+  (\model -> do
+     guard $ not (empty (ilks model))
+     pure $ do
        i <- Gen.element (Map.keys (ilks model))
-       pure (C root (Box vatAddress) (GetIlk i)))
+       pure (C root (ToContract vatAddress) (GetIlk i)))
 
   [ Require $ \model (C _ _ (GetIlk i)) ->
       Map.member i (ilks model)
@@ -276,7 +307,7 @@ good_file what gen f ref = mkSendCommand ref id
      else Just $ do
        i <- Gen.element (Map.keys (ilks model))
        x <- gen
-       pure (C root (Box vatAddress) (File i (padRight 32 what) x)))
+       pure (C root (ToContract vatAddress) (File i (padRight 32 what) x)))
 
   [ Require $ \model (C _ _ (File i _ _)) ->
       Map.member i (ilks model)
@@ -317,10 +348,10 @@ good_mint ref = mkSendCommand ref id
            (min (maxBound - totalSupply token s)
                 (maxBound - dstWad))
 
-       pure (C root (Token token) (Mint dst wad)))
+       pure (C root (ToToken token) (Mint dst wad)))
 
   [ ensureVoidSuccess
-  , Update $ \s (C src (Token token) (Mint dst wad)) _ ->
+  , Update $ \s (C src (ToToken token) (Mint dst wad)) _ ->
       s { balances =
             Map.adjust (+ wad) (token, dst) (balances s) }
   ]
@@ -334,7 +365,7 @@ fail_mint_unauthorized ref = mkSendCommand ref id
        src <- Gen.filter (/= root) (someAccount s)
        dst <- someAccount s
        wad <- someUpTo maxBound
-       pure (C src (Token token) (Mint dst wad)))
+       pure (C src (ToToken token) (Mint dst wad)))
   [ensureRevert]
 
 good_transfer ref = mkSendCommand ref id
@@ -345,12 +376,12 @@ good_transfer ref = mkSendCommand ref id
        dst <- someAccount s
        let srcWad = balances s ! (token, src)
        wad <- someUpTo srcWad
-       pure (C src (Token token) (Transfer dst wad)))
+       pure (C src (ToToken token) (Transfer dst wad)))
 
   [ ensureSuccess (AbiBool True)
-  , Require $ \s (C src (Token token) (Transfer dst wad)) ->
+  , Require $ \s (C src (ToToken token) (Transfer dst wad)) ->
       balanceOf token src s >= wad
-  , Update $ \s (C src (Token token) (Transfer dst wad)) _ ->
+  , Update $ \s (C src (ToToken token) (Transfer dst wad)) _ ->
       s { balances =
             Map.adjust (subtract wad) (token, src) .
             Map.adjust (+ wad) (token, dst) $
@@ -366,7 +397,7 @@ fail_transfer_tooMuch ref = mkSendCommand ref id
        dst <- someAccount s
        let srcWad = balances s ! (token, src)
        wad <- Gen.integral (someAbove srcWad)
-       pure (C src (Token token) (Transfer dst wad)))
+       pure (C src (ToToken token) (Transfer dst wad)))
   [ensureRevert]
 
 check_balanceOf ref = mkSendCommand ref id
@@ -375,8 +406,8 @@ check_balanceOf ref = mkSendCommand ref id
        src <- someAccount s
        guy <- someAccount s
        token <- someToken
-       pure (C src (Token token) (BalanceOf guy)))
-  [ Ensure $ \s _ (C _ (Token token) (BalanceOf guy)) (vm, out) -> do
+       pure (C src (ToToken token) (BalanceOf guy)))
+  [ Ensure $ \s _ (C _ (ToToken token) (BalanceOf guy)) (vm, out) -> do
       case out of
         Just (AbiUInt 256 x) ->
           x === balanceOf token guy s
@@ -390,15 +421,15 @@ good_approve ref = mkSendCommand ref id
         src <- someAccount model
         guy <- pure vatAddress
         token <- someToken
-        pure (C src (Token token) (Approve guy)))
+        pure (C src (ToToken token) (Approve guy)))
   [ ensureSuccess (AbiBool True)
   , Require $
-      \model (C src (Token token) (Approve guy)) ->
+      \model (C src (ToToken token) (Approve guy)) ->
         and
           [ Set.member src (accounts model)
           ]
   , Update $
-      \model (C src (Token token) (Approve guy)) _ ->
+      \model (C src (ToToken token) (Approve guy)) _ ->
         model
           { approvals =
               Set.insert (token, src, guy) (approvals model)
@@ -408,11 +439,11 @@ good_approve ref = mkSendCommand ref id
 good_frob ref = mkSendCommand ref id
   (\model -> do
       guard . not . empty $ ilks model
-      Just $ do
+      pure $ do
         src <- someAccount model
         (ilkId, ilk) <- someIlk model
         x <- someUpTo (balanceOf (gem ilk) src model)
-        pure (C src (Box vatAddress) (Frob ilkId x 0)))
+        pure (C src (ToContract vatAddress) (Frob ilkId x 0)))
 
   [ ensureVoidSuccess
 

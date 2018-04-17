@@ -41,13 +41,11 @@ main = do
           putStrLn "tests failed, as expected."
 
   checkGood "System"
-    [ ("Full test suite", prop_allCommands (pure initialVm))
-    ]
+    [("Full test suite", prop_system (pure initialVm))]
 
   forM_ [1..5] $ \i ->
     checkFail ("system mutation " <> show i)
-      [ ("Full test suite", prop_allCommands (mutate initialVm))
-      ]
+      [("Full test suite", prop_system (mutate initialVm))]
 
   putStrLn ""
 

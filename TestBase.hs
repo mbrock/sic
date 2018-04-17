@@ -5,6 +5,7 @@
 module TestBase (module TestBase, module X) where
 
 import Data.Fixed as X
+import Data.Typeable as X (Typeable)
 import Control.Lens as X hiding (below, Indexed)
 import Control.Monad as X
 import Control.Monad.IO.Class as X
