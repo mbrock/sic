@@ -150,7 +150,6 @@ module Sⁿ where
     -- S⁰, the set of Sic expressions
     data S⁰ : Type → Set where
       -_ ¬_               : Op₁ (S⁰ Word)
-      _%+_ _%−_ _%×_      : Op₂ (S⁰ Word)
       _+_ _−_ _×_ _∙_ _^_ : Op₂ (S⁰ Word)
       _<_ _>_ _≥_ _≤_ _≡_ : Op₂ (S⁰ Word)
       _∨_ _∧_             : Op₂ (S⁰ Word)
@@ -459,9 +458,6 @@ module Sⁿ→Oⁿ where
     ⟦ x + y ⟧⁰     = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ +ₒ
     ⟦ x − y ⟧⁰     = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ −ₒ
     ⟦ x × y ⟧⁰     = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ ×ₒ
-    ⟦ x %+ y ⟧⁰    = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ %+ₒ
-    ⟦ x %− y ⟧⁰    = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ %−ₒ
-    ⟦ x %× y ⟧⁰    = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ %×ₒ
     ⟦ x ∙ y ⟧⁰     = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ ∙ₒ
     ⟦ x ^ y ⟧⁰     = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ ^ₒ
     ⟦ x ∨ y ⟧⁰     = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ ∨ₒ
