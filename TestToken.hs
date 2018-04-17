@@ -25,6 +25,7 @@ goodCommands :: [ModelCommand]
 goodCommands =
   [ good_mint
   , good_transfer
+  , good_approve
   , good_form
   , good_file_spot
   , good_file_rate
@@ -86,6 +87,7 @@ data Spawn (v :: * -> *) = Spawn Word160               deriving (Eq, Show)
 data Mint (v :: * -> *) = Mint Word160 Word256         deriving (Eq, Show)
 data Transfer (v :: * -> *) = Transfer Word160 Word256 deriving (Eq, Show)
 data BalanceOf (v :: * -> *) = BalanceOf Word160       deriving (Eq, Show)
+data Approve (v :: * -> *) = Approve Word160           deriving (Eq, Show)
 data Form (v :: * -> *) = Form Token                   deriving (Eq, Show)
 data GetIlk v = GetIlk (Var (Id Ilk) v)                deriving (Eq, Show)
 data File v = File (Var (Id Ilk) v) ByteString Word256 deriving (Eq, Show)
@@ -99,6 +101,8 @@ instance HTraversable Transfer where
   htraverse f (Transfer a b) = pure (Transfer a b)
 instance HTraversable BalanceOf where
   htraverse f (BalanceOf a) = pure (BalanceOf a)
+instance HTraversable Approve where
+  htraverse f (Approve a) = pure (Approve a)
 instance HTraversable Form where
   htraverse f (Form a) = pure (Form a)
 instance HTraversable GetIlk where
@@ -146,6 +150,13 @@ instance ToABI BalanceOf where
   toABI (BalanceOf guy) =
     ( "balanceOf(address)"
     , Just (AbiUIntType 256)
+    , [AbiAddress (cast guy)]
+    )
+
+instance ToABI Approve where
+  toABI (Approve guy) =
+    ( "approve(address)"
+    , Just AbiBoolType
     , [AbiAddress (cast guy)]
     )
 
@@ -373,13 +384,67 @@ check_balanceOf ref = mkSendCommand ref id
           failure
   ]
 
+good_approve ref = mkSendCommand ref id
+  (\model -> do
+      pure $ do
+        src <- someAccount model
+        guy <- pure vatAddress
+        token <- someToken
+        pure (C src (Token token) (Approve guy)))
+  [ ensureSuccess (AbiBool True)
+  , Require $
+      \model (C src (Token token) (Approve guy)) ->
+        and
+          [ Set.member src (accounts model)
+          ]
+  , Update $
+      \model (C src (Token token) (Approve guy)) _ ->
+        model
+          { approvals =
+              Set.insert (token, src, guy) (approvals model)
+          }
+  ]
+
 good_frob ref = mkSendCommand ref id
   (\model -> do
       guard . not . empty $ ilks model
       Just $ do
         src <- someAccount model
-        ilk <- someIlk model
-        x <- anyInt
+        (ilkId, ilk) <- someIlk model
+        x <- someUpTo (balanceOf (gem ilk) src model)
+        pure (C src (Box vatAddress) (Frob ilkId x 0)))
 
-        pure (C src (Box vatAddress) (Frob ilk x 0)))
-  [ensureVoidSuccess]
+  [ ensureVoidSuccess
+
+  , Require $
+      \model (C src _ (Frob ilkId x _)) ->
+        case
+          Map.lookup ilkId (ilks model)
+        of
+          Just ilk ->
+            and
+              [ balanceOf (gem ilk) src model >= x
+              , Set.member (gem ilk, src, vatAddress) (approvals model)
+              ]
+          _ ->
+            False
+
+  , Require $
+      \model (C src _ (Frob ilkId x _)) ->
+        let
+          Just ilk = Map.lookup ilkId (ilks model)
+        in
+          spot ilk * cast x < cast maxInt
+
+  , Update $
+      \model
+       (C src _ (Frob ilkId x _)) _ ->
+        let
+          Just ilk = Map.lookup ilkId (ilks model)
+        in
+          model
+            { balances =
+                Map.adjust (subtract x) (gem ilk, src)
+                  (balances model)
+            }
+  ]

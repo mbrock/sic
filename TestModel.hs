@@ -46,10 +46,11 @@ newtype Id a = Id Integer
 
 data Model v =
   Model
-    { accounts :: !(Set Word160)
-    , balances :: !(Map (Token, Word160) Word256)
-    , ilks     :: !(Map (Var (Id Ilk) v) Ilk)
-    , urns     :: !(Map (Var (Id Ilk) v, Word160) Urn)
+    { accounts  :: !(Set Word160)
+    , balances  :: !(Map (Token, Word160) Word256)
+    , approvals :: !(Set (Token, Word160, Word160))
+    , ilks      :: !(Map (Var (Id Ilk) v) Ilk)
+    , urns      :: !(Map (Var (Id Ilk) v, Word160) Urn)
     }
 
 deriving instance Show1 v => Show (Model v)
@@ -58,8 +59,9 @@ initialState :: Model v
 initialState = Model
   { accounts = Set.fromList [root]
   , balances = zeroBalancesFor root
-  , ilks     = Map.empty
-  , urns     = Map.empty
+  , approvals = Set.empty
+  , ilks = Map.empty
+  , urns = Map.empty
   }
 
 someAccount :: Model v -> Gen Word160
@@ -68,8 +70,8 @@ someAccount = Gen.element . Set.toList . accounts
 someToken :: Gen Token
 someToken = Gen.element allTokens
 
-someIlk :: Model v -> Gen (Var (Id Ilk) v)
-someIlk = Gen.element . Map.keys . ilks
+someIlk :: Model v -> Gen (Var (Id Ilk) v, Ilk)
+someIlk = Gen.element . Map.toList . ilks
 
 zeroBalancesFor :: Word160 -> Map (Token, Word160) Word256
 zeroBalancesFor x = Map.fromList [((g, x), 0) | g <- allTokens]
