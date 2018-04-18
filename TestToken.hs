@@ -1,11 +1,8 @@
-{-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
-{-# Language ConstraintKinds #-}
-{-# Language KindSignatures #-}
-{-# Language LambdaCase #-}
-{-# Language OverloadedStrings #-}
-{-# Language StandaloneDeriving #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module TestToken where
 
@@ -174,17 +171,17 @@ data Act output action =
         Confirmand output action -> Test ()
     }
 
+instance (Monad f, Semigroup g) => Semigroup (TestT f g) where
+  (<>) = liftA2 (<>)
+
 emptyAct :: Act Result action
 emptyAct = Act
   { concoct = const Nothing
   , confine = const (const True)
   , convert = id
-  , consume = \x _ _ -> x
+  , consume = const . const
   , confirm = const (pure ())
   }
-
-unchanged :: a -> b -> c -> a
-unchanged x _ _ = x
 
 -- Convert our Act to the Hedgehog Command structure.
 act
@@ -208,10 +205,10 @@ act (Act {..}) ref =
     , commandCallbacks =
         let
           singleton x = [x]
-        in concat
-          [ [Require confine]
-          , [Update consume]
-          , [Ensure $ \a b c d -> confirm (Confirmand a b c d)]
+        in
+          [ Require confine
+          , Update consume
+          , Ensure (\a b c d -> confirm (Confirmand a b c d))
           ]
     }
 
@@ -329,8 +326,8 @@ good_form :: Act (Id Ilk) Form
 good_form = Act
   { concoct =
       const . pure $ do
-         token <- someToken
-         pure (Do root (ToContract vatAddress) (Form token))
+        token <- someToken
+        pure (Do root (ToContract vatAddress) (Form token))
 
   , confine =
       const (const True)
@@ -342,9 +339,9 @@ good_form = Act
            _ -> error "bad result of form(address)"
 
   , consume =
-      \model (Do _ _ (Form gem)) o ->
+      \model (Do _ _ (Form gem)) x ->
         model
-          { ilks = Map.insert o (emptyIlk gem) (ilks model)
+          { ilks = Map.insert x (emptyIlk gem) (ilks model)
           }
 
   , confirm =
@@ -440,11 +437,11 @@ confirmSuccess x c =
       y === x
     _ -> failure
 
-confirmReversion
+doesRevert
   :: Show (action Concrete)
   => Confirmand Result action
   -> Test ()
-confirmReversion x =
+doesRevert x =
   case view result (resultVm (output x)) of
     Just (VMFailure Revert) -> pure ()
     _ -> annotate (show (deed x)) >> failure
@@ -485,7 +482,7 @@ fail_mint_unauthorized = emptyAct
           dst <- someAccount model
           wad <- someUpTo maxBound
           pure (Do src (ToToken token) (Mint dst wad))
-  , confirm = confirmReversion
+  , confirm = doesRevert
   }
 
 good_transfer :: Act Result Transfer
@@ -524,7 +521,7 @@ fail_transfer_tooMuch = emptyAct
            let srcWad = balances model ! (token, src)
            wad <- Gen.integral (someAbove srcWad)
            pure (Do src (ToToken token) (Transfer dst wad))
-  , confirm = confirmReversion
+  , confirm = doesRevert
   }
 
 check_balanceOf :: Act Result BalanceOf

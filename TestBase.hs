@@ -13,7 +13,9 @@ import Control.Monad.State.Class as X (MonadState, get, modify)
 import Control.Monad.State.Strict as X (execState, evalState, runState)
 import Data.Foldable as X (Foldable, toList, find)
 import Data.Maybe as X
-import Data.Monoid as X
+import Data.Semigroup as X
+import Data.Monoid as X (mempty)
+import Control.Applicative as X (liftA2)
 import Data.Binary.Get as X (runGetOrFail)
 import Data.ByteString as X (ByteString)
 import Data.ByteString.Lazy as X (fromStrict)
