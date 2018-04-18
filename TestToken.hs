@@ -588,8 +588,7 @@ good_frob = Act
               and
                 [ balanceOf (gem ilk) src model >= x
                 , Set.member (gem ilk, src, vatAddress) (approvals model)
-                , let Just ilk = Map.lookup ilkId (ilks model)
-                  in spot ilk * cast x < cast maxInt
+                , spot ilk * cast x < cast maxInt
                 ]
   , convert = id
   , confirm = confirmVoidSuccess
