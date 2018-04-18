@@ -274,6 +274,35 @@ instance ToABI Frob where
 
 ----------------------------------------------------------------------------
 
+successful :: VM -> Bool
+successful vm =
+  case view result vm of
+    Just (VMSuccess _) -> True
+    _ -> False
+
+tokenFromAddress :: Word160 -> Token
+tokenFromAddress x =
+  case find ((== x) . tokenAddress) allTokens of
+    Just t -> t
+    _ -> error "invalid token address"
+
+ilkFromStruct :: Foldable v => v AbiValue -> Ilk
+ilkFromStruct v =
+  case toList v of
+    [AbiUInt 256 a, AbiUInt 256 b, AbiUInt 256 c,
+     AbiUInt 256 d, AbiUInt 256 e, AbiUInt 256 _] ->
+      Ilk
+        { spot = fixed a
+        , rate = fixed b
+        , line = cast c
+        , arts = cast d
+        , gem = tokenFromAddress (cast e)
+        }
+    _ ->
+      error "invalid ilk struct"
+
+----------------------------------------------------------------------------
+
 -- This command only affects the model.
 --
 -- It generates a random new account with zero balances.
@@ -301,40 +330,25 @@ good_form = Act
       const . pure $ do
          token <- someToken
          pure (Do root (ToContract vatAddress) (Form token))
+
+  , require =
+      Nothing
+
   , convert =
       \(Result _ out) ->
          case out of
            Just (AbiUInt 256 x) -> Id (cast x)
            _ -> error "bad result of form(address)"
+
   , perform =
       \model (Do _ _ (Form gem)) o ->
         model
           { ilks = Map.insert o (emptyIlk gem) (ilks model)
           }
-  , require = Nothing
-  , confirm = const (pure ())
+
+  , confirm =
+      const (pure ())
   }
-
-tokenFromAddress :: Word160 -> Token
-tokenFromAddress x =
-  case find ((== x) . tokenAddress) allTokens of
-    Just t -> t
-    _ -> error "invalid token address"
-
-ilkFromStruct :: Foldable v => v AbiValue -> Ilk
-ilkFromStruct v =
-  case toList v of
-    [AbiUInt 256 a, AbiUInt 256 b, AbiUInt 256 c,
-     AbiUInt 256 d, AbiUInt 256 e, AbiUInt 256 _] ->
-      Ilk
-        { spot = fixed a
-        , rate = fixed b
-        , line = cast c
-        , arts = cast d
-        , gem = tokenFromAddress (cast e)
-        }
-    _ ->
-      error "invalid ilk struct"
 
 -- This command runs the getter for an existing ilk ID
 -- and verifies that the struct's data matches the model.
@@ -346,9 +360,11 @@ check_getIlk = Act
          pure $ do
            i <- Gen.element (Map.keys (ilks model))
            pure (Do root (ToContract vatAddress) (GetIlk i))
+
   , require = Just $
       \model (Do _ _ (GetIlk i)) ->
         Map.member i (ilks model)
+
   , convert = id
   , perform = unchanged
   , confirm =
@@ -360,12 +376,6 @@ check_getIlk = Act
           _ ->
             failure
   }
-
-successful :: VM -> Bool
-successful vm =
-  case view result vm of
-    Just (VMSuccess _) -> True
-    _ -> False
 
 -- Parameterized command for randomly altering an ilk parameter.
 good_file
@@ -579,6 +589,7 @@ good_frob = Act
           (ilkId, ilk) <- someIlk model
           x <- someUpTo (balanceOf (gem ilk) src model)
           pure (Do src (ToContract vatAddress) (Frob ilkId x 0))
+
   , require =
       Just $
         \model (Do src _ (Frob ilkId x _)) ->
@@ -588,10 +599,12 @@ good_frob = Act
               and
                 [ balanceOf (gem ilk) src model >= x
                 , Set.member (gem ilk, src, vatAddress) (approvals model)
-                , spot ilk * cast x < cast maxInt
+                , rayMultiplicationSafe (spot ilk) (cast x)
                 ]
+
   , convert = id
   , confirm = confirmVoidSuccess
+
   , perform =
       \model (Do src _ (Frob ilkId x _)) _ ->
         let

@@ -265,3 +265,9 @@ instance HasResolution e => Fractional (Decimal e) where
 {-# NOINLINE testCount #-}
 testCount :: TestLimit
 testCount = cast (read (performIO (getEnv "count")))
+
+
+
+rayMultiplicationSafe :: Integral a => Ray -> a -> Bool
+rayMultiplicationSafe r x =
+  ((unfixed r * cast x) :: Integer) + (10^27 `div` 2) < maxWord
