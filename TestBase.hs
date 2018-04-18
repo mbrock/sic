@@ -26,7 +26,7 @@ import Data.String as X (fromString)
 import Data.Text as X (Text, pack, unpack)
 import Data.Text.Encoding as X (encodeUtf8)
 import Data.Vector as X (Vector)
-import EVM as X
+import EVM as X hiding (next)
 import EVM.ABI as X
 import EVM.Concrete as X (Blob (B))
 import EVM.Dev as X (loadDappInfo)

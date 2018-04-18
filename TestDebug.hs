@@ -19,10 +19,10 @@ resetDebug = writeIORef failedVm Nothing
 
 sendDebug
   :: (MonadIO m, Show a) => IORef VM -> a -> Call
-  -> m (VM, Maybe AbiValue)
+  -> m Result
 sendDebug ref cmd c = do
   vm0 <- liftIO (readIORef ref)
-  (vm1, x) <- send ref c
+  Result vm1 x <- send ref c
   case view result vm1 of
     Just (VMFailure Revert) -> do
       let
@@ -32,7 +32,7 @@ sendDebug ref cmd c = do
       liftIO (writeIORef failedVm (Just (vm', pack (show cmd))))
     _ ->
       pure ()
-  pure (vm1, x)
+  pure (Result vm1 x)
 
 runFromVM :: VM -> Text -> IO VM
 runFromVM vm msg = do

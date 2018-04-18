@@ -155,7 +155,12 @@ performReversion vm0 vm1 =
     _ ->
       vm1
 
-send :: MonadIO m => IORef VM -> Call -> m (VM, Maybe AbiValue)
+data Result = Result
+  { resultVm :: !VM
+  , resultValue :: !(Maybe AbiValue)
+  }
+
+send :: MonadIO m => IORef VM -> Call -> m Result
 send ref c@(Call sig src dst ret xs) = do
   vm <- liftIO (readIORef ref)
   let vm' = performReversion vm (execState (call c) vm)
@@ -166,18 +171,18 @@ send ref c@(Call sig src dst ret xs) = do
     (Just t, Just (VMSuccess (B out))) ->
       case runGetOrFail (getAbi t) (fromStrict out) of
         Right ("", _, x) ->
-          (vm', Just x)
+          Result vm' (Just x)
         _ ->
           error "ABI return value decoding error"
 
     (Nothing, Just (VMSuccess (B ""))) ->
-      (vm', Nothing)
+      Result vm' Nothing
 
     (Nothing, Just (VMSuccess _)) ->
       error "unexpected return value"
 
     (_, Just (VMFailure _)) ->
-      (vm', Nothing)
+      Result vm' Nothing
 
     (_, Nothing) ->
       error "weird VM state"
