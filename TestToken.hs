@@ -189,7 +189,7 @@ instance HTraversable c => HTraversable (Do c) where
 
 class ToABI a where
   toABI :: a Concrete -> (Text, Maybe AbiType, [AbiValue])
-  outcome :: a v -> Result -> Outcome a
+  convert :: a v -> Result -> Outcome a
 
 toCall :: ToABI t => Do t Concrete -> Call
 toCall (Do src target c) =
@@ -218,8 +218,6 @@ data Act action =
         Model Symbolic -> Maybe (Gen (Do action Symbolic))
     , confine ::
         Model Symbolic -> Do action Symbolic -> Bool
-    , convert ::
-        action Symbolic -> Result -> Outcome action
     , consume ::
         forall v. Ord1 v => Model v -> Do action v -> Var (Outcome action) v -> Model v
     , confirm ::
@@ -229,11 +227,10 @@ data Act action =
 instance (Monad f, Semigroup g) => Semigroup (TestT f g) where
   (<>) = liftA2 (<>)
 
-emptyAct :: ToABI action => Act action
+emptyAct :: Act action
 emptyAct = Act
   { concoct = const Nothing
   , confine = const (const True)
-  , convert = outcome
   , consume = const . const
   , confirm = const (pure ())
   }
@@ -261,7 +258,7 @@ act (Act {..}) ref =
         concoct
     , commandExecute =
         \c@(Do _ _ x) ->
-          fmap (outcome x) (sendDebug ref x (toCall c))
+          fmap (convert x) (sendDebug ref x (toCall c))
     , commandCallbacks =
         let
           singleton x = [x]
@@ -275,7 +272,7 @@ act (Act {..}) ref =
 ----------------------------------------------------------------------------
 
 instance ToABI Transfer where
-  outcome = const id
+  convert = const id
   toABI (Transfer dst wad) =
     ( "transfer(address,uint256)"
     , Just AbiBoolType
@@ -283,7 +280,7 @@ instance ToABI Transfer where
     )
 
 instance ToABI Mint where
-  outcome = const id
+  convert = const id
   toABI (Mint guy wad) =
     ( "mint(address,uint256)"
     , Nothing
@@ -291,7 +288,7 @@ instance ToABI Mint where
     )
 
 instance ToABI BalanceOf where
-  outcome = const id
+  convert = const id
   toABI (BalanceOf guy) =
     ( "balanceOf(address)"
     , Just (AbiUIntType 256)
@@ -299,7 +296,7 @@ instance ToABI BalanceOf where
     )
 
 instance ToABI Approve where
-  outcome = const id
+  convert = const id
   toABI (Approve guy) =
     ( "approve(address)"
     , Just AbiBoolType
@@ -307,7 +304,7 @@ instance ToABI Approve where
     )
 
 instance ToABI Form where
-  outcome _ (Result _ out) =
+  convert _ (Result _ out) =
     case out of
       Just (AbiUInt 256 x) -> Id (cast x)
       _ -> error "bad result of form(address)"
@@ -319,7 +316,7 @@ instance ToABI Form where
     )
 
 instance ToABI GetIlk where
-  outcome = const id
+  convert = const id
   toABI (GetIlk (Var (Concrete (Id i)))) =
     ( "ilks(bytes32)"
     , Just (AbiArrayType 6 (AbiUIntType 256))
@@ -327,7 +324,7 @@ instance ToABI GetIlk where
     )
 
 instance ToABI File where
-  outcome = const id
+  convert = const id
   toABI (File (Var (Concrete (Id i))) what risk) =
     ( "file(bytes32,bytes32,uint256)"
     , Nothing
@@ -335,7 +332,7 @@ instance ToABI File where
     )
 
 instance ToABI Frob where
-  outcome = const id
+  convert = const id
   toABI (Frob (Var (Concrete (Id i))) ink art) =
     ( "frob(bytes32,uint256,uint256)"
     , Nothing
