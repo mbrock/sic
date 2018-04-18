@@ -20,6 +20,9 @@ import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
 import qualified Data.Vector as Vector
 
+
+----------------------------------------------------------------------------
+-- We specify our system as Hedgehog-based stateful testing commands.
 ----------------------------------------------------------------------------
 
 type VmCommand =
@@ -59,6 +62,7 @@ checkCommands =
   , act check_getIlk
   ]
 
+-- This is all commands; other subsets might be interesting later.
 allCommands :: [VmCommand]
 allCommands =
   concat
@@ -68,6 +72,9 @@ allCommands =
     , checkCommands
     ]
 
+
+----------------------------------------------------------------------------
+-- Here's how we verify the spec using randomized testing.
 ----------------------------------------------------------------------------
 
 prop_system :: PropertyT IO VM -> Property
@@ -85,10 +92,16 @@ prop_system generateInitialVm =
     generateInitialVm >>= liftIO . writeIORef vmRef
     executeSequential initialState acts
 
-----------------------------------------------------------------------------
 
+----------------------------------------------------------------------------
+-- We define data types to represent all the specified commands.
+--
+-- The type parameter v is related to Hedgehog's "symbolic results,"
+-- which we currently only use for system-generated ilk IDs.
+--
 -- Action types that don't refer to ilk IDs need an explicit kind signature
 -- because the type parameter is unused and so not inferrable.
+----------------------------------------------------------------------------
 
 data Spawn     (v :: * -> *) = Spawn Word160              deriving (Eq, Show)
 data Mint      (v :: * -> *) = Mint Word160 Word256       deriving (Eq, Show)
@@ -101,10 +114,25 @@ data GetIlk v = GetIlk (Var (Id Ilk) v)                   deriving (Eq, Show)
 data File   v = File (Var (Id Ilk) v) ByteString Word256  deriving (Eq, Show)
 data Frob   v = Frob (Var (Id Ilk) v) Word256 Word256     deriving (Eq, Show)
 
+-- This type family gives the symbolic result type for each action type.
 type family Outcome c where
+  -- For ilk forming, the outcome is an ID.
   Outcome Form = Id Ilk
-  Outcome c = Result
+  -- For other actions, the outcome is a regular VM execution result.
+  Outcome c    = Result
 
+
+-- A command is sent either to some arbitrary contract or to a named token.
+data Target = ToContract Word160 | ToToken Token
+  deriving (Eq, Show)
+
+-- This data type specifies a source, a target, and a command.
+data Do (c :: (* -> *) -> *) v = Do Word160 Target (c v)
+  deriving (Eq, Show)
+
+
+----------------------------------------------------------------------------
+-- We define how the various actions update the model.
 ----------------------------------------------------------------------------
 
 class Change c where
@@ -153,6 +181,12 @@ instance Change File where
 
 
 ----------------------------------------------------------------------------
+-- Boilerplate stuff would preferrably be automated away using generics.
+----------------------------------------------------------------------------
+
+instance HTraversable c => HTraversable (Do c) where
+  htraverse f (Do x y c) =
+    Do <$> pure x <*> pure y <*> htraverse f c
 
 instance HTraversable Spawn where
   htraverse f (Spawn x) = pure (Spawn x)
@@ -173,37 +207,26 @@ instance HTraversable File where
 instance HTraversable Frob where
   htraverse f (Frob a b c) = Frob <$> htraverse f a <*> pure b <*> pure c
 
+
+----------------------------------------------------------------------------
+-- Some support stuff for integrating the EVM with Hedgehog.
 ----------------------------------------------------------------------------
 
-data Target =
-  ToContract Word160 | ToToken Token
-  deriving (Eq, Show)
+class EvmCall a where
+  toEvmCall :: a Concrete -> (Text, Maybe AbiType, [AbiValue])
+  fromEvmResult :: a v -> Result -> Outcome a
 
-data Do (c :: (* -> *) -> *) v =
-  Do Word160 Target (c v)
-  deriving (Eq, Show)
-
-instance HTraversable c => HTraversable (Do c) where
-  htraverse f (Do x y c) =
-    Do <$> pure x <*> pure y <*> htraverse f c
-
-class ToABI a where
-  toABI :: a Concrete -> (Text, Maybe AbiType, [AbiValue])
-  convert :: a v -> Result -> Outcome a
-
-toCall :: ToABI t => Do t Concrete -> Call
+toCall :: EvmCall t => Do t Concrete -> Call
 toCall (Do src target c) =
   let
-    (sig, t, xs) = toABI c
-    dst =
-      case target of
-        ToContract x -> x
-        ToToken x -> tokenAddress x
+    (sig, t, xs) = toEvmCall c
+    dst = case target of
+            ToContract x -> x
+            ToToken x -> tokenAddress x
   in
     Call sig src dst t xs
 
--- This is a slight variant on Hedgehog's Command structure.
-
+-- This name is very bad...
 data Confirmand output action =
   Confirmand
     { prev :: Model Concrete
@@ -212,21 +235,27 @@ data Confirmand output action =
     , output :: output
     }
 
+-- This is a variation on Hedgehog's `Command` record.
 data Act action =
   Act
-    { concoct ::
+    { concoct :: -- How to invent a random instance of the act.
         Model Symbolic -> Maybe (Gen (Do action Symbolic))
-    , confine ::
+
+    , confine :: -- How to decide whether the random instance is okay.
         Model Symbolic -> Do action Symbolic -> Bool
-    , consume ::
+
+    , consume :: -- How to update the model according to the action.
         forall v. Ord1 v => Model v -> Do action v -> Var (Outcome action) v -> Model v
-    , confirm ::
+
+    , confirm :: -- How to verify the outcome of the action.
         Confirmand (Outcome action) action -> Test ()
     }
 
+-- This instance lets us combine confirmation checks like `f <> g`.
 instance (Monad f, Semigroup g) => Semigroup (TestT f g) where
   (<>) = liftA2 (<>)
 
+-- Setting fields of this empty act is convenient.
 emptyAct :: Act action
 emptyAct = Act
   { concoct = const Nothing
@@ -235,161 +264,130 @@ emptyAct = Act
   , confirm = const (pure ())
   }
 
-changingAct :: (ToABI c, Change c) => Act c
+-- This will be the basis for all acts that change the model.
+changingAct :: (EvmCall c, Change c) => Act c
 changingAct = emptyAct { consume = f }
   where
     f model x@(Do _ _ a) v = change model x v
 
 -- Convert our Act to the Hedgehog Command structure.
 act
-  :: ( HTraversable t
-     , ToABI t
-     , Show (t Symbolic)
-     , Show (t Concrete)
-     , MonadIO m
-     , Typeable (Outcome t)
-     )
-  => Act t
-  -> IORef VM
-  -> Command Gen m Model
+  :: ( HTraversable t, EvmCall t
+     , Show (t Symbolic), Show (t Concrete)
+     , MonadIO m, Typeable (Outcome t) )
+  => Act t -> IORef VM -> Command Gen m Model
 act (Act {..}) ref =
   Command
-    { commandGen =
-        concoct
+    { commandGen = concoct
     , commandExecute =
         \c@(Do _ _ x) ->
-          fmap (convert x) (sendDebug ref x (toCall c))
+          fmap (fromEvmResult x) (sendDebug ref x (toCall c))
     , commandCallbacks =
-        let
-          singleton x = [x]
-        in
-          [ Require confine
-          , Update consume
-          , Ensure (\a b c d -> confirm (Confirmand a b c d))
-          ]
+        [ Require confine
+        , Update consume
+        , Ensure (\a b c d -> confirm (Confirmand a b c d))
+        ]
     }
 
+confirmVoidSuccess :: Confirmand Result action -> Test ()
+confirmVoidSuccess x =
+  case view result (resultVm (output x)) of
+    Just (VMSuccess (B "")) -> pure ()
+    _ -> failure
+
+confirmSuccess :: AbiValue -> Confirmand Result action -> Test ()
+confirmSuccess x c =
+  case (view result (resultVm (output c)), resultValue (output c)) of
+    (Just (VMSuccess _), Just y) ->
+      y === x
+    _ -> failure
+
+doesRevert
+  :: Show (action Concrete)
+  => Confirmand Result action
+  -> Test ()
+doesRevert x =
+  case view result (resultVm (output x)) of
+    Just (VMFailure Revert) -> pure ()
+    _ -> annotate (show (deed x)) >> failure
+
+
+----------------------------------------------------------------------------
+-- Now we define the encoding/decoding specifics for our actions.
 ----------------------------------------------------------------------------
 
-instance ToABI Transfer where
-  convert = const id
-  toABI (Transfer dst wad) =
+instance EvmCall Transfer where
+  fromEvmResult = const id
+  toEvmCall (Transfer dst wad) =
     ( "transfer(address,uint256)"
     , Just AbiBoolType
     , [AbiAddress (cast dst), AbiUInt 256 wad]
     )
 
-instance ToABI Mint where
-  convert = const id
-  toABI (Mint guy wad) =
+instance EvmCall Mint where
+  fromEvmResult = const id
+  toEvmCall (Mint guy wad) =
     ( "mint(address,uint256)"
     , Nothing
     , [AbiAddress (cast guy), AbiUInt 256 wad]
     )
 
-instance ToABI BalanceOf where
-  convert = const id
-  toABI (BalanceOf guy) =
+instance EvmCall BalanceOf where
+  fromEvmResult = const id
+  toEvmCall (BalanceOf guy) =
     ( "balanceOf(address)"
     , Just (AbiUIntType 256)
     , [AbiAddress (cast guy)]
     )
 
-instance ToABI Approve where
-  convert = const id
-  toABI (Approve guy) =
+instance EvmCall Approve where
+  fromEvmResult = const id
+  toEvmCall (Approve guy) =
     ( "approve(address)"
     , Just AbiBoolType
     , [AbiAddress (cast guy)]
     )
 
-instance ToABI Form where
-  convert _ (Result _ out) =
+instance EvmCall Form where
+  fromEvmResult _ (Result _ out) =
     case out of
       Just (AbiUInt 256 x) -> Id (cast x)
       _ -> error "bad result of form(address)"
 
-  toABI (Form token) =
+  toEvmCall (Form token) =
     ( "form(address)"
     , Just (AbiUIntType 256)
     , [AbiAddress (cast (tokenAddress token))]
     )
 
-instance ToABI GetIlk where
-  convert = const id
-  toABI (GetIlk (Var (Concrete (Id i)))) =
+instance EvmCall GetIlk where
+  fromEvmResult = const id
+  toEvmCall (GetIlk (Var (Concrete (Id i)))) =
     ( "ilks(bytes32)"
     , Just (AbiArrayType 6 (AbiUIntType 256))
     , [AbiUInt 256 (cast i)]
     )
 
-instance ToABI File where
-  convert = const id
-  toABI (File (Var (Concrete (Id i))) what risk) =
+instance EvmCall File where
+  fromEvmResult = const id
+  toEvmCall (File (Var (Concrete (Id i))) what risk) =
     ( "file(bytes32,bytes32,uint256)"
     , Nothing
     , [AbiUInt 256 (cast i), AbiBytes 32 what, AbiUInt 256 risk]
     )
 
-instance ToABI Frob where
-  convert = const id
-  toABI (Frob (Var (Concrete (Id i))) ink art) =
+instance EvmCall Frob where
+  fromEvmResult = const id
+  toEvmCall (Frob (Var (Concrete (Id i))) ink art) =
     ( "frob(bytes32,uint256,uint256)"
     , Nothing
     , [AbiUInt 256 (cast i), AbiUInt 256 ink, AbiUInt 256 art]
     )
 
-----------------------------------------------------------------------------
-
-successful :: VM -> Bool
-successful vm =
-  case view result vm of
-    Just (VMSuccess _) -> True
-    _ -> False
-
-tokenFromAddress :: Word160 -> Token
-tokenFromAddress x =
-  case find ((== x) . tokenAddress) allTokens of
-    Just t -> t
-    _ -> error "invalid token address"
-
-ilkFromStruct :: Foldable v => v AbiValue -> Ilk
-ilkFromStruct v =
-  case toList v of
-    [AbiUInt 256 a, AbiUInt 256 b, AbiUInt 256 c,
-     AbiUInt 256 d, AbiUInt 256 e, AbiUInt 256 _] ->
-      Ilk
-        { spot = fixed a
-        , rate = fixed b
-        , line = cast c
-        , arts = cast d
-        , gem = tokenFromAddress (cast e)
-        }
-    _ ->
-      error "invalid ilk struct"
 
 ----------------------------------------------------------------------------
-
--- This command only affects the model.
---
--- It generates a random new account with zero balances.
--- In the EVM, all such accounts exist implicitly.
---
--- If we want to run these tests against a real node,
--- we might have to generate private/public keys here...
---
-gen_spawn :: Command Gen (PropertyT IO) Model
-gen_spawn =
-  Command
-    (const (pure (Spawn . cast <$> someUpTo 100000)))
-    (const (pure ()))
-    [ Require $ \s (Spawn x) ->
-        Set.notMember x (accounts s)
-    , Update $ \s (Spawn x) _ ->
-        s { accounts = Set.insert x (accounts s)
-          , balances = Map.union (balances s) (zeroBalancesFor x)
-          }
-    ]
+-- And finally, the specifications of all the command generators.
+----------------------------------------------------------------------------
 
 good_form :: Act Form
 good_form = changingAct
@@ -459,28 +457,6 @@ good_file_rate = good_file "rate" (unfixed <$> anyRay)
 
 good_file_line :: Act File
 good_file_line = good_file "line" anyInt
-
-confirmVoidSuccess :: Confirmand Result action -> Test ()
-confirmVoidSuccess x =
-  case view result (resultVm (output x)) of
-    Just (VMSuccess (B "")) -> pure ()
-    _ -> failure
-
-confirmSuccess :: AbiValue -> Confirmand Result action -> Test ()
-confirmSuccess x c =
-  case (view result (resultVm (output c)), resultValue (output c)) of
-    (Just (VMSuccess _), Just y) ->
-      y === x
-    _ -> failure
-
-doesRevert
-  :: Show (action Concrete)
-  => Confirmand Result action
-  -> Test ()
-doesRevert x =
-  case view result (resultVm (output x)) of
-    Just (VMFailure Revert) -> pure ()
-    _ -> annotate (show (deed x)) >> failure
 
 good_mint :: Act Mint
 good_mint = changingAct
@@ -615,3 +591,57 @@ good_frob = emptyAct
 
   , confirm = confirmVoidSuccess
   }
+
+-- This command only affects the model.
+--
+-- It generates a random new account with zero balances.
+-- In the EVM, all such accounts exist implicitly.
+--
+-- If we want to run these tests against a real node,
+-- we might have to generate private/public keys here...
+--
+gen_spawn :: Command Gen (PropertyT IO) Model
+gen_spawn =
+  Command
+    (const (pure (Spawn . cast <$> someUpTo 100000)))
+    (const (pure ()))
+    [ Require $ \s (Spawn x) ->
+        Set.notMember x (accounts s)
+    , Update $ \s (Spawn x) _ ->
+        s { accounts = Set.insert x (accounts s)
+          , balances = Map.union (balances s) (zeroBalancesFor x)
+          }
+    ]
+
+
+
+----------------------------------------------------------------------------
+-- Find better place for this stuff.
+----------------------------------------------------------------------------
+
+successful :: VM -> Bool
+successful vm =
+  case view result vm of
+    Just (VMSuccess _) -> True
+    _ -> False
+
+tokenFromAddress :: Word160 -> Token
+tokenFromAddress x =
+  case find ((== x) . tokenAddress) allTokens of
+    Just t -> t
+    _ -> error "invalid token address"
+
+ilkFromStruct :: Foldable v => v AbiValue -> Ilk
+ilkFromStruct v =
+  case toList v of
+    [AbiUInt 256 a, AbiUInt 256 b, AbiUInt 256 c,
+     AbiUInt 256 d, AbiUInt 256 e, AbiUInt 256 _] ->
+      Ilk
+        { spot = fixed a
+        , rate = fixed b
+        , line = cast c
+        , arts = cast d
+        , gem = tokenFromAddress (cast e)
+        }
+    _ ->
+      error "invalid ilk struct"
