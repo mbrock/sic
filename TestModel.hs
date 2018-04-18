@@ -1,6 +1,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE StrictData #-}
 
 module TestModel where
 
@@ -20,11 +21,11 @@ allGems :: [Token]
 allGems = enumFrom ETH
 
 data Ilk = Ilk
-  { spot :: !Ray
-  , rate :: !Ray
-  , line :: !Integer
-  , arts :: !Integer
-  , gem  :: !Token
+  { spot :: Ray
+  , rate :: Ray
+  , line :: Integer
+  , arts :: Integer
+  , gem  :: Token
   } deriving (Eq, Show)
 
 emptyIlk :: Token -> Ilk
@@ -37,8 +38,8 @@ emptyIlk t = Ilk
   }
 
 data Urn = Urn
-  { ink :: !Integer
-  , art :: !Integer
+  { ink :: Integer
+  , art :: Integer
   } deriving (Eq, Show)
 
 newtype Id a = Id Integer
@@ -46,11 +47,11 @@ newtype Id a = Id Integer
 
 data Model v =
   Model
-    { accounts  :: !(Set Word160)
-    , balances  :: !(Map (Token, Word160) Word256)
-    , approvals :: !(Set (Token, Word160, Word160))
-    , ilks      :: !(Map (Var (Id Ilk) v) Ilk)
-    , urns      :: !(Map (Var (Id Ilk) v, Word160) Urn)
+    { accounts  :: Set Word160
+    , balances  :: Map (Token, Word160) Word256
+    , approvals :: Set (Token, Word160, Word160)
+    , ilks      :: Map (Var (Id Ilk) v) Ilk
+    , urns      :: Map (Var (Id Ilk) v, Word160) Urn
     }
 
 deriving instance Show1 v => Show (Model v)
