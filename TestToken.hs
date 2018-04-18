@@ -1,8 +1,11 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module TestToken where
 
@@ -98,6 +101,57 @@ data GetIlk v = GetIlk (Var (Id Ilk) v)                   deriving (Eq, Show)
 data File   v = File (Var (Id Ilk) v) ByteString Word256  deriving (Eq, Show)
 data Frob   v = Frob (Var (Id Ilk) v) Word256 Word256     deriving (Eq, Show)
 
+type family Outcome c where
+  Outcome Form = Id Ilk
+  Outcome c = Result
+
+----------------------------------------------------------------------------
+
+class Change c where
+  change :: Ord1 v => Model v -> Do c v -> Var (Outcome c) v -> Model v
+
+instance Change Form where
+  change model (Do _ _ (Form gem)) x =
+    model
+      { ilks =
+          Map.insert x (emptyIlk gem) (ilks model)
+      }
+
+instance Change Mint where
+  change model (Do src (ToToken token) (Mint dst wad)) _ =
+    model
+      { balances =
+          Map.adjust (+ wad) (token, dst) (balances model)
+      }
+
+instance Change Transfer where
+  change model (Do src (ToToken token) (Transfer dst wad)) _ =
+    model
+      { balances =
+          ( Map.adjust (subtract wad) (token, src)
+          . Map.adjust (+ wad) (token, dst)
+          $ balances model
+          )
+      }
+
+instance Change Approve where
+  change model (Do src (ToToken token) (Approve guy)) _ =
+    model
+      { approvals =
+          Set.insert (token, src, guy) (approvals model)
+      }
+
+instance Change File where
+  change model (Do _ _ (File i what x)) _ =
+    model { ilks = Map.adjust f i (ilks model) }
+    where
+      f ilk = if | what == padRight 32 "spot" -> ilk { spot = fixed x }
+                 | what == padRight 32 "rate" -> ilk { rate = fixed x }
+                 | what == padRight 32 "line" -> ilk { line = cast x }
+                 | otherwise ->
+                     error "erroneous file"
+
+
 ----------------------------------------------------------------------------
 
 instance HTraversable Spawn where
@@ -135,6 +189,7 @@ instance HTraversable c => HTraversable (Do c) where
 
 class ToABI a where
   toABI :: a Concrete -> (Text, Maybe AbiType, [AbiValue])
+  outcome :: a v -> Result -> Outcome a
 
 toCall :: ToABI t => Do t Concrete -> Call
 toCall (Do src target c) =
@@ -157,31 +212,36 @@ data Confirmand output action =
     , output :: output
     }
 
-data Act output action =
+data Act action =
   Act
     { concoct ::
         Model Symbolic -> Maybe (Gen (Do action Symbolic))
     , confine ::
         Model Symbolic -> Do action Symbolic -> Bool
     , convert ::
-        Result -> output
+        action Symbolic -> Result -> Outcome action
     , consume ::
-        forall v. Ord1 v => Model v -> Do action v -> Var output v -> Model v
+        forall v. Ord1 v => Model v -> Do action v -> Var (Outcome action) v -> Model v
     , confirm ::
-        Confirmand output action -> Test ()
+        Confirmand (Outcome action) action -> Test ()
     }
 
 instance (Monad f, Semigroup g) => Semigroup (TestT f g) where
   (<>) = liftA2 (<>)
 
-emptyAct :: Act Result action
+emptyAct :: ToABI action => Act action
 emptyAct = Act
   { concoct = const Nothing
   , confine = const (const True)
-  , convert = id
+  , convert = outcome
   , consume = const . const
   , confirm = const (pure ())
   }
+
+changingAct :: (ToABI c, Change c) => Act c
+changingAct = emptyAct { consume = f }
+  where
+    f model x@(Do _ _ a) v = change model x v
 
 -- Convert our Act to the Hedgehog Command structure.
 act
@@ -190,9 +250,9 @@ act
      , Show (t Symbolic)
      , Show (t Concrete)
      , MonadIO m
-     , Typeable output
+     , Typeable (Outcome t)
      )
-  => Act output t
+  => Act t
   -> IORef VM
   -> Command Gen m Model
 act (Act {..}) ref =
@@ -201,7 +261,7 @@ act (Act {..}) ref =
         concoct
     , commandExecute =
         \c@(Do _ _ x) ->
-          fmap convert (sendDebug ref x (toCall c))
+          fmap (outcome x) (sendDebug ref x (toCall c))
     , commandCallbacks =
         let
           singleton x = [x]
@@ -215,6 +275,7 @@ act (Act {..}) ref =
 ----------------------------------------------------------------------------
 
 instance ToABI Transfer where
+  outcome = const id
   toABI (Transfer dst wad) =
     ( "transfer(address,uint256)"
     , Just AbiBoolType
@@ -222,6 +283,7 @@ instance ToABI Transfer where
     )
 
 instance ToABI Mint where
+  outcome = const id
   toABI (Mint guy wad) =
     ( "mint(address,uint256)"
     , Nothing
@@ -229,6 +291,7 @@ instance ToABI Mint where
     )
 
 instance ToABI BalanceOf where
+  outcome = const id
   toABI (BalanceOf guy) =
     ( "balanceOf(address)"
     , Just (AbiUIntType 256)
@@ -236,6 +299,7 @@ instance ToABI BalanceOf where
     )
 
 instance ToABI Approve where
+  outcome = const id
   toABI (Approve guy) =
     ( "approve(address)"
     , Just AbiBoolType
@@ -243,6 +307,11 @@ instance ToABI Approve where
     )
 
 instance ToABI Form where
+  outcome _ (Result _ out) =
+    case out of
+      Just (AbiUInt 256 x) -> Id (cast x)
+      _ -> error "bad result of form(address)"
+
   toABI (Form token) =
     ( "form(address)"
     , Just (AbiUIntType 256)
@@ -250,6 +319,7 @@ instance ToABI Form where
     )
 
 instance ToABI GetIlk where
+  outcome = const id
   toABI (GetIlk (Var (Concrete (Id i)))) =
     ( "ilks(bytes32)"
     , Just (AbiArrayType 6 (AbiUIntType 256))
@@ -257,6 +327,7 @@ instance ToABI GetIlk where
     )
 
 instance ToABI File where
+  outcome = const id
   toABI (File (Var (Concrete (Id i))) what risk) =
     ( "file(bytes32,bytes32,uint256)"
     , Nothing
@@ -264,6 +335,7 @@ instance ToABI File where
     )
 
 instance ToABI Frob where
+  outcome = const id
   toABI (Frob (Var (Concrete (Id i))) ink art) =
     ( "frob(bytes32,uint256,uint256)"
     , Nothing
@@ -322,35 +394,17 @@ gen_spawn =
           }
     ]
 
-good_form :: Act (Id Ilk) Form
-good_form = Act
+good_form :: Act Form
+good_form = changingAct
   { concoct =
       const . pure $ do
         token <- someToken
         pure (Do root (ToContract vatAddress) (Form token))
-
-  , confine =
-      const (const True)
-
-  , convert =
-      \(Result _ out) ->
-         case out of
-           Just (AbiUInt 256 x) -> Id (cast x)
-           _ -> error "bad result of form(address)"
-
-  , consume =
-      \model (Do _ _ (Form gem)) x ->
-        model
-          { ilks = Map.insert x (emptyIlk gem) (ilks model)
-          }
-
-  , confirm =
-      const (pure ())
   }
 
 -- This command runs the getter for an existing ilk ID
 -- and verifies that the struct's data matches the model.
-check_getIlk :: Act Result GetIlk
+check_getIlk :: Act GetIlk
 check_getIlk = emptyAct
   { concoct =
       \model -> do
@@ -377,9 +431,8 @@ check_getIlk = emptyAct
 good_file
   :: ByteString
   -> Gen Word256
-  -> (Word256 -> Ilk -> Ilk)
-  -> Act Result File
-good_file what gen f = emptyAct
+  -> Act File
+good_file what gen = changingAct
   { concoct =
       \model -> do
         guard . not . empty $ ilks model
@@ -394,11 +447,6 @@ good_file what gen f = emptyAct
       \model (Do _ _ (File i _ _)) ->
         Map.member i (ilks model)
 
-  , consume =
-      \model (Do _ _ (File i _ x)) _ ->
-         model
-           { ilks = Map.adjust (f x) i (ilks model) }
-
   , confirm =
       \c -> do
         let Result vm x = output c
@@ -406,23 +454,14 @@ good_file what gen f = emptyAct
         x === Nothing
   }
 
-good_file_spot :: Act Result File
-good_file_spot =
-  good_file "spot"
-    (unfixed <$> anyRay)
-    (\x ilk -> ilk { spot = fixed x })
+good_file_spot :: Act File
+good_file_spot = good_file "spot" (unfixed <$> anyRay)
 
-good_file_rate :: Act Result File
-good_file_rate =
-  good_file "rate"
-    (unfixed <$> anyRay)
-    (\x ilk -> ilk { rate = fixed x })
+good_file_rate :: Act File
+good_file_rate = good_file "rate" (unfixed <$> anyRay)
 
-good_file_line :: Act Result File
-good_file_line =
-  good_file "line"
-    anyInt
-    (\x ilk -> ilk { line = cast x })
+good_file_line :: Act File
+good_file_line = good_file "line" anyInt
 
 confirmVoidSuccess :: Confirmand Result action -> Test ()
 confirmVoidSuccess x =
@@ -446,8 +485,8 @@ doesRevert x =
     Just (VMFailure Revert) -> pure ()
     _ -> annotate (show (deed x)) >> failure
 
-good_mint :: Act Result Mint
-good_mint = emptyAct
+good_mint :: Act Mint
+good_mint = changingAct
   { concoct =
       \s ->
         Just $ do
@@ -465,13 +504,9 @@ good_mint = emptyAct
           pure (Do root (ToToken token) (Mint dst wad))
 
   , confirm = confirmVoidSuccess
-  , consume =
-      \s (Do src (ToToken token) (Mint dst wad)) _ ->
-           s { balances =
-                 Map.adjust (+ wad) (token, dst) (balances s) }
   }
 
-fail_mint_unauthorized :: Act Result Mint
+fail_mint_unauthorized :: Act Mint
 fail_mint_unauthorized = emptyAct
   { concoct =
       \model -> do
@@ -485,8 +520,8 @@ fail_mint_unauthorized = emptyAct
   , confirm = doesRevert
   }
 
-good_transfer :: Act Result Transfer
-good_transfer = emptyAct
+good_transfer :: Act Transfer
+good_transfer = changingAct
   { concoct =
       \model ->
          pure $ do
@@ -497,20 +532,12 @@ good_transfer = emptyAct
            wad <- someUpTo srcWad
            pure (Do src (ToToken token) (Transfer dst wad))
   , confine =
-        \model (Do src (ToToken token) (Transfer dst wad)) ->
-          balanceOf token src model >= wad
+      \model (Do src (ToToken token) (Transfer dst wad)) ->
+        balanceOf token src model >= wad
   , confirm = confirmSuccess (AbiBool True)
-  , consume =
-      \model (Do src (ToToken token) (Transfer dst wad)) _ ->
-        model
-          { balances =
-              Map.adjust (subtract wad) (token, src) .
-              Map.adjust (+ wad) (token, dst) $
-                balances model
-          }
   }
 
-fail_transfer_tooMuch :: Act Result Transfer
+fail_transfer_tooMuch :: Act Transfer
 fail_transfer_tooMuch = emptyAct
   { concoct =
       \model ->
@@ -524,7 +551,7 @@ fail_transfer_tooMuch = emptyAct
   , confirm = doesRevert
   }
 
-check_balanceOf :: Act Result BalanceOf
+check_balanceOf :: Act BalanceOf
 check_balanceOf = emptyAct
   { concoct =
       \model ->
@@ -540,8 +567,8 @@ check_balanceOf = emptyAct
           Just (AbiUInt 256 (balanceOf token guy (next c)))
   }
 
-good_approve :: Act Result Approve
-good_approve = emptyAct
+good_approve :: Act Approve
+good_approve = changingAct
   { concoct =
       \model -> do
         pure $ do
@@ -550,19 +577,13 @@ good_approve = emptyAct
           token <- someToken
           pure (Do src (ToToken token) (Approve guy))
   , confine =
-        \model (Do src (ToToken token) (Approve guy)) ->
-          Set.member src (accounts model)
+      \model (Do src (ToToken token) (Approve guy)) ->
+        Set.member src (accounts model)
   , confirm =
       confirmSuccess (AbiBool True)
-  , consume =
-      \model (Do src (ToToken token) (Approve guy)) _ ->
-        model
-          { approvals =
-              Set.insert (token, src, guy) (approvals model)
-          }
   }
 
-good_frob :: Act Result Frob
+good_frob :: Act Frob
 good_frob = emptyAct
   { concoct =
       \model -> do
@@ -574,15 +595,15 @@ good_frob = emptyAct
           pure (Do src (ToContract vatAddress) (Frob ilkId x 0))
 
   , confine =
-        \model (Do src _ (Frob ilkId x _)) ->
-          case Map.lookup ilkId (ilks model) of
-            Nothing -> False
-            Just ilk ->
-              and
-                [ balanceOf (gem ilk) src model >= x
-                , Set.member (gem ilk, src, vatAddress) (approvals model)
-                , rayMultiplicationSafe (spot ilk) (cast x)
-                ]
+      \model (Do src _ (Frob ilkId x _)) ->
+        case Map.lookup ilkId (ilks model) of
+          Nothing -> False
+          Just ilk ->
+            and
+              [ balanceOf (gem ilk) src model >= x
+              , Set.member (gem ilk, src, vatAddress) (approvals model)
+              , rayMultiplicationSafe (spot ilk) (cast x)
+              ]
 
   , consume =
       \model (Do src _ (Frob ilkId x _)) _ ->
@@ -594,4 +615,6 @@ good_frob = emptyAct
                 Map.adjust (subtract x) (gem ilk, src)
                   (balances model)
             }
+
+  , confirm = confirmVoidSuccess
   }
