@@ -163,24 +163,25 @@ data Confirmand output action =
 data Act output action =
   Act
     { concoct ::
-        Model Symbolic
-          -> Maybe (Gen (Do action Symbolic))
+        Model Symbolic -> Maybe (Gen (Do action Symbolic))
+    , confine ::
+        Model Symbolic -> Do action Symbolic -> Bool
     , convert ::
         Result -> output
-    , require ::
-        Maybe
-          (Model Symbolic
-            -> Do action Symbolic
-            -> Bool)
-    , perform ::
-        forall v. Ord1 v
-          => Model v
-          -> Do action v
-          -> Var output v
-          -> Model v
+    , consume ::
+        forall v. Ord1 v => Model v -> Do action v -> Var output v -> Model v
     , confirm ::
         Confirmand output action -> Test ()
     }
+
+emptyAct :: Act Result action
+emptyAct = Act
+  { concoct = const Nothing
+  , confine = const (const True)
+  , convert = id
+  , consume = \x _ _ -> x
+  , confirm = const (pure ())
+  }
 
 unchanged :: a -> b -> c -> a
 unchanged x _ _ = x
@@ -208,8 +209,8 @@ act (Act {..}) ref =
         let
           singleton x = [x]
         in concat
-          [ maybe [] (singleton . Require) require
-          , [Update perform]
+          [ [Require confine]
+          , [Update consume]
           , [Ensure $ \a b c d -> confirm (Confirmand a b c d)]
           ]
     }
@@ -331,8 +332,8 @@ good_form = Act
          token <- someToken
          pure (Do root (ToContract vatAddress) (Form token))
 
-  , require =
-      Nothing
+  , confine =
+      const (const True)
 
   , convert =
       \(Result _ out) ->
@@ -340,7 +341,7 @@ good_form = Act
            Just (AbiUInt 256 x) -> Id (cast x)
            _ -> error "bad result of form(address)"
 
-  , perform =
+  , consume =
       \model (Do _ _ (Form gem)) o ->
         model
           { ilks = Map.insert o (emptyIlk gem) (ilks model)
@@ -353,7 +354,7 @@ good_form = Act
 -- This command runs the getter for an existing ilk ID
 -- and verifies that the struct's data matches the model.
 check_getIlk :: Act Result GetIlk
-check_getIlk = Act
+check_getIlk = emptyAct
   { concoct =
       \model -> do
          guard $ not (empty (ilks model))
@@ -361,12 +362,10 @@ check_getIlk = Act
            i <- Gen.element (Map.keys (ilks model))
            pure (Do root (ToContract vatAddress) (GetIlk i))
 
-  , require = Just $
+  , confine =
       \model (Do _ _ (GetIlk i)) ->
         Map.member i (ilks model)
 
-  , convert = id
-  , perform = unchanged
   , confirm =
       \c -> do
         let Do _ _ (GetIlk i) = deed c
@@ -383,7 +382,7 @@ good_file
   -> Gen Word256
   -> (Word256 -> Ilk -> Ilk)
   -> Act Result File
-good_file what gen f = Act
+good_file what gen f = emptyAct
   { concoct =
       \model -> do
         guard . not . empty $ ilks model
@@ -394,14 +393,15 @@ good_file what gen f = Act
             (ToContract vatAddress)
             (File i (padRight 32 what) x)
 
-  , require = Just $
+  , confine =
       \model (Do _ _ (File i _ _)) ->
         Map.member i (ilks model)
-  , convert = id
-  , perform =
+
+  , consume =
       \model (Do _ _ (File i _ x)) _ ->
          model
            { ilks = Map.adjust (f x) i (ilks model) }
+
   , confirm =
       \c -> do
         let Result vm x = output c
@@ -450,7 +450,7 @@ confirmReversion x =
     _ -> annotate (show (deed x)) >> failure
 
 good_mint :: Act Result Mint
-good_mint = Act
+good_mint = emptyAct
   { concoct =
       \s ->
         Just $ do
@@ -467,17 +467,15 @@ good_mint = Act
 
           pure (Do root (ToToken token) (Mint dst wad))
 
-  , require = Nothing
-  , convert = id
   , confirm = confirmVoidSuccess
-  , perform =
+  , consume =
       \s (Do src (ToToken token) (Mint dst wad)) _ ->
            s { balances =
                  Map.adjust (+ wad) (token, dst) (balances s) }
   }
 
 fail_mint_unauthorized :: Act Result Mint
-fail_mint_unauthorized = Act
+fail_mint_unauthorized = emptyAct
   { concoct =
       \model -> do
         guard $ Set.size (accounts model) >= 2
@@ -487,14 +485,11 @@ fail_mint_unauthorized = Act
           dst <- someAccount model
           wad <- someUpTo maxBound
           pure (Do src (ToToken token) (Mint dst wad))
-  , require = Nothing
-  , convert = id
   , confirm = confirmReversion
-  , perform = unchanged
   }
 
 good_transfer :: Act Result Transfer
-good_transfer = Act
+good_transfer = emptyAct
   { concoct =
       \model ->
          pure $ do
@@ -504,13 +499,11 @@ good_transfer = Act
            let srcWad = balances model ! (token, src)
            wad <- someUpTo srcWad
            pure (Do src (ToToken token) (Transfer dst wad))
-  , require =
-      Just $
+  , confine =
         \model (Do src (ToToken token) (Transfer dst wad)) ->
           balanceOf token src model >= wad
-  , convert = id
   , confirm = confirmSuccess (AbiBool True)
-  , perform =
+  , consume =
       \model (Do src (ToToken token) (Transfer dst wad)) _ ->
         model
           { balances =
@@ -521,7 +514,7 @@ good_transfer = Act
   }
 
 fail_transfer_tooMuch :: Act Result Transfer
-fail_transfer_tooMuch = Act
+fail_transfer_tooMuch = emptyAct
   { concoct =
       \model ->
          pure $ do
@@ -531,14 +524,11 @@ fail_transfer_tooMuch = Act
            let srcWad = balances model ! (token, src)
            wad <- Gen.integral (someAbove srcWad)
            pure (Do src (ToToken token) (Transfer dst wad))
-  , require = Nothing
-  , convert = id
   , confirm = confirmReversion
-  , perform = unchanged
   }
 
 check_balanceOf :: Act Result BalanceOf
-check_balanceOf = Act
+check_balanceOf = emptyAct
   { concoct =
       \model ->
         pure $ do
@@ -546,18 +536,15 @@ check_balanceOf = Act
           guy <- someAccount model
           token <- someToken
           pure (Do src (ToToken token) (BalanceOf guy))
-  , require = Nothing
-  , convert = id
   , confirm =
       \c -> do
         let Do _ (ToToken token) (BalanceOf guy) = deed c
         resultValue (output c) ===
           Just (AbiUInt 256 (balanceOf token guy (next c)))
-  , perform = unchanged
   }
 
 good_approve :: Act Result Approve
-good_approve = Act
+good_approve = emptyAct
   { concoct =
       \model -> do
         pure $ do
@@ -565,13 +552,12 @@ good_approve = Act
           guy <- pure vatAddress
           token <- someToken
           pure (Do src (ToToken token) (Approve guy))
-  , require =
-      Just $
+  , confine =
         \model (Do src (ToToken token) (Approve guy)) ->
           Set.member src (accounts model)
-  , convert = id
-  , confirm = confirmSuccess (AbiBool True)
-  , perform =
+  , confirm =
+      confirmSuccess (AbiBool True)
+  , consume =
       \model (Do src (ToToken token) (Approve guy)) _ ->
         model
           { approvals =
@@ -580,7 +566,7 @@ good_approve = Act
   }
 
 good_frob :: Act Result Frob
-good_frob = Act
+good_frob = emptyAct
   { concoct =
       \model -> do
         guard . not . empty $ ilks model
@@ -590,8 +576,7 @@ good_frob = Act
           x <- someUpTo (balanceOf (gem ilk) src model)
           pure (Do src (ToContract vatAddress) (Frob ilkId x 0))
 
-  , require =
-      Just $
+  , confine =
         \model (Do src _ (Frob ilkId x _)) ->
           case Map.lookup ilkId (ilks model) of
             Nothing -> False
@@ -602,10 +587,7 @@ good_frob = Act
                 , rayMultiplicationSafe (spot ilk) (cast x)
                 ]
 
-  , convert = id
-  , confirm = confirmVoidSuccess
-
-  , perform =
+  , consume =
       \model (Do src _ (Frob ilkId x _)) _ ->
         let
           Just ilk = Map.lookup ilkId (ilks model)
