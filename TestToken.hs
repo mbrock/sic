@@ -45,7 +45,7 @@ goodCommands =
   , act good_file_spot
   , act good_file_rate
   , act good_file_line
-  , act good_frob
+  -- , act good_frob
   ]
 
 -- These commands exercise the system's error cases.

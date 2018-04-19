@@ -1,4 +1,4 @@
-{ stdenv, haskell, haskellPackages, fetchFromGitHub, AgdaStdlib, z3 }:
+{ lib, stdenv, haskell, haskellPackages, fetchFromGitHub, AgdaStdlib, z3 }:
 
 let
   stdlib =
@@ -65,7 +65,22 @@ in
     name = "sic-${version}";
     version = "1.0";
     contract = "Example";
-    src = ./.;
+    src =
+      builtins.filterSource
+        (name: type:
+          let
+            basename = builtins.baseNameOf name;
+            is = x: basename == x;
+            like = x: builtins.match x basename != null;
+          in !(
+            is ".git" ||
+            is "out" ||
+            is "MAlonzo" ||
+            is "agda-stdlib" ||
+            like "\\.agdai$"
+          )
+        )
+        ./.;
 
     buildInputs =
       let
@@ -98,13 +113,13 @@ in
     checkPhase = ''
       ${envPhase}
       runghc Test.hs
-      output=$(set -x; runghc TestFail.hs) || true
+      output=$(set -x; runghc Test.hs --mutation) || true
       if message=$(grep ✓ <<<"$output"); then
         echo $'\e[31m'"$message"$'\e[0m'
         exit 1
       else
         echo -n $'\e[32m'
-        grep ✗ <<<"$output"
+        grep "failed after" <<<"$output"
         echo -n $'\e[0m'
       fi
     '';

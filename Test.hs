@@ -13,41 +13,34 @@ import qualified Hedgehog.Range as Range
 import System.IO.Silently (hSilence)
 import System.IO (stdout, stderr)
 import System.Random
+import System.Environment (getArgs)
 
 import qualified Data.ByteString as BS
 import Data.Word (Word8)
 
-main :: IO ()
-main = do
+checkGood :: GroupName -> [(PropertyName, Property)] -> IO ()
+checkGood s ps =  do
+  good <- checkSequential $ Group s ps
+  unless good exitFailure
+
+checkFail :: String -> [(PropertyName, Property)] -> IO ()
+checkFail s ps = do
+  putStrLn ("Verifying failure of " <> s <> "... ")
+  good <-
+    checkSequential
+      (Group "" [(x, withShrinks 0 y) | (x, y) <- ps])
+  if good
+    then do
+      putStrLn "unfortunately, all tests passed!"
+      exitFailure
+    else do
+      putStrLn "tests failed as expected."
+
+mainGood :: IO ()
+mainGood = do
   resetDebug
-
-  let
-    checkGood s ps = do
-      good <- checkSequential $ Group s ps
-      unless good exitFailure
-      putStrLn ""
-
-    checkFail s ps = do
-      putStr ("Verifying failure of " <> s <> "... ")
-      good <-
-        hSilence [stdout, stderr] $
-          checkSequential
-            (Group "" [(x, withShrinks 0 y) | (x, y) <- ps])
-      if good
-        then do
-          putStrLn "unfortunately, all tests passed!"
-          exitFailure
-        else do
-          putStrLn "tests failed, as expected."
-
   checkGood "System"
     [("Full test suite", prop_system (pure initialVm))]
-
-  forM_ [1..5] $ \i ->
-    checkFail ("system mutation " <> show i)
-      [("Full test suite", prop_system (mutate initialVm))]
-
-  putStrLn ""
 
   -- check "Sic basic math"
   --   [ ("iadd", prop_iadd (+))
@@ -56,7 +49,22 @@ main = do
   --   , ("rpow", prop_rpow (^) rpowMaxResult)
   --   ]
 
+mainFail :: IO ()
+mainFail = do
+  resetDebug
+  forM_ [1..5] $ \i ->
+    checkFail ("system mutation " <> show i)
+      [("Full test suite", prop_system (mutate initialVm))]
 
+main :: IO ()
+main = do
+  args <- getArgs
+  case args of
+    ["--mutation"] -> mainFail
+    [] -> mainGood
+    _ -> do
+      putStrLn "nope"
+      exitFailure
 
 -- This bytecode mutation testing code is very prototype.
 -- Right now it just alters one random opcode according to
