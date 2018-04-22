@@ -138,8 +138,8 @@ module Sⁿ where
   open Lists
   open Strings
 
-  data Arg : Set where $ : ℕ → Arg
-  data Ref : Set where # : ℕ → Ref
+  data Arg : Set where $$ : ℕ → Arg
+  data Ref : Set where ## : ℕ → Ref
 
   data Type : Set where
     Word : Type
@@ -156,21 +156,26 @@ module Sⁿ where
 
       u     : S⁰ Word            -- The invoking user's ID
       t     : S⁰ Word            -- The current time
-      nat_  : ℕ → S⁰ Word        -- A natural number literal
+      ray   : S⁰ Word            -- The ray 1.0
+      nat  : ℕ → S⁰ Word        -- A natural number literal
       at_   : ℕ → S⁰ Slot        -- A simple storage slot
-      get_  : S⁰ Slot → S⁰ Word  -- Value of a storage slot
-      ref_  : Ref → S⁰ Word      -- Value of a memory slot
-      arg_  : Arg → S⁰ Word      -- Value of an argument
+      get_ : S⁰ Slot → S⁰ Word  -- Value of a storage slot
+      #  : Ref → S⁰ Word      -- Value of a memory slot
+      $  : Arg → S⁰ Word      -- Value of an argument
       ⟨_    : ⟨S⁰⟩ → S⁰ Slot     -- Hash of a sequence of values
 
     -- A nonempty list of S⁰ terms.
     data ⟨S⁰⟩ : Set where
-      one-S⁰ : S⁰ Word → ⟨S⁰⟩
-      _,_    : S⁰ Word → ⟨S⁰⟩ → ⟨S⁰⟩
+      _⟩  : S⁰ Word → ⟨S⁰⟩
+      _,_ : S⁰ Word → ⟨S⁰⟩ → ⟨S⁰⟩
 
-    -- Some trickery to make ⟨ x₁ , x₂ , ... ⟩ work syntactically.
-    _⟩ : S⁰ Word → ⟨S⁰⟩
-    x ⟩ = one-S⁰ x
+  append-⟨S⁰⟩ : ⟨S⁰⟩ → ⟨S⁰⟩ → ⟨S⁰⟩
+  append-⟨S⁰⟩ (x ⟩) y = x , y
+  append-⟨S⁰⟩ (x , xs) y = x , append-⟨S⁰⟩ xs y
+
+  reverse-⟨S⁰⟩ : ⟨S⁰⟩ → ⟨S⁰⟩
+  reverse-⟨S⁰⟩ (x ⟩) = x ⟩
+  reverse-⟨S⁰⟩ (x , xs) = append-⟨S⁰⟩ (reverse-⟨S⁰⟩ xs) (x ⟩)
 
   -- An S¹ is “easy” if it doesn’t do any external calls.
   data Ease : Set where
@@ -193,7 +198,7 @@ module Sⁿ where
   -- The ℕ type parameter is the number of values returned via “fyi”.
   data S¹ : Ease → ℕ → Set where
     iff_ : S⁰ Word → S¹ easy 0
-    _≜_  : ℕ → S⁰ Word → S¹ easy 0
+    _≜_  : Ref → S⁰ Word → S¹ easy 0
     _←_  : S⁰ Slot → S⁰ Word → S¹ easy 0
     fyi  : ∀ {n} → (xs : Vec (S⁰ Word) (suc n)) → S¹ easy (suc n)
     ext  : ∀ {n} → String → S⁰ Word → Vec (S⁰ Word) n → S¹ hard 0
@@ -263,7 +268,7 @@ module Sⁿ where
       → S¹ ease n
       → S² Guy Act ease
 
-    _//_
+    _⅋_
       : ∀ {ease₁ ease₂}
       → S² Guy Act ease₁
       → S² Guy Act ease₂
@@ -279,7 +284,7 @@ module Sⁿ where
   -- Syntax precedence list
 
   infix  1 case_then_else_
-  infixr 2 _//_
+  infixr 2 _⅋_
   infixr 3 _can_::_
   infixr 4 _│_
 
@@ -296,8 +301,7 @@ module Sⁿ where
   infixl 41 _∙_
   infixl 42 -_
 
-  infix  50 get_ ref_ arg_ nat_
-
+  infix  50 get_
   infixr 60 ⟨_
   infixr 61 _,_
   infixr 62 _⟩
@@ -323,8 +327,8 @@ module OverloadedNumbers where
     from-ℕ {{ℕ-IsNumber}}    n = n
     from-ℕ {{Word-IsNumber}} n = nat n
     from-ℕ {{Slot-IsNumber}} n = at n
-    from-ℕ {{Ref-IsNumber}}  n = # n
-    from-ℕ {{Arg-IsNumber}}  n = $ n
+    from-ℕ {{Ref-IsNumber}}  n = ## n
+    from-ℕ {{Arg-IsNumber}}  n = $$ n
 
   {-# BUILTIN FROMNAT from-ℕ #-}
 
@@ -341,7 +345,7 @@ module Oⁿ where
   open Vectors
   open Lists
   open Strings
-  open Sⁿ using (Some; the; anybody)
+  open Sⁿ using (Ref; ##; Some; the; anybody)
 
   -- The O⁰ operations have stack effects, which we encode in the types.
   -- For example, the type of +ₒ denotes taking two items and leaving one.
@@ -350,6 +354,7 @@ module Oⁿ where
   data O⁰ : ℕ → ℕ → Set where
     _┆_     : ∀ {i j k} → O⁰ i j → O⁰ j k → O⁰ i k
     #ₒ      : ∀ {i} → ℕ → O⁰           i   (suc i)
+    rayₒ    : ∀ {i} →     O⁰           i   (suc i)
     refₒ    : ∀ {i} → ℕ → O⁰           i   (suc i)
     getₒ    : ∀ {i} → ℕ → O⁰           i   (suc i)
     argₒ    : ∀ {i} → ℕ → O⁰           i   (suc i)
@@ -379,7 +384,7 @@ module Oⁿ where
     _∥_   : O¹ → O¹ → O¹
     iffₒ  :          O⁰ 0 1  → O¹
     setₖₒ : O⁰ 0 1 → O⁰ 0 1  → O¹
-    defₒ  :      ℕ → O⁰ 0 1  → O¹
+    defₒ  :    Ref → O⁰ 0 1  → O¹
     setₒ  :      ℕ → O⁰ 0 1  → O¹
     fyiₒ  : ∀ {n} → Vec (O⁰ 0 1) (suc n) → O¹
     extₒ  : ∀ {n} → String → O⁰ 0 1 → Vec (O⁰ 0 1) n → O¹
@@ -419,13 +424,13 @@ module Oⁿ where
   O⁰-memory x = 0
 
   O¹-var-memory : O¹ → ℕ
-  O¹-var-memory (defₒ i x)    = suc i ⊔ O⁰-memory x
-  O¹-var-memory (fyiₒ xs)     = foldr₁ᵛ _⊔_ (mapᵛ O⁰-memory xs)
-  O¹-var-memory (extₒ s c xs) = foldrᵛ (λ _ → ℕ) _⊔_ 0 (mapᵛ O⁰-memory xs)
-  O¹-var-memory (iffₒ x)      = O⁰-memory x
-  O¹-var-memory (setₖₒ k x)   = O⁰-memory x
-  O¹-var-memory (setₒ i x)    = O⁰-memory x
-  O¹-var-memory (o₁ ∥ o₂)     = O¹-var-memory o₁ ⊔ O¹-var-memory o₂
+  O¹-var-memory (defₒ (## i) x) = suc i ⊔ O⁰-memory x
+  O¹-var-memory (fyiₒ xs)      = foldr₁ᵛ _⊔_ (mapᵛ O⁰-memory xs)
+  O¹-var-memory (extₒ s c xs)  = foldrᵛ (λ _ → ℕ) _⊔_ 0 (mapᵛ O⁰-memory xs)
+  O¹-var-memory (iffₒ x)       = O⁰-memory x
+  O¹-var-memory (setₖₒ k x)    = O⁰-memory x
+  O¹-var-memory (setₒ i x)     = O⁰-memory x
+  O¹-var-memory (o₁ ∥ o₂)      = O¹-var-memory o₁ ⊔ O¹-var-memory o₂
 
   O¹-fyi-memory : O¹ → ℕ
   O¹-fyi-memory (fyiₒ {n} xs) = suc n
@@ -442,17 +447,18 @@ module Sⁿ→Oⁿ where
 
   mutual
     ⟨S⁰⟩→O⁰ : ∀ {i} → ⟨S⁰⟩ → O⁰ i (suc i)
-    ⟨S⁰⟩→O⁰ (one-S⁰ x) =              ⟦ x ⟧⁰ ┆ H¹ₒ
+    ⟨S⁰⟩→O⁰ (x ⟩) =              ⟦ x ⟧⁰ ┆ H¹ₒ
     ⟨S⁰⟩→O⁰ (x , xs)   = ⟨S⁰⟩→O⁰ xs ┆ ⟦ x ⟧⁰ ┆ H²ₒ
 
     -- Compiling expressions
     ⟦_⟧⁰ : ∀ {i T} → S⁰ T → O⁰ i (suc i)
     ⟦ ⟨ xs ⟧⁰      = ⟨S⁰⟩→O⁰ xs
+    ⟦ ray ⟧⁰       = rayₒ
     ⟦ at n ⟧⁰      = #ₒ n
     ⟦ nat n ⟧⁰     = #ₒ n
     ⟦ get x ⟧⁰     = ⟦ x ⟧⁰ ┆ getₖₒ
-    ⟦ ref (# x) ⟧⁰ = refₒ x
-    ⟦ arg ($ x) ⟧⁰ = argₒ x
+    ⟦ # (## x) ⟧⁰ = refₒ x
+    ⟦ $ ($$ x) ⟧⁰ = argₒ x
     ⟦ u ⟧⁰         = callerₒ
     ⟦ t ⟧⁰         = timeₒ
     ⟦ x + y ⟧⁰     = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ +ₒ
@@ -486,7 +492,7 @@ module Sⁿ→Oⁿ where
   ⟦_⟧² : ∀ {ease Guy Act} → S² Guy Act ease → O² Guy Act
   ⟦ g can s :: k ⟧² =
     actₒ g s (S¹-fyi-size k) ⟦ k ⟧¹
-  ⟦ a // b     ⟧² =
+  ⟦ a ⅋ b     ⟧² =
     seqₒ ⟦ a ⟧² ⟦ b ⟧²
   ⟦ case p then a else b ⟧² =
     caseₒ ⟦ p ⟧⁰ ⟦ a ⟧² ⟦ b ⟧²
@@ -506,7 +512,7 @@ module Sⁿ→Oⁿ where
     example-2 : S¹-memory {_} {0} (0 ≜ nat 0) ≣ 1
     example-2 = refl
 
-    example-3 : S¹-memory {_} {0} (0 ≜ ref 1 + ref 2) ≣ 3
+    example-3 : S¹-memory {_} {0} (0 ≜ # 1 + # 2) ≣ 3
     example-3 = refl
 
 
@@ -813,7 +819,7 @@ module EVM-Math where
 --
 
 module Sic→EVM where
-  open Sⁿ using (Some; the; anybody)
+  open Sⁿ using (##; Some; the; anybody)
   open Oⁿ
   open EVM
   open EVM-Math
@@ -825,6 +831,7 @@ module Sic→EVM where
 
   ⟦_⟧⁰ᵉ : ∀ {i j} → O⁰ i j → Oᴱ
   ⟦ #ₒ n    ⟧⁰ᵉ  = PUSH n
+  ⟦ rayₒ ⟧⁰ᵉ     = RONE
   ⟦ timeₒ   ⟧⁰ᵉ  = TIMESTAMP
   ⟦ x₁ ┆ x₂ ⟧⁰ᵉ  = ⟦ x₁ ⟧⁰ᵉ ⟫ ⟦ x₂ ⟧⁰ᵉ
   ⟦ callerₒ ⟧⁰ᵉ  = CALLER
@@ -891,7 +898,7 @@ module Sic→EVM where
   mutual
     O¹→Oᴱ′ : ℕ → ℕ → O¹ → Oᴱ
     O¹→Oᴱ′ m₁ m₂ (iffₒ o)      = ⟦ o ⟧⁰ᵉ ⟫ ISZERO ⟫ JUMPI 3
-    O¹→Oᴱ′ m₁ m₂ (defₒ i x)    = ⟦ x ⟧⁰ᵉ ⟫ PUSH (i * wordsize +ℕ m₀) ⟫ MSTORE
+    O¹→Oᴱ′ m₁ m₂ (defₒ (## i) x) = ⟦ x ⟧⁰ᵉ ⟫ PUSH (i * wordsize +ℕ m₀) ⟫ MSTORE
     O¹→Oᴱ′ m₁ m₂ (setₒ i x)    = ⟦ x ⟧⁰ᵉ ⟫ PUSH i ⟫ SSTORE
     O¹→Oᴱ′ m₁ m₂ (setₖₒ k x)   = ⟦ x ⟧⁰ᵉ ⟫ ⟦ k ⟧⁰ᵉ ⟫ SSTORE
     O¹→Oᴱ′ m₁ m₂ (fyiₒ xs)     = fyiₒ→Oᴱ offset xs
@@ -1252,11 +1259,12 @@ module Linking where
 
 module Dappsys where
   open Sⁿ
+  open Naturals
 
   root = get ⟨ 0 , u ⟩ ≡ 1
 
   x₁ x₂ x₃ x₄ x₅ : S⁰ Word
-  x₁ = arg 0; x₂ = arg 1; x₃ = arg 2; x₄ = arg 3; x₅ = arg 4
+  x₁ = $ 0; x₂ = $ 1; x₃ = $ 2; x₄ = $ 3; x₅ = $ 4
 
   v = x₁
 
@@ -1275,7 +1283,39 @@ module Dappsys where
   _↧_↥_ : S⁰ Slot → S⁰ Slot → S⁰ Word → S¹ easy 0
   k₁ ↧ k₂ ↥ v = (k₁ ↧ v) │ (k₂ ↥ v)
 
-  infix 19 _↧_↥_
+  infix 19 _↧_↥_ _↧_ _↥_
+
+module Structs where
+  open Sⁿ
+  open Naturals
+
+  private
+    _of_to_ : (n : ℕ) → Set → Set → Set
+    ℕ.zero of t₁ to t₂ = t₂
+    suc n  of t₁ to t₂ = t₁ → n of t₁ to t₂
+
+    fmap
+      : ∀ {t t₁ t₂} → (n : ℕ) → (t₁ → t₂)
+      → n of t to t₁
+      → n of t to t₂
+    fmap ℕ.zero f x = f x
+    fmap (suc n) f x = λ a → fmap n f (x a)
+
+    struct : ℕ → (m : ℕ) → m of S⁰ Word to ⟨S⁰⟩
+    struct k ℕ.zero    = nat k ⟩
+    struct k (suc m) x = fmap m (λ s → x , s) (struct k m)
+
+  _maps_to_::_
+    : ∀ {t} → ℕ → (m : ℕ) → (n : ℕ)
+    → n of m of S⁰ Word to S⁰ Slot to t
+    → t
+  k maps m to ℕ.zero :: f = f
+  k maps m to suc n :: f =
+    k maps m to n :: f (fmap m (λ x → ⟨ nat k , x) (struct n m))
+
+  _args_ : ∀ {t} → (n : ℕ) → (n of S⁰ Word to t) → t
+  ℕ.zero args f = f
+  suc n  args f = n args f ($ ($$ n))
 
 
 -- Now we open up our modules to users of the language.
@@ -1288,3 +1328,5 @@ open External public
 open Linking public
 open EVM-Assembly public
 open EVM public
+open Structs public
+open Dappsys public
