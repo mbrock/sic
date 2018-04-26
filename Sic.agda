@@ -264,9 +264,9 @@ module Sⁿ where
     anybody : Some Guy
 
   data S² (Guy : Set) (Act : Set) : Ease → Set where
-    _can_::_
+    _::_⊢_
       : ∀ {ease n}
-      → Some Guy
+      → Guy
       → Act
       → S¹ ease n
       → S² Guy Act ease
@@ -288,7 +288,7 @@ module Sⁿ where
 
   infix  1 case_then_else_
   infixr 2 _⅋_
-  infixr 3 _can_::_
+  infixr 3 _::_⊢_
   infixr 4 _│_
 
   infix  10 iff_ _≜_ _←_ _←+_
@@ -394,7 +394,7 @@ module Oⁿ where
     extₒ  : ∀ {n} → String → O⁰ 0 1 → Vec (O⁰ 0 1) n → O¹
 
   data O² (Guy : Set) (Act : Set) : Set where
-    actₒ  : Some Guy → Act → ℕ → O¹ → O² Guy Act
+    actₒ  : Guy → Act → ℕ → O¹ → O² Guy Act
     seqₒ  : Op₂ (O² Guy Act)
     caseₒ : O⁰ 0 1 → Op₂ (O² Guy Act)
 
@@ -407,10 +407,8 @@ module Oⁿ where
     caseₒ p (map-O²-act f x) (map-O²-act f y)
 
   map-O²-guy : ∀ {Guy₁ Guy₂ Act} → (Guy₁ → Guy₂) → O² Guy₁ Act → O² Guy₂ Act
-  map-O²-guy f (actₒ (the guy) s x₁ x₂) =
-    actₒ (the (f guy)) s x₁ x₂
-  map-O²-guy f (actₒ anybody s x₁ x₂) =
-    actₒ anybody s x₁ x₂
+  map-O²-guy f (actₒ guy s x₁ x₂) =
+    actₒ (f guy) s x₁ x₂
   map-O²-guy f (seqₒ x₁ x₂) =
     seqₒ (map-O²-guy f x₁) (map-O²-guy f x₂)
   map-O²-guy f (caseₒ p x₁ x₂) =
@@ -496,7 +494,7 @@ module Sⁿ→Oⁿ where
 
   -- Compiling signature dispatch sequences
   ⟦_⟧² : ∀ {ease Guy Act} → S² Guy Act ease → O² Guy Act
-  ⟦ g can s :: k ⟧² =
+  ⟦ g :: s ⊢ k ⟧² =
     actₒ g s (S¹-fyi-size k) ⟦ k ⟧¹
   ⟦ a ⅋ b     ⟧² =
     seqₒ ⟦ a ⟧² ⟦ b ⟧²
@@ -947,7 +945,7 @@ module Sic→EVM where
   guy-check (the x) = PUSHADDR x ⟫ CALLER ⟫ EQ
   guy-check anybody = PUSH 1
 
-  ⟦_⟧²ᵉ : O² Addrᴱ String → Oᴱ
+  ⟦_⟧²ᵉ : O² (Some Addrᴱ) String → Oᴱ
   ⟦ seqₒ a b   ⟧²ᵉ = ⟦ a ⟧²ᵉ ⟫ ⟦ b ⟧²ᵉ
   ⟦ actₒ guy s n k ⟧²ᵉ =
     guy-check guy ⟫ sig-check s n ⟫ AND ⟫
@@ -962,7 +960,7 @@ module Sic→EVM where
   open Sⁿ→Oⁿ using (⟦_⟧²)
 
   S²→Oᴱ : ∀ {Guy Act ease}
-        → (Guy → Addrᴱ)
+        → (Guy → Some Addrᴱ)
         → (Act → String)
         → S² Guy Act ease → Oᴱ
   S²→Oᴱ f g s = prelude ⟫ ⟦ map-O²-guy f (map-O²-act g ⟦ s ⟧²) ⟧²ᵉ ⟫ REVERT
@@ -970,10 +968,10 @@ module Sic→EVM where
   S²→O² : ∀ {Guy Act ease} → S² Guy Act ease → O² Guy Act
   S²→O² x = ⟦ x ⟧²
 
-  O²→Oᴱ : O² Addrᴱ String → Oᴱ
+  O²→Oᴱ : O² (Some Addrᴱ) String → Oᴱ
   O²→Oᴱ x = prelude ⟫ ⟦ x ⟧²ᵉ ⟫ REVERT
 
-  compile : ∀ {ease} → S² Addrᴱ String ease → Oᴱ
+  compile : ∀ {ease} → S² (Some Addrᴱ) String ease → Oᴱ
   compile = S²→Oᴱ (λ x → x) (λ x → x)
 
 
@@ -1188,24 +1186,26 @@ module Linking where
     where import Data.String
 
   -- Resolve parameters via I/O environment variables.
-  resolve : ID → IO (Maybe Addrᴱ)
-  resolve (parameter x) =
+  resolve : Some ID → IO (Maybe (Some Addrᴱ))
+  resolve anybody = IO.return (just anybody)
+  resolve (the (parameter x)) =
     ♯ lift (ask x) >>= λ y →
-      ♯ IO.return (maybe addr nothing y)
-  resolve (hardcoded x) = IO.return (just x)
-  resolve (construct) = IO.return nothing
+      ♯ IO.return
+          (maybe
+            (λ s → maybe (λ a → just (the a)) nothing (addr s))
+            nothing y)
+  resolve (the (hardcoded x)) = IO.return (just (the x))
+  resolve (the construct) = IO.return nothing
 
   -- Resolve all the guys in an O² using I/O.
   resolve-O²
     : ∀ {guy act}
-    → (guy → ID)
+    → (guy → Some ID)
     → O² guy act
-    → IO (Maybe (O² Addrᴱ act))
-  resolve-O² f (actₒ anybody a n x) =
-    IO.return (just (actₒ anybody a n x))
-  resolve-O² f (actₒ (the g) a n x) =
+    → IO (Maybe (O² (Some Addrᴱ) act))
+  resolve-O² f (actₒ g a n x) =
     ♯ resolve (f g) >>= maybe
-        (λ g′ → ♯ IO.return (just (actₒ (the g′) a n x)))
+        (λ g′ → ♯ IO.return (just (actₒ g′ a n x)))
         (♯ IO.return nothing)
   resolve-O² f (seqₒ x₁ x₂) =
     ♯ resolve-O² f x₁ >>= maybe
@@ -1224,7 +1224,7 @@ module Linking where
 
   compile-and-assemble
     : ∀ {Guy Act ease}
-    → (Guy → Addrᴱ)
+    → (Guy → Some Addrᴱ)
     → (Act → String)
     → S² Guy Act ease → String
   compile-and-assemble f₁ f₂ s² =
@@ -1235,7 +1235,7 @@ module Linking where
 
   compile-and-link
     : ∀ {Guy Act ease}
-    → (Guy → ID)
+    → (Guy → Some ID)
     → (Act → String)
     → S² Guy Act ease
     → IO (Maybe Oᴱ)
@@ -1254,7 +1254,7 @@ module Linking where
   link_with-guys_with-acts
     : ∀ {Guy Act ease}
     → S² Guy Act ease
-    → (Guy → ID)
+    → (Guy → Some ID)
     → (Act → String)
     → IO.Primitive.IO ⊤
   link x with-guys f₁ with-acts f₂ =
@@ -1269,13 +1269,6 @@ module Linking where
 module Dappsys where
   open Sⁿ
   open Naturals
-
-  root = get ⟨ 0 , u ⟩ ≡ 1
-
-  x₁ x₂ x₃ x₄ x₅ : S⁰ Word
-  x₁ = $ 0; x₂ = $ 1; x₃ = $ 2; x₄ = $ 3; x₅ = $ 4
-
-  v = x₁
 
   _↑_ : S⁰ Slot → S⁰ Word → S¹ easy 0
   _↓_ : S⁰ Slot → S⁰ Word → S¹ easy 0
