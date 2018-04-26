@@ -13,7 +13,7 @@ D⁰ = slot 0             :: λ K →
      slot 1 maps 1 to 4 :: λ ilk → λ ψ φ Ω Σ →
      slot 2 maps 2 to 4 :: λ urn → λ c d C D →
 
-     the pal can cage :: K ← 1
+    the pal can cage :: K ← 1
   ⅋ anybody can live :: fyi₁ (¬ get K)
   ⅋ anybody can look :: 2 args (λ i j → fyi₂ (get C i j) (get D i j))
   ⅋ anybody can gaze :: 2 args (λ i j → fyi₂ (get c i j) (get d i j))
