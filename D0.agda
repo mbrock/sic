@@ -5,7 +5,7 @@ open import Sic
 data Guy⁰ : Set where pal : Guy⁰
 data Act⁰ : Set where
   live cage : Act⁰
-  look feel gaze : Act⁰
+  look feel : Act⁰
   slip mold frob grab : Act⁰
 
 D⁰ : S² Guy⁰ Act⁰ easy
@@ -15,9 +15,8 @@ D⁰ = slot 0             :: λ K →
 
     the pal can cage :: K ← 1
   ⅋ anybody can live :: fyi₁ (¬ get K)
-  ⅋ anybody can look :: 2 args (λ i j → fyi₂ (get C i j) (get D i j))
-  ⅋ anybody can gaze :: 2 args (λ i j → fyi₂ (get c i j) (get d i j))
-  ⅋ anybody can feel :: 1 args (λ i → ilk i 0 1 2 3 fyi₄)
+  ⅋ anybody can look :: 2 args (λ i j → urn i j 0 1 2 3 fyi₄)
+  ⅋ anybody can feel :: 1 args (λ i   → ilk i   0 1 2 3 fyi₄)
   ⅋ the pal can grab :: 2 args (λ i j → c i j ← 0 │ d i j ← 0)
   ⅋ the pal can mold :: 4 args (λ i φᵢ ψᵢ Ωᵢ → φ i ← φᵢ │ ψ i ← ψᵢ │ Ω i ← Ωᵢ)
   ⅋ the pal can slip :: 4 args (λ i j ΔC ΔD → C i j ←+ ΔC │ D i j ←+ ΔD)
@@ -25,8 +24,8 @@ D⁰ = slot 0             :: λ K →
         urn i u 0 1 2 3  λ cᵢᵤ dᵢᵤ Cᵢᵤ Dᵢᵤ →
         ilk i   4 5 6 7  λ ψᵢ φᵢ Ωᵢ Σᵢ →
         0 ≜ cᵢᵤ + Δc │ 1 ≜ dᵢᵤ + Δd │ 7 ≜ Σᵢ + Δd
+      │ iff (φᵢ ∙ dᵢᵤ ≤ ψᵢ ∙ cᵢᵤ) ∨ (Δd ≤ 0 ∧ Δc ≥ 0)
+      │ iff (φᵢ ∙ Σᵢ ≤ Ωᵢ) ∨ (Δd ≤ 0)
       │ c i u ←+ cᵢᵤ │ d i u ←+ dᵢᵤ │ Σ i ←+ Σᵢ
       │ C i u ←+ Cᵢᵤ − Δc
       │ D i u ←+ Dᵢᵤ − Δd ∙ φᵢ
-      │ iff φᵢ ∙ dᵢᵤ ≤ ψᵢ ∙ cᵢᵤ ∨ (Δd ≤ 0 ∧ Δc ≥ 0)
-      │ iff φᵢ ∙ Σᵢ ≤ Ωᵢ ∨ Δd ≤ 0
