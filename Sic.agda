@@ -103,9 +103,11 @@ module Vectors where
              ; fromList  to fromListᵛ
              ; []        to []ᵛ
              ; _∷_       to _∷ᵛ_
+             ; _++_      to _++ᵛ_
              ; allFin    to allFinᵛ
              ; zip       to zipᵛ
              ; reverse   to reverseᵛ
+             ; tabulate  to tabulateᵛ
              )
     public
 
@@ -154,15 +156,15 @@ module Sⁿ where
       _<_ _>_ _≥_ _≤_ _≡_ : Op₂ (S⁰ Word)
       _∨_ _∧_             : Op₂ (S⁰ Word)
 
-      u     : S⁰ Word            -- The invoking user's ID
-      t     : S⁰ Word            -- The current time
-      ray   : S⁰ Word            -- The ray 1.0
-      nat  : ℕ → S⁰ Word        -- A natural number literal
-      at_   : ℕ → S⁰ Slot        -- A simple storage slot
-      get_ : S⁰ Slot → S⁰ Word  -- Value of a storage slot
-      #  : Ref → S⁰ Word      -- Value of a memory slot
-      $  : Arg → S⁰ Word      -- Value of an argument
-      ⟨_    : ⟨S⁰⟩ → S⁰ Slot     -- Hash of a sequence of values
+      u : S⁰ Word -- The invoking user's ID
+      t : S⁰ Word -- The current time
+      ray : S⁰ Word -- The ray 1.0
+      nat : ℕ → S⁰ Word -- A natural number literal
+      at_ : ℕ → S⁰ Slot -- A simple storage slot
+      get_ : S⁰ Slot → S⁰ Word -- Value of a storage slot
+      #  : Ref → S⁰ Word -- Value of a memory slot
+      $  : Arg → S⁰ Word -- Value of an argument
+      ⟨_ : ⟨S⁰⟩ → S⁰ Slot -- Hash of a sequence of values
 
     -- A nonempty list of S⁰ terms.
     data ⟨S⁰⟩ : Set where
@@ -200,6 +202,7 @@ module Sⁿ where
     iff_ : S⁰ Word → S¹ easy 0
     _≜_  : Ref → S⁰ Word → S¹ easy 0
     _←_  : S⁰ Slot → S⁰ Word → S¹ easy 0
+    _←+_ : S⁰ Slot → S⁰ Word → S¹ easy 0
     fyi  : ∀ {n} → (xs : Vec (S⁰ Word) (suc n)) → S¹ easy (suc n)
     ext  : ∀ {n} → String → S⁰ Word → Vec (S⁰ Word) n → S¹ hard 0
     move_of_from_to_ : S⁰ Word → S⁰ Word → S⁰ Word → S⁰ Word → S¹ hard 0
@@ -288,7 +291,7 @@ module Sⁿ where
   infixr 3 _can_::_
   infixr 4 _│_
 
-  infix  10 iff_ _≜_ _←_
+  infix  10 iff_ _≜_ _←_ _←+_
 
   infixl 31 _∨_
   infixl 32 _∧_
@@ -384,6 +387,7 @@ module Oⁿ where
     _∥_   : O¹ → O¹ → O¹
     iffₒ  :          O⁰ 0 1  → O¹
     setₖₒ : O⁰ 0 1 → O⁰ 0 1  → O¹
+    setₖₒ₊ : O⁰ 0 1 → O⁰ 0 1  → O¹
     defₒ  :    Ref → O⁰ 0 1  → O¹
     setₒ  :      ℕ → O⁰ 0 1  → O¹
     fyiₒ  : ∀ {n} → Vec (O⁰ 0 1) (suc n) → O¹
@@ -429,6 +433,7 @@ module Oⁿ where
   O¹-var-memory (extₒ s c xs)  = foldrᵛ (λ _ → ℕ) _⊔_ 0 (mapᵛ O⁰-memory xs)
   O¹-var-memory (iffₒ x)       = O⁰-memory x
   O¹-var-memory (setₖₒ k x)    = O⁰-memory x
+  O¹-var-memory (setₖₒ₊ k x)   = O⁰-memory x
   O¹-var-memory (setₒ i x)     = O⁰-memory x
   O¹-var-memory (o₁ ∥ o₂)      = O¹-var-memory o₁ ⊔ O¹-var-memory o₂
 
@@ -483,6 +488,7 @@ module Sⁿ→Oⁿ where
   ⟦ ext s c a ⟧¹ = extₒ s (⟦_⟧⁰ c) (mapᵛ ⟦_⟧⁰ a)
   ⟦ i ≜ x ⟧¹  = defₒ i ⟦ x ⟧⁰
   ⟦ k ← x ⟧¹  = setₖₒ ⟦ k ⟧⁰ ⟦ x ⟧⁰
+  ⟦ k ←+ x ⟧¹ = setₖₒ₊ ⟦ k ⟧⁰ ⟦ x ⟧⁰
   ⟦ x │ y ⟧¹  = ⟦ x ⟧¹ ∥ ⟦ y ⟧¹
   ⟦ move wad of gem from src to dst ⟧¹ =
     extₒ "transferFrom(address,address,uint256)" ⟦ gem ⟧⁰
@@ -901,6 +907,9 @@ module Sic→EVM where
     O¹→Oᴱ′ m₁ m₂ (defₒ (## i) x) = ⟦ x ⟧⁰ᵉ ⟫ PUSH (i * wordsize +ℕ m₀) ⟫ MSTORE
     O¹→Oᴱ′ m₁ m₂ (setₒ i x)    = ⟦ x ⟧⁰ᵉ ⟫ PUSH i ⟫ SSTORE
     O¹→Oᴱ′ m₁ m₂ (setₖₒ k x)   = ⟦ x ⟧⁰ᵉ ⟫ ⟦ k ⟧⁰ᵉ ⟫ SSTORE
+    O¹→Oᴱ′ m₁ m₂ (setₖₒ₊ k x)  =
+      ⟦ x ⟧⁰ᵉ ⟫ DUP 1 ⟫ PUSH 0 ⟫ SGT ⟫ JUMPI 3 ⟫
+      ⟦ k ⟧⁰ᵉ ⟫ SSTORE
     O¹→Oᴱ′ m₁ m₂ (fyiₒ xs)     = fyiₒ→Oᴱ offset xs
       where offset = m₁ * wordsize +ℕ m₀
     O¹→Oᴱ′ m₁ m₂ (extₒ s c xs) = extₒ→Oᴱ offset s c xs
@@ -1285,14 +1294,43 @@ module Dappsys where
 
   infix 19 _↧_↥_ _↧_ _↥_
 
-module Structs where
-  open Sⁿ
+module Slots where
   open Naturals
+  open Vectors
+  open FiniteSets
 
-  private
+  module Varargs where
     _of_to_ : (n : ℕ) → Set → Set → Set
     ℕ.zero of t₁ to t₂ = t₂
     suc n  of t₁ to t₂ = t₁ → n of t₁ to t₂
+
+    curryᵛ : ∀ {n a b} → (Vec a n → b) → n of a to b
+    curryᵛ {ℕ.zero} f = f []ᵛ
+    curryᵛ {suc n} f = λ x → curryᵛ λ v → f (x ∷ᵛ v)
+
+    uncurryᵛ : ∀ {n a b} → n of a to b → Vec a n → b
+    uncurryᵛ f []ᵛ = f
+    uncurryᵛ f (x ∷ᵛ v) = uncurryᵛ (f x) v
+
+    private
+      open Relations
+      uncurryᵛ-curryᵛ≡id
+        : ∀ {n a b} → (f : Vec a n → b) → (v : Vec a n)
+        → uncurryᵛ (curryᵛ f) v ≣ f v
+      uncurryᵛ-curryᵛ≡id f []ᵛ = refl
+      uncurryᵛ-curryᵛ≡id f (x ∷ᵛ v) = uncurryᵛ-curryᵛ≡id (λ y → f (x ∷ᵛ y)) v
+
+  open Varargs
+  open Sⁿ
+
+  _args_ : ∀ {t} → (n : ℕ) → (n of S⁰ Word to t) → t
+  ℕ.zero args f = f
+  suc n  args f = n args f ($ ($$ n))
+
+  private
+    Vec→⟨S⁰⟩ : ∀ {n} → Vec (S⁰ Word) (suc n) → ⟨S⁰⟩
+    Vec→⟨S⁰⟩ (x ∷ᵛ []ᵛ)    = x ⟩
+    Vec→⟨S⁰⟩ (x ∷ᵛ y ∷ᵛ v) = x , Vec→⟨S⁰⟩ (y ∷ᵛ v)
 
     fmap
       : ∀ {t t₁ t₂} → (n : ℕ) → (t₁ → t₂)
@@ -1302,20 +1340,78 @@ module Structs where
     fmap (suc n) f x = λ a → fmap n f (x a)
 
     struct : ℕ → (m : ℕ) → m of S⁰ Word to ⟨S⁰⟩
-    struct k ℕ.zero    = nat k ⟩
-    struct k (suc m) x = fmap m (λ s → x , s) (struct k m)
+    struct k m = curryᵛ f
+      where
+        f : Vec (S⁰ Word) m → ⟨S⁰⟩
+        f v = Vec→⟨S⁰⟩ (nat k ∷ᵛ v)
 
-  _maps_to_::_
-    : ∀ {t} → ℕ → (m : ℕ) → (n : ℕ)
-    → n of m of S⁰ Word to S⁰ Slot to t
+  slot_::_ : ∀ {t : Set} → ℕ → (S⁰ Slot → t) → t
+  slot k :: f = f (at k)
+
+  open Products renaming (_,_ to _&_)
+
+  -- This is so higher-order I had to lease a new quiet office space
+  -- to even think about implementing it.  The logic is not complex,
+  -- but we jump through hoops to get the desired syntax at the use site:
+  --
+  --   slot k maps 2 to 3 :: λ foo a b c →
+  --     foo ($ 0) ($ 1) 7 8 9  λ aᵢⱼ bᵢⱼ cᵢⱼ →
+  --       a i j ← aᵢⱼ + bᵢⱼ ∙ cᵢⱼ
+  --
+  -- In this example, we define a 2D mapping to a 3-field struct.
+  --
+  -- foo is bound to a full-struct loader that takes 2+3+1 arguments:
+  -- first the mapping indices to load; then a memory index for each field;
+  -- and finally a 3-parameter function that gets called with memory getters.
+  --
+  -- The variables a, b, and c are bound to slot functions, such that
+  -- a i j is the slot ⟨ k , i , j , 0 ⟩, and so on.
+  --
+  slot_maps_to_::_ : ∀ {t : Set}
+    → (k m n : ℕ)
+    → (m of S⁰ Word to
+        (n of Ref to
+          (∀ {x} → n of S⁰ Word to S¹ easy x → S¹ easy x))
+        → n of (m of S⁰ Word to S⁰ Slot) to t)
     → t
-  k maps m to ℕ.zero :: f = f
-  k maps m to suc n :: f =
-    k maps m to n :: f (fmap m (λ x → ⟨ nat k , x) (struct n m))
+  slot k maps m to n :: cont =
+    uncurryᵛ
+      (cont (fmap m curryᵛ (curryᵛ with-loader)))
+      (tabulateᵛ λ i → curryᵛ {m} λ v → k-slot v i)
 
-  _args_ : ∀ {t} → (n : ℕ) → (n of S⁰ Word to t) → t
-  ℕ.zero args f = f
-  suc n  args f = n args f ($ ($$ n))
+    where
+      -- Make the slot ⟨ k , v₁ , ... , vₘ , i ⟩.
+      k-slot : Vec (S⁰ Word) m → Fin n → S⁰ Slot
+      k-slot v i = ⟨ Vec→⟨S⁰⟩ (nat k ∷ᵛ v ++ᵛ (nat (toℕ i) ∷ᵛ []ᵛ))
+
+      with-loader
+        : Vec (S⁰ Word) m
+        → Vec Ref n
+        → ∀ {x} → (n of S⁰ Word to S¹ easy x)
+        → S¹ easy x
+      with-loader ixs []ᵛ g = g  -- Degenerate case of zero struct fields.
+      with-loader ixs refs@(_ ∷ᵛ _) g =
+        let
+          setup =
+            -- Build something like
+            --
+            --     ref₁ ≜ get ⟨ k , ixs... , 0 ⟩
+            --   │ ref₂ ≜ get ⟨ k , ixs... , 1 ⟩
+            --   │ ...
+            --
+            -- by mapping and folding the refs vector.
+            foldr₁ᵛ (λ s₁ s₂ → s₁ │ s₂)
+              (mapᵛ (λ { (i & r) → r ≜ get k-slot ixs i})
+                (zipᵛ (allFinᵛ n) refs))
+
+          proceed =
+            -- Call the body function with the memory load expressions.
+            uncurryᵛ g (mapᵛ # refs)
+
+        in setup │ proceed
+
+      f₂ : Vec (m of S⁰ Word to S⁰ Slot) n
+      f₂ = tabulateᵛ λ i → curryᵛ {m} λ v → k-slot v i
 
 
 -- Now we open up our modules to users of the language.
@@ -1328,5 +1424,5 @@ open External public
 open Linking public
 open EVM-Assembly public
 open EVM public
-open Structs public
 open Dappsys public
+open Slots public
