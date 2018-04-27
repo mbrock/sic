@@ -163,7 +163,8 @@ module Sⁿ where
       ray : S⁰ Word -- The ray 1.0
       nat : ℕ → S⁰ Word -- A natural number literal
       at_ : ℕ → S⁰ Slot -- A simple storage slot
-      scoped : S⁰ Slot → S⁰ Slot -- A scoped slot
+      scoped : ℕ → S⁰ Slot -- A scoped slot
+      member : S⁰ Slot → ℕ → S⁰ Slot -- XXX do this better
       get_ : S⁰ Slot → S⁰ Word -- Value of a storage slot
       #  : Ref → S⁰ Word -- Value of a memory slot
       $  : Arg → S⁰ Word -- Value of an argument
@@ -171,9 +172,8 @@ module Sⁿ where
 
     -- A nonempty list of S⁰ terms.
     data ⟨S⁰⟩ : Set where
-      _⟩  : S⁰ Word → ⟨S⁰⟩
-      _,_ : S⁰ Word → ⟨S⁰⟩ → ⟨S⁰⟩
-      _,,_ : ⟨S⁰⟩ → S⁰ Word → ⟨S⁰⟩
+      one  : S⁰ Word → ⟨S⁰⟩
+      _,_ : ⟨S⁰⟩ → S⁰ Word → ⟨S⁰⟩
 
   -- An S¹ is “Holy” if it doesn’t do any external calls.
   data Ease : Set where
@@ -306,7 +306,6 @@ module Sⁿ where
   infix  50 get_
   infixr 60 ⟨_
   infixr 61 _,_
-  infixr 62 _⟩
 
 
 module OverloadedNumbers where
@@ -457,11 +456,9 @@ module Sⁿ→Oⁿ where
 
   mutual
     ⟨S⁰⟩→O⁰ : ∀ {i} → ⟨S⁰⟩ → O⁰ i (suc i)
-    ⟨S⁰⟩→O⁰ (x ⟩)          = ⟦ x ⟧⁰ ┆ H¹ₒ
-    ⟨S⁰⟩→O⁰ (x , y ⟩)      = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ H²ₒ
-    ⟨S⁰⟩→O⁰ (x , y , z)    = ⟨S⁰⟩→O⁰ (y , z)  ┆ ⟦ x ⟧⁰ ┆ H²ₒ
-    ⟨S⁰⟩→O⁰ (x , (y ,, z)) = ⟨S⁰⟩→O⁰ (y ,, z) ┆ ⟦ x ⟧⁰ ┆ H²ₒ
-    ⟨S⁰⟩→O⁰ (x ,, y)       = ⟦ y ⟧⁰ ┆ ⟨S⁰⟩→O⁰ x ┆ H²ₒ
+    ⟨S⁰⟩→O⁰ (one x)       = ⟦ x ⟧⁰ ┆ H¹ₒ
+    ⟨S⁰⟩→O⁰ (one x , y)   = ⟦ x ⟧⁰ ┆ ⟦ y ⟧⁰ ┆ H²ₒ
+    ⟨S⁰⟩→O⁰ ((x , y) , z) = ⟨S⁰⟩→O⁰ (x , y) ┆ ⟦ z ⟧⁰ ┆ H²ₒ
 
     -- Compiling expressions
     ⟦_⟧⁰ : ∀ {i T} → S⁰ T → O⁰ i (suc i)
@@ -470,7 +467,8 @@ module Sⁿ→Oⁿ where
     ⟦ at n ⟧⁰      = #ₒ n
     ⟦ nat n ⟧⁰     = #ₒ n
     ⟦ get x ⟧⁰     = ⟦ x ⟧⁰ ┆ getₖₒ
-    ⟦ scoped k ⟧⁰  = ⟦ k ⟧⁰ ┆ scopedₒ
+    ⟦ scoped n ⟧⁰  = #ₒ n ┆ scopedₒ
+    ⟦ member x n ⟧⁰  = ⟦ x ⟧⁰ ┆ #ₒ n ┆ +ₒ
     ⟦ # (## x) ⟧⁰ = refₒ x
     ⟦ $ ($$ x) ⟧⁰ = argₒ x
     ⟦ u ⟧⁰         = callerₒ
@@ -867,7 +865,7 @@ module Sic→EVM where
   ⟦ getₒ x  ⟧⁰ᵉ  = PUSH x ⟫ SLOAD
   ⟦ argₒ x  ⟧⁰ᵉ  = PUSH (4 +ℕ x * wordsize) ⟫ CALLDATALOAD
   ⟦ getₖₒ   ⟧⁰ᵉ  = SLOAD
-  ⟦ scopedₒ ⟧⁰ᵉ  = PUSH %scope ⟫ MLOAD ⟫ hash-two
+  ⟦ scopedₒ ⟧⁰ᵉ  = PUSH %scope ⟫ MLOAD ⟫ ADD
   ⟦ +ₒ      ⟧⁰ᵉ  = IADD
   ⟦ −ₒ      ⟧⁰ᵉ  = ISUB
   ⟦ ×ₒ      ⟧⁰ᵉ  = IMUL
@@ -1364,8 +1362,8 @@ module Slots where
 
   private
     Vec→⟨S⁰⟩ : ∀ {n} → Vec (S⁰ Word) (suc n) → ⟨S⁰⟩
-    Vec→⟨S⁰⟩ (x ∷ᵛ []ᵛ)    = x ⟩
-    Vec→⟨S⁰⟩ (x ∷ᵛ y ∷ᵛ v) = x , Vec→⟨S⁰⟩ (y ∷ᵛ v)
+    Vec→⟨S⁰⟩ (x ∷ᵛ []ᵛ)    = one x
+    Vec→⟨S⁰⟩ (x ∷ᵛ y ∷ᵛ v) = Vec→⟨S⁰⟩ (y ∷ᵛ v) , x
 
     fmap
       : ∀ {t t₁ t₂} → (n : ℕ) → (t₁ → t₂)
@@ -1411,11 +1409,11 @@ module Slots where
     where
       -- Make the slot ⟨ ⟨ k , v₁ , ... , vₘ ⟩ , i ⟩.
       k-slot : Vec (S⁰ Word) m → Fin n → S⁰ Slot
-      k-slot v i = ⟨ (Vec→⟨S⁰⟩ (nat k ∷ᵛ v) ,, nat (toℕ i))
+      k-slot v i = member (⟨ (Vec→⟨S⁰⟩ (reverseᵛ (nat k ∷ᵛ v)))) (toℕ i)
 
       -- Make the slot prefix ⟨ k , v₁ , ... , vₘ ⟩.
       k-scope : Vec (S⁰ Word) m → S⁰ Slot
-      k-scope v = ⟨ Vec→⟨S⁰⟩ (nat k ∷ᵛ v)
+      k-scope v = ⟨ Vec→⟨S⁰⟩ (reverseᵛ (nat k ∷ᵛ v))
 
       with-loader
         : Vec (S⁰ Word) m
@@ -1436,7 +1434,7 @@ module Slots where
             -- by mapping and folding the refs vector.
             scope! (k-scope ixs) │
             foldr₁ᵛ (λ s₁ s₂ → s₁ │ s₂)
-              (mapᵛ (λ { (i and r) → r ≜ get (scoped (at (toℕ i))) })
+              (mapᵛ (λ { (i and r) → r ≜ get (scoped (toℕ i)) })
                 (zipᵛ (allFinᵛ n) refs))
 
           proceed =
