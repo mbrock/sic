@@ -3,24 +3,18 @@ module T0 where
 open import Sic
 open Dappsys
 
-multi-owner =
-  CALLER ⟫ PUSH 1 ⟫ SSTORE ⟫
-  PUSH 13 ⟫ CODESIZE ⟫ SUB ⟫ DUP 1 ⟫
-  PUSH 13 ⟫ PUSH 0 ⟫ CODECOPY ⟫ PUSH 0 ⟫ RETURN
-
+data ⊥ : Set where
 data Math : Set where
   IADD ISUB IMUL RMUL RPOW : Math
 
-data X : Set where ⊤ : X
+T⁰ : S² ⊥ Math Holy
+T⁰ = ¶ IADD 2 (λ x y → fyi₁ (x + y))
+   & ¶ ISUB 2 (λ x y → fyi₁ (x − y))
+   & ¶ IMUL 2 (λ x y → fyi₁ (x × y))
+   & ¶ RMUL 2 (λ x y → fyi₁ (x ∙ y))
+   & ¶ RPOW 2 (λ x y → fyi₁ (x ^ y))
 
-main =
-  link
-    ( ¶ IADD 2 (λ x y → fyi₁ (x + y))
-    & ¶ ISUB 2 (λ x y → fyi₁ (x − y))
-    & ¶ IMUL 2 (λ x y → fyi₁ (x × y))
-    & ¶ RMUL 2 (λ x y → fyi₁ (x ∙ y))
-    & ¶ RPOW 2 (λ x y → fyi₁ (x ^ y)))
-  (λ { ⊤ → anybody })
+main = link T⁰ (λ ())
   (λ { IADD → "iadd(int256,int256)"
      ; ISUB → "isub(int256,int256)"
      ; IMUL → "imul(int256,int256)"

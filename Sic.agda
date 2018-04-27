@@ -163,6 +163,7 @@ module Sⁿ where
       ray : S⁰ Word -- The ray 1.0
       nat : ℕ → S⁰ Word -- A natural number literal
       at_ : ℕ → S⁰ Slot -- A simple storage slot
+      scoped : S⁰ Slot → S⁰ Slot -- A scoped slot
       get_ : S⁰ Slot → S⁰ Word -- Value of a storage slot
       #  : Ref → S⁰ Word -- Value of a memory slot
       $  : Arg → S⁰ Word -- Value of an argument
@@ -211,6 +212,7 @@ module Sⁿ where
     _│_  : ∀ {m n i₁ i₂}
          → S¹ i₁ m → S¹ i₂ n → {_ : fyi-ok m n}
          → S¹ (i₁ ⊔ᵉ i₂) (m ⊔ n)
+    scope! : S⁰ Slot → S¹ Holy 0
 
   S¹-fyi-size : ∀ {ease n} → S¹ ease n → ℕ
   S¹-fyi-size {_} {n} _ = n
@@ -261,10 +263,6 @@ module Sⁿ where
   -- you will provide the identity of each “guy” as a parameter
   -- to the deployment procedure.
   --
-  data Some (Guy : Set) : Set where
-    the : Guy → Some Guy
-    anybody : Some Guy
-
   data S² (Guy : Set) (Act : Set) : Ease → Set where
     _⟶_
       : ∀ {ease n}
@@ -281,6 +279,13 @@ module Sⁿ where
     case_then_else_
       : ∀ {ease₁ ease₂}
       → S⁰ Word
+      → S² Guy Act ease₁
+      → S² Guy Act ease₂
+      → S² Guy Act (ease₁ ⊔ᵉ ease₂)
+
+    auth_∷_else_
+      : ∀ {ease₁ ease₂}
+      → Guy
       → S² Guy Act ease₁
       → S² Guy Act ease₂
       → S² Guy Act (ease₁ ⊔ᵉ ease₂)
@@ -349,7 +354,7 @@ module Oⁿ where
   open Vectors
   open Lists
   open Strings
-  open Sⁿ using (Ref; ##; Some; the; anybody)
+  open Sⁿ using (Ref; ##)
 
   -- The O⁰ operations have stack effects, which we encode in the types.
   -- For example, the type of +ₒ denotes taking two items and leaving one.
@@ -365,6 +370,7 @@ module Oⁿ where
     callerₒ : ∀ {i}     → O⁰           i   (suc i)
     timeₒ   : ∀ {i}     → O⁰           i   (suc i)
     getₖₒ   : ∀ {i}     → O⁰      (suc i)  (suc i)
+    scopedₒ : ∀ {i}     → O⁰      (suc i)  (suc i)
     H¹ₒ     : ∀ {i}     → O⁰      (suc i)  (suc i)
     H²ₒ     : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
     +ₒ      : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
@@ -385,19 +391,21 @@ module Oⁿ where
     ∨ₒ      : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
 
   data O¹ : Set where
-    _∥_   : O¹ → O¹ → O¹
-    iffₒ  :          O⁰ 0 1  → O¹
+    _∥_ : O¹ → O¹ → O¹
+    iffₒ : O⁰ 0 1  → O¹
     setₖₒ : O⁰ 0 1 → O⁰ 0 1  → O¹
     setₖₒ₊ : O⁰ 0 1 → O⁰ 0 1  → O¹
-    defₒ  :    Ref → O⁰ 0 1  → O¹
-    setₒ  :      ℕ → O⁰ 0 1  → O¹
-    fyiₒ  : ∀ {n} → Vec (O⁰ 0 1) (suc n) → O¹
-    extₒ  : ∀ {n} → String → O⁰ 0 1 → Vec (O⁰ 0 1) n → O¹
+    defₒ : Ref → O⁰ 0 1  → O¹
+    setₒ : ℕ → O⁰ 0 1  → O¹
+    scope!ₒ : O⁰ 0 1 → O¹
+    fyiₒ : ∀ {n} → Vec (O⁰ 0 1) (suc n) → O¹
+    extₒ : ∀ {n} → String → O⁰ 0 1 → Vec (O⁰ 0 1) n → O¹
 
   data O² (Guy : Set) (Act : Set) : Set where
-    actₒ  : Act → ℕ → O¹ → O² Guy Act
-    seqₒ  : Op₂ (O² Guy Act)
+    actₒ : Act → ℕ → O¹ → O² Guy Act
+    seqₒ : Op₂ (O² Guy Act)
     caseₒ : O⁰ 0 1 → Op₂ (O² Guy Act)
+    authₒ : Guy → Op₂ (O² Guy Act)
 
   map-O²-act : ∀ {Guy Act₁ Act₂} → (Act₁ → Act₂) → O² Guy Act₁ → O² Guy Act₂
   map-O²-act f (actₒ s x₁ x₂) =
@@ -406,6 +414,8 @@ module Oⁿ where
     seqₒ (map-O²-act f x) (map-O²-act f y)
   map-O²-act f (caseₒ p x y) =
     caseₒ p (map-O²-act f x) (map-O²-act f y)
+  map-O²-act f (authₒ g x y) =
+    authₒ g (map-O²-act f x) (map-O²-act f y)
 
   map-O²-guy : ∀ {Guy₁ Guy₂ Act} → (Guy₁ → Guy₂) → O² Guy₁ Act → O² Guy₂ Act
   map-O²-guy f (actₒ s x₁ x₂) =
@@ -414,6 +424,8 @@ module Oⁿ where
     seqₒ (map-O²-guy f x₁) (map-O²-guy f x₂)
   map-O²-guy f (caseₒ p x₁ x₂) =
     caseₒ p (map-O²-guy f x₁) (map-O²-guy f x₂)
+  map-O²-guy f (authₒ g x₁ x₂) =
+    authₒ (f g) (map-O²-guy f x₁) (map-O²-guy f x₂)
 
   infixr  5 _┆_
   infixr 10 _∥_
@@ -431,9 +443,10 @@ module Oⁿ where
   O¹-var-memory (fyiₒ xs)      = foldr₁ᵛ _⊔_ (mapᵛ O⁰-memory xs)
   O¹-var-memory (extₒ s c xs)  = foldrᵛ (λ _ → ℕ) _⊔_ 0 (mapᵛ O⁰-memory xs)
   O¹-var-memory (iffₒ x)       = O⁰-memory x
-  O¹-var-memory (setₖₒ k x)    = O⁰-memory x
-  O¹-var-memory (setₖₒ₊ k x)   = O⁰-memory x
+  O¹-var-memory (setₖₒ k x)    = O⁰-memory k ⊔ O⁰-memory x
+  O¹-var-memory (setₖₒ₊ k x)   = O⁰-memory k ⊔ O⁰-memory x
   O¹-var-memory (setₒ i x)     = O⁰-memory x
+  O¹-var-memory (scope!ₒ k)    = O⁰-memory k
   O¹-var-memory (o₁ ∥ o₂)      = O¹-var-memory o₁ ⊔ O¹-var-memory o₂
 
   O¹-fyi-memory : O¹ → ℕ
@@ -451,8 +464,9 @@ module Sⁿ→Oⁿ where
 
   mutual
     ⟨S⁰⟩→O⁰ : ∀ {i} → ⟨S⁰⟩ → O⁰ i (suc i)
-    ⟨S⁰⟩→O⁰ (x ⟩) =              ⟦ x ⟧⁰ ┆ H¹ₒ
-    ⟨S⁰⟩→O⁰ (x , xs)   = ⟨S⁰⟩→O⁰ xs ┆ ⟦ x ⟧⁰ ┆ H²ₒ
+    ⟨S⁰⟩→O⁰ (x ⟩) = ⟦ x ⟧⁰ ┆ H¹ₒ
+    ⟨S⁰⟩→O⁰ (x , y ⟩) = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ H²ₒ
+    ⟨S⁰⟩→O⁰ (x , y , z)  = ⟨S⁰⟩→O⁰ (y , z) ┆ ⟦ x ⟧⁰ ┆ H²ₒ
 
     -- Compiling expressions
     ⟦_⟧⁰ : ∀ {i T} → S⁰ T → O⁰ i (suc i)
@@ -461,6 +475,7 @@ module Sⁿ→Oⁿ where
     ⟦ at n ⟧⁰      = #ₒ n
     ⟦ nat n ⟧⁰     = #ₒ n
     ⟦ get x ⟧⁰     = ⟦ x ⟧⁰ ┆ getₖₒ
+    ⟦ scoped k ⟧⁰  = ⟦ k ⟧⁰ ┆ scopedₒ
     ⟦ # (## x) ⟧⁰ = refₒ x
     ⟦ $ ($$ x) ⟧⁰ = argₒ x
     ⟦ u ⟧⁰         = callerₒ
@@ -489,6 +504,7 @@ module Sⁿ→Oⁿ where
   ⟦ k ← x ⟧¹  = setₖₒ ⟦ k ⟧⁰ ⟦ x ⟧⁰
   ⟦ k ←+ x ⟧¹ = setₖₒ₊ ⟦ k ⟧⁰ ⟦ x ⟧⁰
   ⟦ x │ y ⟧¹  = ⟦ x ⟧¹ ∥ ⟦ y ⟧¹
+  ⟦ scope! s ⟧¹ = scope!ₒ ⟦ s ⟧⁰
   ⟦ move wad of gem from src to dst ⟧¹ =
     extₒ "transferFrom(address,address,uint256)" ⟦ gem ⟧⁰
       (mapᵛ ⟦_⟧⁰ (src ∷ᵛ dst ∷ᵛ wad ∷ᵛ []ᵛ))
@@ -501,6 +517,8 @@ module Sⁿ→Oⁿ where
     seqₒ ⟦ a ⟧² ⟦ b ⟧²
   ⟦ case p then a else b ⟧² =
     caseₒ ⟦ p ⟧⁰ ⟦ a ⟧² ⟦ b ⟧²
+  ⟦ auth g ∷ a else b ⟧² =
+    authₒ g ⟦ a ⟧² ⟦ b ⟧²
 
 
   -- Some compile-time assertions
@@ -672,9 +690,10 @@ module EVM where
   %rpowⁿ = 3 * wordsize
   %rpowᶻ = 4 * wordsize
   %sig = 5 * wordsize
+  %scope = 6 * wordsize
 
   -- Let mₒ be the first memory address for non-reserved variables.
-  m₀ = %sig +ℕ wordsize
+  m₀ = %scope +ℕ wordsize
 
   Addrᴱ = Vec Char 40
 
@@ -825,7 +844,7 @@ module EVM-Math where
 --
 
 module Sic→EVM where
-  open Sⁿ using (##; Some; the; anybody)
+  open Sⁿ using (##)
   open Oⁿ
   open EVM
   open EVM-Math
@@ -834,6 +853,11 @@ module Sic→EVM where
   open FiniteSets
   open Vectors
   open Strings
+
+  hash-two : Oᴱ
+  hash-two =
+    PUSH %hash¹ ⟫ MSTORE ⟫ PUSH %hash² ⟫ MSTORE ⟫
+    PUSH (2 * wordsize) ⟫ PUSH 0 ⟫ KECCAK256
 
   ⟦_⟧⁰ᵉ : ∀ {i j} → O⁰ i j → Oᴱ
   ⟦ #ₒ n    ⟧⁰ᵉ  = PUSH n
@@ -845,6 +869,7 @@ module Sic→EVM where
   ⟦ getₒ x  ⟧⁰ᵉ  = PUSH x ⟫ SLOAD
   ⟦ argₒ x  ⟧⁰ᵉ  = PUSH (4 +ℕ x * wordsize) ⟫ CALLDATALOAD
   ⟦ getₖₒ   ⟧⁰ᵉ  = SLOAD
+  ⟦ scopedₒ ⟧⁰ᵉ  = PUSH %scope ⟫ MLOAD ⟫ hash-two
   ⟦ +ₒ      ⟧⁰ᵉ  = IADD
   ⟦ −ₒ      ⟧⁰ᵉ  = ISUB
   ⟦ ×ₒ      ⟧⁰ᵉ  = IMUL
@@ -863,9 +888,7 @@ module Sic→EVM where
   ⟦ ∨ₒ      ⟧⁰ᵉ  = OR
   ⟦ H¹ₒ     ⟧⁰ᵉ  = PUSH %hash¹ ⟫ MSTORE ⟫
                     PUSH wordsize ⟫ PUSH 0 ⟫ KECCAK256
-  ⟦ H²ₒ     ⟧⁰ᵉ  = PUSH %hash¹ ⟫ MSTORE ⟫
-                    PUSH %hash² ⟫ MSTORE ⟫
-                    PUSH (2 * wordsize) ⟫ PUSH 0 ⟫ KECCAK256
+  ⟦ H²ₒ     ⟧⁰ᵉ  = hash-two
 
   open Products
 
@@ -914,6 +937,7 @@ module Sic→EVM where
       where offset = m₁ * wordsize +ℕ m₀
     O¹→Oᴱ′ m₁ m₂ (extₒ s c xs) = extₒ→Oᴱ offset s c xs
       where offset = m₂ * wordsize +ℕ m₀
+    O¹→Oᴱ′ m₁ m₂ (scope!ₒ k) = ⟦ k ⟧⁰ᵉ ⟫ PUSH %scope ⟫ MSTORE
     O¹→Oᴱ′ m₁ m₂ (o₁ ∥ o₂)     = ⟦ o₁ with-var m₁ with-fyi m₂ ⟧¹ᵉ ⟫
                                  ⟦ o₂ with-var m₁ with-fyi m₂ ⟧¹ᵉ
 
@@ -945,7 +969,7 @@ module Sic→EVM where
   sig-check s n =
     PUSH %sig ⟫ MLOAD ⟫ PUSHSIG s ⟫ EQ
 
-  ⟦_⟧²ᵉ : O² (Some Addrᴱ) String → Oᴱ
+  ⟦_⟧²ᵉ : O² Addrᴱ String → Oᴱ
   ⟦ seqₒ a b   ⟧²ᵉ = ⟦ a ⟧²ᵉ ⟫ ⟦ b ⟧²ᵉ
   ⟦ actₒ s n k ⟧²ᵉ =
     sig-check s n ⟫
@@ -955,12 +979,14 @@ module Sic→EVM where
         ISZERO ⟫ ELSE (⟦ k with-var m₁ with-fyi m₂ ⟧¹ᵉ ⟫ return m₁ n)
   ⟦ caseₒ p a b ⟧²ᵉ =
     ⟦ p ⟧⁰ᵉ ⟫ ELSE ⟦ b ⟧²ᵉ ⟫ ⟦ a ⟧²ᵉ
+  ⟦ authₒ x a b ⟧²ᵉ =
+    PUSHADDR x ⟫ CALLER ⟫ EQ ⟫ ELSE ⟦ b ⟧²ᵉ ⟫ ⟦ a ⟧²ᵉ
 
   open Sⁿ    using (S²)
   open Sⁿ→Oⁿ using (⟦_⟧²)
 
   S²→Oᴱ : ∀ {Guy Act ease}
-        → (Guy → Some Addrᴱ)
+        → (Guy → Addrᴱ)
         → (Act → String)
         → S² Guy Act ease → Oᴱ
   S²→Oᴱ f g s = prelude ⟫ ⟦ map-O²-guy f (map-O²-act g ⟦ s ⟧²) ⟧²ᵉ ⟫ REVERT
@@ -968,10 +994,10 @@ module Sic→EVM where
   S²→O² : ∀ {Guy Act ease} → S² Guy Act ease → O² Guy Act
   S²→O² x = ⟦ x ⟧²
 
-  O²→Oᴱ : O² (Some Addrᴱ) String → Oᴱ
+  O²→Oᴱ : O² Addrᴱ String → Oᴱ
   O²→Oᴱ x = prelude ⟫ ⟦ x ⟧²ᵉ ⟫ REVERT
 
-  compile : ∀ {ease} → S² (Some Addrᴱ) String ease → Oᴱ
+  compile : ∀ {ease} → S² Addrᴱ String ease → Oᴱ
   compile = S²→Oᴱ (λ x → x) (λ x → x)
 
 
@@ -1195,23 +1221,22 @@ module Linking where
     where import Data.String
 
   -- Resolve parameters via I/O environment variables.
-  resolve : Some ID → IO (Maybe (Some Addrᴱ))
-  resolve anybody = IO.return (just anybody)
-  resolve (the (parameter x)) =
+  resolve : ID → IO (Maybe Addrᴱ)
+  resolve (parameter x) =
     ♯ lift (ask x) >>= λ y →
       ♯ IO.return
           (maybe
-            (λ s → maybe (λ a → just (the a)) nothing (addr s))
+            (λ s → maybe (λ a → just a) nothing (addr s))
             nothing y)
-  resolve (the (hardcoded x)) = IO.return (just (the x))
-  resolve (the construct) = IO.return nothing
+  resolve (hardcoded x) = IO.return (just x)
+  resolve (construct) = IO.return nothing
 
   -- Resolve all the guys in an O² using I/O.
   resolve-O²
     : ∀ {guy act}
-    → (guy → Some ID)
+    → (guy → ID)
     → O² guy act
-    → IO (Maybe (O² (Some Addrᴱ) act))
+    → IO (Maybe (O² Addrᴱ act))
   resolve-O² f (actₒ a n x) =
     IO.return (just (actₒ a n x))
   resolve-O² f (seqₒ x₁ x₂) =
@@ -1228,10 +1253,20 @@ module Linking where
           (λ y₂′ → ♯ IO.return (just (caseₒ p y₁′ y₂′)))
           (♯ IO.return nothing)))
       (♯ IO.return nothing)
+  resolve-O² f (authₒ g x₁ x₂) =
+    ♯ resolve (f g) >>= maybe
+        (λ g′ → ♯
+          (♯ resolve-O² f x₁ >>= maybe
+            (λ y₁′ → ♯
+              (♯ resolve-O² f x₂ >>= maybe
+                (λ y₂′ → ♯ IO.return (just (authₒ g′ y₁′ y₂′)))
+                (♯ IO.return nothing)))
+            (♯ IO.return nothing)))
+        (♯ IO.return nothing)
 
   compile-and-assemble
     : ∀ {Guy Act ease}
-    → (Guy → Some Addrᴱ)
+    → (Guy → Addrᴱ)
     → (Act → String)
     → S² Guy Act ease → String
   compile-and-assemble f₁ f₂ s² =
@@ -1242,7 +1277,7 @@ module Linking where
 
   compile-and-link
     : ∀ {Guy Act ease}
-    → (Guy → Some ID)
+    → (Guy → ID)
     → (Act → String)
     → S² Guy Act ease
     → IO (Maybe Oᴱ)
@@ -1261,7 +1296,7 @@ module Linking where
   link
     : ∀ {Guy Act ease}
     → S² Guy Act ease
-    → (Guy → Some ID)
+    → (Guy → ID)
     → (Act → String)
     → IO.Primitive.IO ⊤
   link x f₁ f₂ =
@@ -1327,8 +1362,7 @@ module Slots where
   open Sⁿ
 
   ♯ : ∀ {t} → (n : ℕ) → (n of S⁰ Word to t) → t
-  ♯ ℕ.zero f = f
-  ♯ (suc n) f = ♯ n (f ($ ($$ n)))
+  ♯ n f = uncurryᵛ f (mapᵛ (λ i → $ ($$ (toℕ i))) (allFinᵛ n))
 
   private
     Vec→⟨S⁰⟩ : ∀ {n} → Vec (S⁰ Word) (suc n) → ⟨S⁰⟩
@@ -1381,6 +1415,10 @@ module Slots where
       k-slot : Vec (S⁰ Word) m → Fin n → S⁰ Slot
       k-slot v i = ⟨ Vec→⟨S⁰⟩ (nat k ∷ᵛ v ++ᵛ (nat (toℕ i) ∷ᵛ []ᵛ))
 
+      -- Make the slot ⟨ k , v₁ , ... , vₘ , i ⟩.
+      k-scope : Vec (S⁰ Word) m → S⁰ Slot
+      k-scope v = ⟨ Vec→⟨S⁰⟩ (nat k ∷ᵛ v)
+
       with-loader
         : Vec (S⁰ Word) m
         → Vec Ref n
@@ -1392,13 +1430,15 @@ module Slots where
           setup =
             -- Build something like
             --
-            --     ref₁ ≜ get ⟨ k , ixs... , 0 ⟩
-            --   │ ref₂ ≜ get ⟨ k , ixs... , 1 ⟩
+            --     scope! ⟨ k , ixs... ⟩
+            --   │ ref₁ ≜ get (scoped 0)
+            --   │ ref₂ ≜ get (scoped 1)
             --   │ ...
             --
             -- by mapping and folding the refs vector.
+            scope! (k-scope ixs) │
             foldr₁ᵛ (λ s₁ s₂ → s₁ │ s₂)
-              (mapᵛ (λ { (i and r) → r ≜ get k-slot ixs i})
+              (mapᵛ (λ { (i and r) → r ≜ get (scoped (at (toℕ i))) })
                 (zipᵛ (allFinᵛ n) refs))
 
           proceed =
