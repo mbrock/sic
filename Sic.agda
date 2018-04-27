@@ -40,7 +40,7 @@ module Sic where
 
 module Naturals where
   open import Data.Nat
-    using (ℕ; suc; _⊔_; _*_)
+    using (ℕ; suc; _⊔_; _*_; compare; _≤?_)
     renaming (_+_ to _+ℕ_)
     public
 
@@ -61,6 +61,8 @@ module Basics where
     public
 
 module Relations where
+  open import Relation.Nullary
+    using (yes; no) public
   open import Relation.Nullary.Decidable
     using (⌊_⌋) public
   open import Relation.Binary.PropositionalEquality
@@ -264,10 +266,9 @@ module Sⁿ where
     anybody : Some Guy
 
   data S² (Guy : Set) (Act : Set) : Ease → Set where
-    _∷_⟶_
+    _⟶_
       : ∀ {ease n}
       → Act
-      → Guy
       → S¹ ease n
       → S² Guy Act ease
 
@@ -288,7 +289,7 @@ module Sⁿ where
 
   infix  1 case_then_else_
   infixr 2 _&_
-  infixr 3 _∷_⟶_
+  infixr 3 _⟶_
   infixr 4 _│_
 
   infix  10 iff_ _≜_ _←_ _←+_
@@ -394,21 +395,21 @@ module Oⁿ where
     extₒ  : ∀ {n} → String → O⁰ 0 1 → Vec (O⁰ 0 1) n → O¹
 
   data O² (Guy : Set) (Act : Set) : Set where
-    actₒ  : Guy → Act → ℕ → O¹ → O² Guy Act
+    actₒ  : Act → ℕ → O¹ → O² Guy Act
     seqₒ  : Op₂ (O² Guy Act)
     caseₒ : O⁰ 0 1 → Op₂ (O² Guy Act)
 
   map-O²-act : ∀ {Guy Act₁ Act₂} → (Act₁ → Act₂) → O² Guy Act₁ → O² Guy Act₂
-  map-O²-act f (actₒ g s x₁ x₂) =
-    actₒ g (f s) x₁ x₂
+  map-O²-act f (actₒ s x₁ x₂) =
+    actₒ (f s) x₁ x₂
   map-O²-act f (seqₒ x y) =
     seqₒ (map-O²-act f x) (map-O²-act f y)
   map-O²-act f (caseₒ p x y) =
     caseₒ p (map-O²-act f x) (map-O²-act f y)
 
   map-O²-guy : ∀ {Guy₁ Guy₂ Act} → (Guy₁ → Guy₂) → O² Guy₁ Act → O² Guy₂ Act
-  map-O²-guy f (actₒ guy s x₁ x₂) =
-    actₒ (f guy) s x₁ x₂
+  map-O²-guy f (actₒ s x₁ x₂) =
+    actₒ s x₁ x₂
   map-O²-guy f (seqₒ x₁ x₂) =
     seqₒ (map-O²-guy f x₁) (map-O²-guy f x₂)
   map-O²-guy f (caseₒ p x₁ x₂) =
@@ -494,8 +495,8 @@ module Sⁿ→Oⁿ where
 
   -- Compiling signature dispatch sequences
   ⟦_⟧² : ∀ {ease Guy Act} → S² Guy Act ease → O² Guy Act
-  ⟦ s ∷ g ⟶ k ⟧² =
-    actₒ g s (S¹-fyi-size k) ⟦ k ⟧¹
+  ⟦ s ⟶ k ⟧² =
+    actₒ s (S¹-fyi-size k) ⟦ k ⟧¹
   ⟦ a & b     ⟧² =
     seqₒ ⟦ a ⟧² ⟦ b ⟧²
   ⟦ case p then a else b ⟧² =
@@ -670,9 +671,10 @@ module EVM where
   %rpowˣ = 2 * wordsize
   %rpowⁿ = 3 * wordsize
   %rpowᶻ = 4 * wordsize
+  %sig = 5 * wordsize
 
   -- Let mₒ be the first memory address for non-reserved variables.
-  m₀ = %rpowᶻ +ℕ wordsize
+  m₀ = %sig +ℕ wordsize
 
   Addrᴱ = Vec Char 40
 
@@ -901,12 +903,12 @@ module Sic→EVM where
 
   mutual
     O¹→Oᴱ′ : ℕ → ℕ → O¹ → Oᴱ
-    O¹→Oᴱ′ m₁ m₂ (iffₒ o)      = ⟦ o ⟧⁰ᵉ ⟫ ISZERO ⟫ JUMPI 3
+    O¹→Oᴱ′ m₁ m₂ (iffₒ o)      = ⟦ o ⟧⁰ᵉ ⟫ ISZERO ⟫ REVERTIF
     O¹→Oᴱ′ m₁ m₂ (defₒ (## i) x) = ⟦ x ⟧⁰ᵉ ⟫ PUSH (i * wordsize +ℕ m₀) ⟫ MSTORE
     O¹→Oᴱ′ m₁ m₂ (setₒ i x)    = ⟦ x ⟧⁰ᵉ ⟫ PUSH i ⟫ SSTORE
     O¹→Oᴱ′ m₁ m₂ (setₖₒ k x)   = ⟦ x ⟧⁰ᵉ ⟫ ⟦ k ⟧⁰ᵉ ⟫ SSTORE
     O¹→Oᴱ′ m₁ m₂ (setₖₒ₊ k x)  =
-      ⟦ x ⟧⁰ᵉ ⟫ DUP 1 ⟫ PUSH 0 ⟫ SGT ⟫ JUMPI 3 ⟫
+      ⟦ x ⟧⁰ᵉ ⟫ DUP 1 ⟫ PUSH 0 ⟫ SGT ⟫ REVERTIF ⟫
       ⟦ k ⟧⁰ᵉ ⟫ SSTORE
     O¹→Oᴱ′ m₁ m₂ (fyiₒ xs)     = fyiₒ→Oᴱ offset xs
       where offset = m₁ * wordsize +ℕ m₀
@@ -920,7 +922,10 @@ module Sic→EVM where
     ⟦ o with-var m₁ with-fyi m₂ ⟧¹ᵉ = tag o (O¹→Oᴱ′ m₁ m₂ o)
 
   -- This prelude is inserted into every compiled S².
-  prelude = JUMP 6 ⟫ JUMPDEST ⟫ REVERT ⟫ JUMPDEST
+  prelude =
+    JUMP 6 ⟫ JUMPDEST ⟫ REVERT ⟫ JUMPDEST ⟫
+    PUSH 224 ⟫ PUSH 2 ⟫ EXP ⟫ PUSH 0 ⟫
+    CALLDATALOAD ⟫ DIV ⟫ PUSH %sig ⟫ MSTORE
 
   -- This is the PC for jumping to the prelude’s revert.
   revert-jumpdest : ℕ
@@ -938,17 +943,12 @@ module Sic→EVM where
 
   sig-check : String → ℕ → Oᴱ
   sig-check s n =
-    PUSH 224 ⟫ PUSH 2 ⟫ EXP ⟫ PUSH 0 ⟫ CALLDATALOAD ⟫ DIV ⟫
-    PUSHSIG s ⟫ EQ
-
-  guy-check : Some Addrᴱ → Oᴱ
-  guy-check (the x) = PUSHADDR x ⟫ CALLER ⟫ EQ
-  guy-check anybody = PUSH 1
+    PUSH %sig ⟫ MLOAD ⟫ PUSHSIG s ⟫ EQ
 
   ⟦_⟧²ᵉ : O² (Some Addrᴱ) String → Oᴱ
   ⟦ seqₒ a b   ⟧²ᵉ = ⟦ a ⟧²ᵉ ⟫ ⟦ b ⟧²ᵉ
-  ⟦ actₒ guy s n k ⟧²ᵉ =
-    guy-check guy ⟫ sig-check s n ⟫ AND ⟫
+  ⟦ actₒ s n k ⟧²ᵉ =
+    sig-check s n ⟫
       let m₁ = O¹-var-memory k
           m₂ = m₁ +ℕ (O¹-fyi-memory k)
       in
@@ -1063,6 +1063,7 @@ module EVM-Assembly where
   ⋆ b = ⋆′ (+ 0) b
 
   open EVM
+  open Relations
 
   code′ : Oᴱ → Σ ℕ B¹
   code′ NOOP = , op B0
@@ -1099,7 +1100,9 @@ module EVM-Assembly where
   code′ MOD = , op B1 0x06
   code′ EXP = , op B1 0x0a
   code′ OR = , op B1 0x17
-  code′ (PUSH x) = , op B1 0x60 ⦂ op B1 x
+  code′ (PUSH x) with x ≤? 255
+  ... | yes _ = , op B1 0x60 ⦂ op B1 x
+  ... | no _  = , op B1 0x61 ⦂ op B2 (+ x)
   code′ (PUSHSIG x) = , op B1 0x63 ⦂ op BSig x
   code′ (PUSHADDR x) = , op B1 0x73 ⦂ op BAddr x
   code′ DIV = , op B1 0x04
@@ -1129,14 +1132,20 @@ module EVM-Assembly where
     renaming (_++_ to _string++_)
   open import Data.List using (length; replicate)
 
+  open import Data.Nat.Show using (showInBase)
+
   0-pad : ℕ → String → String
   0-pad n s with (+ n) -ℤ (+ length (toList s))
   ... | +_ i = fromList (replicate i '0') string++ s
-  ... | ℤ.negsuc n₁ = "{erroneously-huge}"
+  ... | ℤ.negsuc n₁ =
+    "{erroneously-huge "
+      string++ (showInBase 10 n)
+      string++ " "
+      string++ s
+      string++ "}"
 
   ℤ→hex : ℕ → ℤ → String
-  ℤ→hex n (+_ x) = 0-pad n (Data.Nat.Show.showInBase 16 x)
-    where import Data.Nat.Show
+  ℤ→hex n (+_ x) = 0-pad n (showInBase 16 x)
   ℤ→hex _ (ℤ.negsuc n) = "{erroneously-negative}"
 
   B⁰⋆→String : B⁰⋆ → String
@@ -1203,10 +1212,8 @@ module Linking where
     → (guy → Some ID)
     → O² guy act
     → IO (Maybe (O² (Some Addrᴱ) act))
-  resolve-O² f (actₒ g a n x) =
-    ♯ resolve (f g) >>= maybe
-        (λ g′ → ♯ IO.return (just (actₒ g′ a n x)))
-        (♯ IO.return nothing)
+  resolve-O² f (actₒ a n x) =
+    IO.return (just (actₒ a n x))
   resolve-O² f (seqₒ x₁ x₂) =
     ♯ resolve-O² f x₁ >>= maybe
         (λ y₁′ → ♯
@@ -1404,11 +1411,11 @@ module Slots where
       f₂ = tabulateᵛ λ i → curryᵛ {m} λ v → k-slot v i
 
   ¶ : ∀ {i A G}
-      → A → G
+      → A
       → (n : ℕ)
       → (n of S⁰ Word to S¹ Holy i)
       → S² G A Holy
-  ¶ a b c d = a ∷ b ⟶ ♯ c d
+  ¶ a b c = a ⟶ ♯ b c
 
 
 -- Now we open up our modules to users of the language.

@@ -1,4 +1,4 @@
-module Example where
+module T0 where
 
 open import Sic
 open Dappsys
@@ -15,11 +15,11 @@ data X : Set where ⊤ : X
 
 main =
   link
-    ( ¶ IADD ⊤ 2 (λ x y → fyi₁ (x + y))
-    & ¶ ISUB ⊤ 2 (λ x y → fyi₁ (x − y))
-    & ¶ IMUL ⊤ 2 (λ x y → fyi₁ (x × y))
-    & ¶ RMUL ⊤ 2 (λ x y → fyi₁ (x ∙ y))
-    & ¶ RPOW ⊤ 2 (λ x y → fyi₁ (x ^ y)))
+    ( ¶ IADD 2 (λ x y → fyi₁ (x + y))
+    & ¶ ISUB 2 (λ x y → fyi₁ (x − y))
+    & ¶ IMUL 2 (λ x y → fyi₁ (x × y))
+    & ¶ RMUL 2 (λ x y → fyi₁ (x ∙ y))
+    & ¶ RPOW 2 (λ x y → fyi₁ (x ^ y)))
   (λ { ⊤ → anybody })
   (λ { IADD → "iadd(int256,int256)"
      ; ISUB → "isub(int256,int256)"

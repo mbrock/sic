@@ -60,11 +60,23 @@ let
   aux-root =
     "${aux}/dapp/aux";
 
+  compile-agda = x: ''
+    ${haskellPackages.Agda}/bin/agda \
+       --compile ${x}.agda \
+       -i ${stdlib}/share/agda
+  '';
+
+  htmlify-agda = x: ''
+    ${haskellPackages.Agda}/bin/agda \
+       --html ${x}.agda \
+       --html-dir=html/${x} \
+       -i ${stdlib}/share/agda
+ '';
+
 in
   stdenv.mkDerivation rec {
     name = "sic-${version}";
     version = "1.0";
-    contract = "Example";
     src =
       builtins.filterSource
         (name: type:
@@ -103,10 +115,8 @@ in
     buildPhase = ''
       result=$(z3 math.z3)
       test $result = unsat
-
-      ${haskellPackages.Agda}/bin/agda \
-         --compile ${contract}.agda \
-         -i ${stdlib}/share/agda
+      ${compile-agda "T0"}
+      ${compile-agda "D0"}
     '';
 
     doCheck = true;
@@ -130,7 +140,9 @@ in
           root: name:
             "$(cat ${root}/out/${name}.bin | tr -d '\n')";
       in ''
-        export EXAMPLE_CODE=$(./${contract} | tr -d '\n')
+        export ROOT=0000000000000000000000000000000000000000
+        export T0_CODE=$(./T0 | tr -d '\n')
+        export D0_CODE=$(./D0 | tr -d '\n')
         export BIN_CODE=${solidity coins-root "Bin"}
         export PIE_CODE=${solidity aux-root "Pie"}
         export DAPP_ROOT=${coins-root}
@@ -144,12 +156,9 @@ in
 
     installPhase = ''
       mkdir html
-      ${haskellPackages.Agda}/bin/agda \
-         --html ${contract}.agda \
-         --html-dir=html \
-         -i ${stdlib}/share/agda
+      ${htmlify-agda "D0"}
       mkdir -p "$out"/{bin,sic}
-      cp ${contract} "$out/bin"
-      cp -r html "$out/sic/${contract}"
+      cp D0 "$out/bin"
+      cp -r html/D0 "$out/sic/D0"
     '';
   }
