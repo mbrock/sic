@@ -50,11 +50,6 @@ ABI =
 
 main = link D⁰ (λ { ⊤ → parameter "ROOT" }) ABI
 
+-- This one is for inspecting in Emacs.
 postulate &ROOT : Addrᴱ
 D⁰-demo = S²→Oᴱ (λ { ⊤ → &ROOT }) ABI D⁰
-
--- Some kind of gadget
-multi-owner =
-  CALLER ⟫ PUSH 1 ⟫ SSTORE ⟫
-  PUSH 13 ⟫ CODESIZE ⟫ SUB ⟫ DUP 1 ⟫
-  PUSH 13 ⟫ PUSH 0 ⟫ CODECOPY ⟫ PUSH 0 ⟫ RETURN
