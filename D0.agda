@@ -36,17 +36,22 @@ D⁰ = slot 0 ∷ λ K →
   & ¶ feel 1 (λ i → ilk i 0 1 2 3 fyi₄)
   & ¶ look 2 (λ i j → urn i j 0 1 2 3 fyi₄)
 
-main = link D⁰
-  (λ { ⊤ → parameter "ROOT" })
-  (λ { slip → "slip(uint256,address,int256,int256)"
-     ; mold → "mold(uint256,int256,int256,int256)"
-     ; grab → "grab(uint256,address)"
-     ; cage → "cage()"
-     ; frob → "frob(uint256,int256,int256)"
-     ; live → "live()"
-     ; feel → "feel(uint256)"
-     ; look → "look(uint256,address)"
-     })
+ABI : 𝟖 → String
+ABI =
+  λ { slip → "slip(uint256,address,int256,int256)"
+    ; mold → "mold(uint256,int256,int256,int256)"
+    ; grab → "grab(uint256,address)"
+    ; cage → "cage()"
+    ; frob → "frob(uint256,int256,int256)"
+    ; live → "live()"
+    ; feel → "feel(uint256)"
+    ; look → "look(uint256,address)"
+    }
+
+main = link D⁰ (λ { ⊤ → parameter "ROOT" }) ABI
+
+postulate &ROOT : Addrᴱ
+D⁰-demo = S²→Oᴱ (λ { ⊤ → &ROOT }) ABI D⁰
 
 -- Some kind of gadget
 multi-owner =

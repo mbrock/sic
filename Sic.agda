@@ -173,14 +173,7 @@ module Sⁿ where
     data ⟨S⁰⟩ : Set where
       _⟩  : S⁰ Word → ⟨S⁰⟩
       _,_ : S⁰ Word → ⟨S⁰⟩ → ⟨S⁰⟩
-
-  append-⟨S⁰⟩ : ⟨S⁰⟩ → ⟨S⁰⟩ → ⟨S⁰⟩
-  append-⟨S⁰⟩ (x ⟩) y = x , y
-  append-⟨S⁰⟩ (x , xs) y = x , append-⟨S⁰⟩ xs y
-
-  reverse-⟨S⁰⟩ : ⟨S⁰⟩ → ⟨S⁰⟩
-  reverse-⟨S⁰⟩ (x ⟩) = x ⟩
-  reverse-⟨S⁰⟩ (x , xs) = append-⟨S⁰⟩ (reverse-⟨S⁰⟩ xs) (x ⟩)
+      _,,_ : ⟨S⁰⟩ → S⁰ Word → ⟨S⁰⟩
 
   -- An S¹ is “Holy” if it doesn’t do any external calls.
   data Ease : Set where
@@ -464,9 +457,11 @@ module Sⁿ→Oⁿ where
 
   mutual
     ⟨S⁰⟩→O⁰ : ∀ {i} → ⟨S⁰⟩ → O⁰ i (suc i)
-    ⟨S⁰⟩→O⁰ (x ⟩) = ⟦ x ⟧⁰ ┆ H¹ₒ
-    ⟨S⁰⟩→O⁰ (x , y ⟩) = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ H²ₒ
-    ⟨S⁰⟩→O⁰ (x , y , z)  = ⟨S⁰⟩→O⁰ (y , z) ┆ ⟦ x ⟧⁰ ┆ H²ₒ
+    ⟨S⁰⟩→O⁰ (x ⟩)          = ⟦ x ⟧⁰ ┆ H¹ₒ
+    ⟨S⁰⟩→O⁰ (x , y ⟩)      = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ H²ₒ
+    ⟨S⁰⟩→O⁰ (x , y , z)    = ⟨S⁰⟩→O⁰ (y , z)  ┆ ⟦ x ⟧⁰ ┆ H²ₒ
+    ⟨S⁰⟩→O⁰ (x , (y ,, z)) = ⟨S⁰⟩→O⁰ (y ,, z) ┆ ⟦ x ⟧⁰ ┆ H²ₒ
+    ⟨S⁰⟩→O⁰ (x ,, y)       = ⟦ y ⟧⁰ ┆ ⟨S⁰⟩→O⁰ x ┆ H²ₒ
 
     -- Compiling expressions
     ⟦_⟧⁰ : ∀ {i T} → S⁰ T → O⁰ i (suc i)
@@ -783,7 +778,8 @@ module EVM-Math where
   IMUL = snippet (impl 0 0 []) ⟫ ISZERO ⟫ REVERTIF
     where
       -- We check for multiplication overflow by verifying the division.
-      no-overflow? = λ x y → (¬ (neg? y) ∨ (minInt < x)) ∧ (¬ y ∨ ((x × y) ÷ y) == x)
+      no-overflow? = λ x y →
+        (¬ (neg? y) ∨ (minInt < x)) ∧ (¬ y ∨ ((x × y) ÷ y) == x)
 
       impl : ∀ x y ◎ →
             0 ¤ (x , y , ◎)
@@ -806,7 +802,9 @@ module EVM-Math where
   RHALF = PUSH 2 ⟫ RONE ⟫ SDIV
   RTRUNC = RONE ⟫ SWAP 1 ⟫ SDIV
 
-  RMUL = IMUL ⟫ RHALF ⟫ PUSH 0 ⟫ DUP 3 ⟫ SLT ⟫ PUSH 0 ⟫ NOT ⟫ MUL ⟫ MUL ⟫ IADD ⟫ RTRUNC
+  RMUL =
+    IMUL ⟫ RHALF ⟫ PUSH 0 ⟫ DUP 3 ⟫ SLT ⟫
+    PUSH 0 ⟫ NOT ⟫ MUL ⟫ MUL ⟫ IADD ⟫ RTRUNC
 
   {-
     Pseudocode for RPOW:
@@ -1411,11 +1409,11 @@ module Slots where
       (tabulateᵛ λ i → curryᵛ {m} λ v → k-slot v i)
 
     where
-      -- Make the slot ⟨ k , v₁ , ... , vₘ , i ⟩.
+      -- Make the slot ⟨ ⟨ k , v₁ , ... , vₘ ⟩ , i ⟩.
       k-slot : Vec (S⁰ Word) m → Fin n → S⁰ Slot
-      k-slot v i = ⟨ Vec→⟨S⁰⟩ (nat k ∷ᵛ v ++ᵛ (nat (toℕ i) ∷ᵛ []ᵛ))
+      k-slot v i = ⟨ (Vec→⟨S⁰⟩ (nat k ∷ᵛ v) ,, nat (toℕ i))
 
-      -- Make the slot ⟨ k , v₁ , ... , vₘ , i ⟩.
+      -- Make the slot prefix ⟨ k , v₁ , ... , vₘ ⟩.
       k-scope : Vec (S⁰ Word) m → S⁰ Slot
       k-scope v = ⟨ Vec→⟨S⁰⟩ (nat k ∷ᵛ v)
 
