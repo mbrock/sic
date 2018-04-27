@@ -179,15 +179,15 @@ module Sⁿ where
   reverse-⟨S⁰⟩ (x ⟩) = x ⟩
   reverse-⟨S⁰⟩ (x , xs) = append-⟨S⁰⟩ (reverse-⟨S⁰⟩ xs) (x ⟩)
 
-  -- An S¹ is “easy” if it doesn’t do any external calls.
+  -- An S¹ is “Holy” if it doesn’t do any external calls.
   data Ease : Set where
-    easy hard : Ease
+    Holy Vile : Ease
 
   _⊔ᵉ_ : Op₂ Ease
-  easy ⊔ᵉ easy = easy
-  easy ⊔ᵉ hard = hard
-  hard ⊔ᵉ easy = hard
-  hard ⊔ᵉ hard = hard
+  Holy ⊔ᵉ Holy = Holy
+  Holy ⊔ᵉ Vile = Vile
+  Vile ⊔ᵉ Holy = Vile
+  Vile ⊔ᵉ Vile = Vile
 
   -- This is for checking that you don’t use “fyi” more than once
   -- in one action.
@@ -199,13 +199,13 @@ module Sⁿ where
   -- S¹, the set of Sic actions.
   -- The ℕ type parameter is the number of values returned via “fyi”.
   data S¹ : Ease → ℕ → Set where
-    iff_ : S⁰ Word → S¹ easy 0
-    _≜_  : Ref → S⁰ Word → S¹ easy 0
-    _←_  : S⁰ Slot → S⁰ Word → S¹ easy 0
-    _←+_ : S⁰ Slot → S⁰ Word → S¹ easy 0
-    fyi  : ∀ {n} → (xs : Vec (S⁰ Word) (suc n)) → S¹ easy (suc n)
-    ext  : ∀ {n} → String → S⁰ Word → Vec (S⁰ Word) n → S¹ hard 0
-    move_of_from_to_ : S⁰ Word → S⁰ Word → S⁰ Word → S⁰ Word → S¹ hard 0
+    iff_ : S⁰ Word → S¹ Holy 0
+    _≜_  : Ref → S⁰ Word → S¹ Holy 0
+    _←_  : S⁰ Slot → S⁰ Word → S¹ Holy 0
+    _←+_ : S⁰ Slot → S⁰ Word → S¹ Holy 0
+    fyi  : ∀ {n} → (xs : Vec (S⁰ Word) (suc n)) → S¹ Holy (suc n)
+    ext  : ∀ {n} → String → S⁰ Word → Vec (S⁰ Word) n → S¹ Vile 0
+    move_of_from_to_ : S⁰ Word → S⁰ Word → S⁰ Word → S⁰ Word → S¹ Vile 0
     _│_  : ∀ {m n i₁ i₂}
          → S¹ i₁ m → S¹ i₂ n → {_ : fyi-ok m n}
          → S¹ (i₁ ⊔ᵉ i₂) (m ⊔ n)
@@ -216,10 +216,10 @@ module Sⁿ where
 
   -- We define helpers for returning up to 4 values...
   module fyi-helpers where
-    fyi₁ : S⁰ Word → S¹ easy 1
-    fyi₂ : S⁰ Word → S⁰ Word → S¹ easy 2
-    fyi₃ : S⁰ Word → S⁰ Word → S⁰ Word → S¹ easy 3
-    fyi₄ : S⁰ Word → S⁰ Word → S⁰ Word → S⁰ Word → S¹ easy 4
+    fyi₁ : S⁰ Word → S¹ Holy 1
+    fyi₂ : S⁰ Word → S⁰ Word → S¹ Holy 2
+    fyi₃ : S⁰ Word → S⁰ Word → S⁰ Word → S¹ Holy 3
+    fyi₄ : S⁰ Word → S⁰ Word → S⁰ Word → S⁰ Word → S¹ Holy 4
     fyi₁ a = fyi (a ∷ᵛ []ᵛ)
     fyi₂ a b = fyi (a ∷ᵛ b ∷ᵛ []ᵛ)
     fyi₃ a b c = fyi (a ∷ᵛ b ∷ᵛ c ∷ᵛ []ᵛ)
@@ -229,14 +229,14 @@ module Sⁿ where
 
   -- ...and for calling externally with up to 4 values.
   module ext-helpers where
-    extⁿ : String → S⁰ Word → List (S⁰ Word) → S¹ hard 0
+    extⁿ : String → S⁰ Word → List (S⁰ Word) → S¹ Vile 0
     extⁿ s x xs = ext s x (fromListᵛ xs)
 
-    ext₀ : String → S⁰ Word → S¹ hard 0
-    ext₁ : String → S⁰ Word → S⁰ Word → S¹ hard 0
-    ext₂ : String → S⁰ Word → S⁰ Word → S⁰ Word → S¹ hard 0
-    ext₃ : String → S⁰ Word → S⁰ Word → S⁰ Word → S⁰ Word → S¹ hard 0
-    ext₄ : String → S⁰ Word → S⁰ Word → S⁰ Word → S⁰ Word → S⁰ Word → S¹ hard 0
+    ext₀ : String → S⁰ Word → S¹ Vile 0
+    ext₁ : String → S⁰ Word → S⁰ Word → S¹ Vile 0
+    ext₂ : String → S⁰ Word → S⁰ Word → S⁰ Word → S¹ Vile 0
+    ext₃ : String → S⁰ Word → S⁰ Word → S⁰ Word → S⁰ Word → S¹ Vile 0
+    ext₄ : String → S⁰ Word → S⁰ Word → S⁰ Word → S⁰ Word → S⁰ Word → S¹ Vile 0
     ext₀ s x = extⁿ s x []
     ext₁ s x a = extⁿ s x [ a ]
     ext₂ s x a b = extⁿ s x ( a ∷ [ b ] )
@@ -264,14 +264,14 @@ module Sⁿ where
     anybody : Some Guy
 
   data S² (Guy : Set) (Act : Set) : Ease → Set where
-    _::_⊢_
+    _∷_⟶_
       : ∀ {ease n}
-      → Guy
       → Act
+      → Guy
       → S¹ ease n
       → S² Guy Act ease
 
-    _⅋_
+    _&_
       : ∀ {ease₁ ease₂}
       → S² Guy Act ease₁
       → S² Guy Act ease₂
@@ -287,8 +287,8 @@ module Sⁿ where
   -- Syntax precedence list
 
   infix  1 case_then_else_
-  infixr 2 _⅋_
-  infixr 3 _::_⊢_
+  infixr 2 _&_
+  infixr 3 _∷_⟶_
   infixr 4 _│_
 
   infix  10 iff_ _≜_ _←_ _←+_
@@ -301,7 +301,7 @@ module Sⁿ where
   infixl 36 _≥_ _≤_ _<_ _>_
 
   infixl 40 _+_ _−_
-  infixl 41 _∙_
+  infixl 41 _∙_ _×_
   infixl 42 -_
 
   infix  50 get_
@@ -494,9 +494,9 @@ module Sⁿ→Oⁿ where
 
   -- Compiling signature dispatch sequences
   ⟦_⟧² : ∀ {ease Guy Act} → S² Guy Act ease → O² Guy Act
-  ⟦ g :: s ⊢ k ⟧² =
+  ⟦ s ∷ g ⟶ k ⟧² =
     actₒ g s (S¹-fyi-size k) ⟦ k ⟧¹
-  ⟦ a ⅋ b     ⟧² =
+  ⟦ a & b     ⟧² =
     seqₒ ⟦ a ⟧² ⟦ b ⟧²
   ⟦ case p then a else b ⟧² =
     caseₒ ⟦ p ⟧⁰ ⟦ a ⟧² ⟦ b ⟧²
@@ -1251,13 +1251,13 @@ module Linking where
       (λ x → ♯ putStrLn (assemble constructor-prelude string++ assemble x))
       (♯ putStrLn "Error: linking failed.")
 
-  link_with-guys_with-acts
+  link
     : ∀ {Guy Act ease}
     → S² Guy Act ease
     → (Guy → Some ID)
     → (Act → String)
     → IO.Primitive.IO ⊤
-  link x with-guys f₁ with-acts f₂ =
+  link x f₁ f₂ =
     run (assemble-and-print (compile-and-link f₁ f₂ x))
 
 
@@ -1270,10 +1270,10 @@ module Dappsys where
   open Sⁿ
   open Naturals
 
-  _↑_ : S⁰ Slot → S⁰ Word → S¹ easy 0
-  _↓_ : S⁰ Slot → S⁰ Word → S¹ easy 0
-  _↥_ : S⁰ Slot → S⁰ Word → S¹ easy 0
-  _↧_ : S⁰ Slot → S⁰ Word → S¹ easy 0
+  _↑_ : S⁰ Slot → S⁰ Word → S¹ Holy 0
+  _↓_ : S⁰ Slot → S⁰ Word → S¹ Holy 0
+  _↥_ : S⁰ Slot → S⁰ Word → S¹ Holy 0
+  _↧_ : S⁰ Slot → S⁰ Word → S¹ Holy 0
 
   n ↑ v = n ← get n + v
   n ↥ v = n ← get n + v │ iff get n ≥ 0
@@ -1282,43 +1282,46 @@ module Dappsys where
 
   -- The “move statement” which subtracts and adds the same quantity
   -- to different places, failing if either place becomes negative.
-  _↧_↥_ : S⁰ Slot → S⁰ Slot → S⁰ Word → S¹ easy 0
+  _↧_↥_ : S⁰ Slot → S⁰ Slot → S⁰ Word → S¹ Holy 0
   k₁ ↧ k₂ ↥ v = (k₁ ↧ v) │ (k₂ ↥ v)
 
   infix 19 _↧_↥_ _↧_ _↥_
+
+module Varargs where
+  open Naturals
+  open Vectors
+
+  _of_to_ : (n : ℕ) → Set → Set → Set
+  ℕ.zero of t₁ to t₂ = t₂
+  suc n  of t₁ to t₂ = t₁ → n of t₁ to t₂
+
+  curryᵛ : ∀ {n a b} → (Vec a n → b) → n of a to b
+  curryᵛ {ℕ.zero} f = f []ᵛ
+  curryᵛ {suc n} f = λ x → curryᵛ λ v → f (x ∷ᵛ v)
+
+  uncurryᵛ : ∀ {n a b} → n of a to b → Vec a n → b
+  uncurryᵛ f []ᵛ = f
+  uncurryᵛ f (x ∷ᵛ v) = uncurryᵛ (f x) v
+
+  private
+    open Relations
+    uncurryᵛ-curryᵛ≡id
+      : ∀ {n a b} → (f : Vec a n → b) → (v : Vec a n)
+      → uncurryᵛ (curryᵛ f) v ≣ f v
+    uncurryᵛ-curryᵛ≡id f []ᵛ = refl
+    uncurryᵛ-curryᵛ≡id f (x ∷ᵛ v) = uncurryᵛ-curryᵛ≡id (λ y → f (x ∷ᵛ y)) v
 
 module Slots where
   open Naturals
   open Vectors
   open FiniteSets
 
-  module Varargs where
-    _of_to_ : (n : ℕ) → Set → Set → Set
-    ℕ.zero of t₁ to t₂ = t₂
-    suc n  of t₁ to t₂ = t₁ → n of t₁ to t₂
-
-    curryᵛ : ∀ {n a b} → (Vec a n → b) → n of a to b
-    curryᵛ {ℕ.zero} f = f []ᵛ
-    curryᵛ {suc n} f = λ x → curryᵛ λ v → f (x ∷ᵛ v)
-
-    uncurryᵛ : ∀ {n a b} → n of a to b → Vec a n → b
-    uncurryᵛ f []ᵛ = f
-    uncurryᵛ f (x ∷ᵛ v) = uncurryᵛ (f x) v
-
-    private
-      open Relations
-      uncurryᵛ-curryᵛ≡id
-        : ∀ {n a b} → (f : Vec a n → b) → (v : Vec a n)
-        → uncurryᵛ (curryᵛ f) v ≣ f v
-      uncurryᵛ-curryᵛ≡id f []ᵛ = refl
-      uncurryᵛ-curryᵛ≡id f (x ∷ᵛ v) = uncurryᵛ-curryᵛ≡id (λ y → f (x ∷ᵛ y)) v
-
   open Varargs
   open Sⁿ
 
-  _args_ : ∀ {t} → (n : ℕ) → (n of S⁰ Word to t) → t
-  ℕ.zero args f = f
-  suc n  args f = n args f ($ ($$ n))
+  ♯ : ∀ {t} → (n : ℕ) → (n of S⁰ Word to t) → t
+  ♯ ℕ.zero f = f
+  ♯ (suc n) f = ♯ n (f ($ ($$ n)))
 
   private
     Vec→⟨S⁰⟩ : ∀ {n} → Vec (S⁰ Word) (suc n) → ⟨S⁰⟩
@@ -1332,22 +1335,16 @@ module Slots where
     fmap ℕ.zero f x = f x
     fmap (suc n) f x = λ a → fmap n f (x a)
 
-    struct : ℕ → (m : ℕ) → m of S⁰ Word to ⟨S⁰⟩
-    struct k m = curryᵛ f
-      where
-        f : Vec (S⁰ Word) m → ⟨S⁰⟩
-        f v = Vec→⟨S⁰⟩ (nat k ∷ᵛ v)
+  slot_∷_ : ∀ {t : Set} → ℕ → (S⁰ Slot → t) → t
+  slot k ∷ f = f (at k)
 
-  slot_::_ : ∀ {t : Set} → ℕ → (S⁰ Slot → t) → t
-  slot k :: f = f (at k)
-
-  open Products renaming (_,_ to _&_)
+  open Products renaming (_,_ to _and_)
 
   -- This is so higher-order I had to lease a new quiet office space
   -- to even think about implementing it.  The logic is not complex,
   -- but we jump through hoops to get the desired syntax at the use site:
   --
-  --   slot k maps 2 to 3 :: λ foo a b c →
+  --   slot k maps 2 to 3 ∷ λ foo a b c →
   --     foo ($ 0) ($ 1) 7 8 9  λ aᵢⱼ bᵢⱼ cᵢⱼ →
   --       a i j ← aᵢⱼ + bᵢⱼ ∙ cᵢⱼ
   --
@@ -1360,14 +1357,14 @@ module Slots where
   -- The variables a, b, and c are bound to slot functions, such that
   -- a i j is the slot ⟨ k , i , j , 0 ⟩, and so on.
   --
-  slot_maps_to_::_ : ∀ {t : Set}
+  slot_∷_×_∷_ : ∀ {t : Set}
     → (k m n : ℕ)
     → (m of S⁰ Word to
         (n of Ref to
-          (∀ {x} → n of S⁰ Word to S¹ easy x → S¹ easy x))
+          (∀ {x} → n of S⁰ Word to S¹ Holy x → S¹ Holy x))
         → n of (m of S⁰ Word to S⁰ Slot) to t)
     → t
-  slot k maps m to n :: cont =
+  slot k ∷ m × n ∷ cont =
     uncurryᵛ
       (cont (fmap m curryᵛ (curryᵛ with-loader)))
       (tabulateᵛ λ i → curryᵛ {m} λ v → k-slot v i)
@@ -1380,8 +1377,8 @@ module Slots where
       with-loader
         : Vec (S⁰ Word) m
         → Vec Ref n
-        → ∀ {x} → (n of S⁰ Word to S¹ easy x)
-        → S¹ easy x
+        → ∀ {x} → (n of S⁰ Word to S¹ Holy x)
+        → S¹ Holy x
       with-loader ixs []ᵛ g = g  -- Degenerate case of zero struct fields.
       with-loader ixs refs@(_ ∷ᵛ _) g =
         let
@@ -1394,7 +1391,7 @@ module Slots where
             --
             -- by mapping and folding the refs vector.
             foldr₁ᵛ (λ s₁ s₂ → s₁ │ s₂)
-              (mapᵛ (λ { (i & r) → r ≜ get k-slot ixs i})
+              (mapᵛ (λ { (i and r) → r ≜ get k-slot ixs i})
                 (zipᵛ (allFinᵛ n) refs))
 
           proceed =
@@ -1406,9 +1403,15 @@ module Slots where
       f₂ : Vec (m of S⁰ Word to S⁰ Slot) n
       f₂ = tabulateᵛ λ i → curryᵛ {m} λ v → k-slot v i
 
+  ¶ : ∀ {i A G}
+      → A → G
+      → (n : ℕ)
+      → (n of S⁰ Word to S¹ Holy i)
+      → S² G A Holy
+  ¶ a b c d = a ∷ b ⟶ ♯ c d
+
 
 -- Now we open up our modules to users of the language.
-open Basics public
 open Strings public
 open OverloadedNumbers public
 open Sⁿ public
