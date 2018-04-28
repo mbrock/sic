@@ -175,7 +175,6 @@ module Sⁿ where
     _←+_ : S⁰ Slot → S⁰ Word → S¹ 0
     fyi  : ∀ {n} → (xs : Vec (S⁰ Word) (suc n)) → S¹ (suc n)
     ext  : ∀ {n} → String → S⁰ Word → Vec (S⁰ Word) n → S¹ 0
-    move_of_from_to_ : S⁰ Word → S⁰ Word → S⁰ Word → S⁰ Word → S¹ 0
     _│_  : ∀ {m n} → S¹ m → S¹ n → {_ : fyi-ok m n} → S¹ (m ⊔ n)
     scope! : S⁰ Slot → S¹ 0
 
@@ -449,9 +448,6 @@ module Sⁿ→Oⁿ where
   ⟦ k ←+ x ⟧¹ = setₖₒ₊ ⟦ k ⟧⁰ ⟦ x ⟧⁰
   ⟦ x │ y ⟧¹  = ⟦ x ⟧¹ ∥ ⟦ y ⟧¹
   ⟦ scope! s ⟧¹ = scope!ₒ ⟦ s ⟧⁰
-  ⟦ move wad of gem from src to dst ⟧¹ =
-    extₒ "transferFrom(address,address,uint256)" ⟦ gem ⟧⁰
-      (mapᵛ ⟦_⟧⁰ (src ∷ᵛ dst ∷ᵛ wad ∷ᵛ []ᵛ))
 
   -- Compiling signature dispatch sequences
   ⟦_⟧² : ∀ {Guy Act} → S² Guy Act → O² Guy Act
