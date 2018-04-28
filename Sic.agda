@@ -126,22 +126,15 @@ module Sⁿ where
   open Lists
   open Strings
 
-  data Arg : Set where $$ : ℕ → Arg
-  data Ref : Set where ## : ℕ → Ref
+  data Arg  : Set where $$ : ℕ → Arg
+  data Ref  : Set where ## : ℕ → Ref
+  data Type : Set where Word Slot : Type
 
-  ref-index : Ref → ℕ
-  ref-index (## n) = n
-
-  data Type : Set where
-    Word : Type
-    Slot : Type
-
+  -- S⁰, the set of Sic expressions
   mutual
-
-    -- S⁰, the set of Sic expressions
     data S⁰ : Type → Set where
-      -_ ¬_ : Op₁ (S⁰ Word)
       _+_ _−_ _×_ _∙_ _^_ _<_ _>_ _≥_ _≤_ _≡_ _∨_ _∧_ : Op₂ (S⁰ Word)
+      -_ ¬_ : Op₁ (S⁰ Word)
       u : S⁰ Word                    -- The invoking user's ID
       t : S⁰ Word                    -- The current time
       ray : S⁰ Word                  -- The ray 1.0
@@ -159,22 +152,55 @@ module Sⁿ where
       one  : S⁰ Word → ⟨S⁰⟩
       _,_ : ⟨S⁰⟩ → S⁰ Word → ⟨S⁰⟩
 
-  -- This is for checking that you don’t use “fyi” more than once
-  -- in one action.
-  fyi-ok : ℕ → ℕ → Set
-  fyi-ok 0       _       = ⊤
-  fyi-ok (suc _) 0       = ⊤
-  fyi-ok (suc _) (suc _) = ⊥
-
   -- S¹, the set of Sic actions.
-  data S¹ : ℕ → Set where
-    iff_   : S⁰ Word → S¹ 0
-    _≜_    : Ref → S⁰ Word → S¹ 0
-    _←_    : S⁰ Slot → S⁰ Word → S¹ 0
-    _←+_   : S⁰ Slot → S⁰ Word → S¹ 0
-    fyiᵛ   : ∀ {n} → (xs : Vec (S⁰ Word) n) → S¹ n
-    _│_    : ∀ {m n} → S¹ m → S¹ n → {_ : fyi-ok m n} → S¹ (m ⊔ n)
-    scope! : S⁰ Slot → S¹ 0
+  mutual
+    data S¹ : ℕ → Set where
+      iff_   : S⁰ Word → S¹ 0
+      _≜_    : Ref → S⁰ Word → S¹ 0
+      _←_    : S⁰ Slot → S⁰ Word → S¹ 0
+      _←+_   : S⁰ Slot → S⁰ Word → S¹ 0
+      fyiᵛ   : ∀ {n} → (xs : Vec (S⁰ Word) n) → S¹ n
+      _│_    : ∀ {m n} → S¹ m → S¹ n → {_ : fyi-ok m n} → S¹ (m ⊔ n)
+      scope! : S⁰ Slot → S¹ 0
+
+    -- (Only one fyi per S¹.)
+    fyi-ok : ℕ → ℕ → Set
+    fyi-ok 0       _       = ⊤
+    fyi-ok (suc _) 0       = ⊤
+    fyi-ok (suc _) (suc _) = ⊥
+
+  -- S², the set of Sic contracts with named actions.
+  data S² (Guy : Set) (Act : Set) : Set where
+    _⟶_ : ∀ {n} → Act → S¹ n → S² Guy Act
+    _&_ : S² Guy Act → S² Guy Act → S² Guy Act
+    case_then_else_ : S⁰ Word → S² Guy Act → S² Guy Act → S² Guy Act
+    auth_∷_else_ : Guy → S² Guy Act → S² Guy Act → S² Guy Act
+
+  infix   1  case_then_else_
+  infixr  2  _&_
+  infixr  3  _⟶_
+  infixr  4  _│_
+  infix  10  iff_ _≜_ _←_ _←+_
+  infixl 31  _∨_
+  infixl 32  _∧_
+  infixl 33  ¬_
+  infixl 35  _≡_
+  infixl 36  _≥_ _≤_ _<_ _>_
+  infixl 40  _+_ _−_
+  infixl 41  _∙_ _×_
+  infixl 42  -_
+  infix  50  get_
+  infixr 60  ⟨_
+  infixr 61  _,_
+
+
+-- Section: Functions that recursively analyze Sⁿ terms
+--
+
+module Sⁿ-analysis where
+  open Sⁿ
+  open Naturals
+  open Vectors
 
   S¹-fyi-size : ∀ {n} → S¹ n → ℕ
   S¹-fyi-size {n} _ = n
@@ -221,13 +247,6 @@ module Sⁿ where
   S¹-memory-usage (x │ y)           = S¹-memory-usage x ⊔ S¹-memory-usage y
   S¹-memory-usage (scope! x)        = S⁰-memory-usage x
 
-  -- S², the set of Sic contracts with named actions.
-  data S² (Guy : Set) (Act : Set) : Set where
-    _⟶_ : ∀ {n} → Act → S¹ n → S² Guy Act
-    _&_ : S² Guy Act → S² Guy Act → S² Guy Act
-    case_then_else_ : S⁰ Word → S² Guy Act → S² Guy Act → S² Guy Act
-    auth_∷_else_ : Guy → S² Guy Act → S² Guy Act → S² Guy Act
-
   transform-S²
     : ∀ {G₁ G₂ A₁ A₂} → (G₁ → G₂) → (A₁ → A₂)
     → S² G₁ A₁ → S² G₂ A₂
@@ -241,30 +260,6 @@ module Sⁿ where
     auth (f₁ a) ∷ transform-S² f₁ f₂ x else transform-S² f₁ f₂ y
 
 
-  -- Syntax precedence list
-  infix  1 case_then_else_
-  infixr 2 _&_
-  infixr 3 _⟶_
-  infixr 4 _│_
-
-  infix  10 iff_ _≜_ _←_ _←+_
-
-  infixl 31 _∨_
-  infixl 32 _∧_
-  infixl 33 ¬_
-
-  infixl 35 _≡_
-  infixl 36 _≥_ _≤_ _<_ _>_
-
-  infixl 40 _+_ _−_
-  infixl 41 _∙_ _×_
-  infixl 42 -_
-
-  infix  50 get_
-  infixr 60 ⟨_
-  infixr 61 _,_
-
-
 -- Section: Metaprogramming utilities
 --
 -- We extend the Agda environment with some useful stuff.
@@ -274,14 +269,21 @@ module Varargs where
   open Naturals
   open Vectors
 
+  -- See example below.
   _of_to_ : (n : ℕ) → Set → Set → Set
   ℕ.zero of t₁ to t₂ = t₂
   suc n  of t₁ to t₂ = t₁ → n of t₁ to t₂
 
+  private
+    example : 3 of ℕ to ℕ
+    example a b c = a * b * c
+
+  -- We can convert a vector-taking function to a vararg function.
   curryᵛ : ∀ {n a b} → (Vec a n → b) → n of a to b
   curryᵛ {ℕ.zero} f = f []ᵛ
   curryᵛ {suc n} f = λ x → curryᵛ λ v → f (x ∷ᵛ v)
 
+  -- And the other way around.
   uncurryᵛ : ∀ {n a b} → n of a to b → Vec a n → b
   uncurryᵛ f []ᵛ = f
   uncurryᵛ f (x ∷ᵛ v) = uncurryᵛ (f x) v
@@ -318,6 +320,142 @@ module OverloadedNumbers where
     from-ℕ {{Arg-IsNumber}}  n = $$ n
 
   {-# BUILTIN FROMNAT from-ℕ #-}
+
+
+
+-- Section: Higher-level Sⁿ combinators
+--
+-- We now define a “standard library” in the Sic language.
+--
+
+module Dappsys where
+  open Sⁿ
+  open Naturals
+  open Varargs
+  open Vectors
+  open FiniteSets
+
+  -- Make it easier to use calldata.
+  ♯ : ∀ {t} → (n : ℕ) → (n of S⁰ Word to t) → t
+  ♯ n f = uncurryᵛ f (mapᵛ (λ i → $ ($$ (toℕ i))) (allFinᵛ n))
+
+  -- Nice syntax for methods using calldata.
+  ¶ : ∀ {i A G} → A → (n : ℕ) → n of S⁰ Word to S¹ i → S² G A
+  ¶ a b c = a ⟶ ♯ b c
+
+  -- Return with varargs.
+  fyi : (n : ℕ) → n of S⁰ Word to S¹ n
+  fyi n = curryᵛ {n} fyiᵛ
+
+  -- Should these be built into S¹?
+  _↑_ : S⁰ Slot → S⁰ Word → S¹ 0
+  _↓_ : S⁰ Slot → S⁰ Word → S¹ 0
+  _↥_ : S⁰ Slot → S⁰ Word → S¹ 0
+  _↧_ : S⁰ Slot → S⁰ Word → S¹ 0
+  n ↑ v = n ← get n + v
+  n ↥ v = n ← get n + v │ iff get n ≥ 0
+  n ↓ v = n ↑ (- v)
+  n ↧ v = n ↥ (- v)
+
+  -- The “move statement” which subtracts and adds the same quantity
+  -- to different places, failing if either place becomes negative.
+  _↧_↥_ : S⁰ Slot → S⁰ Slot → S⁰ Word → S¹ 0
+  k₁ ↧ k₂ ↥ v = (k₁ ↧ v) │ (k₂ ↥ v)
+
+  infix 19 _↧_↥_ _↧_ _↥_
+
+module Storage where
+  open Sⁿ
+  open Naturals
+  open Vectors
+  open Varargs
+  open FiniteSets
+
+  private
+    Vec→⟨S⁰⟩ : ∀ {n} → Vec (S⁰ Word) (suc n) → ⟨S⁰⟩
+    Vec→⟨S⁰⟩ (x ∷ᵛ []ᵛ)    = one x
+    Vec→⟨S⁰⟩ (x ∷ᵛ y ∷ᵛ v) = Vec→⟨S⁰⟩ (y ∷ᵛ v) , x
+
+    fmap
+      : ∀ {t t₁ t₂} → (n : ℕ) → (t₁ → t₂)
+      → n of t to t₁
+      → n of t to t₂
+    fmap ℕ.zero f x = f x
+    fmap (suc n) f x = λ a → fmap n f (x a)
+
+  slot_∷_ : ∀ {t : Set} → ℕ → (S⁰ Slot → t) → t
+  slot k ∷ f = f (at k)
+
+  open Products renaming (_,_ to _and_)
+
+  -- This is so higher-order I had to lease a new quiet office space
+  -- to even think about implementing it.  The logic is not complex,
+  -- but we jump through hoops to get the desired syntax at the use site:
+  --
+  --   slot k maps 2 to 3 ∷ λ foo a b c →
+  --     foo ($ 0) ($ 1) 7 8 9  λ aᵢⱼ bᵢⱼ cᵢⱼ →
+  --       a i j ← aᵢⱼ + bᵢⱼ ∙ cᵢⱼ
+  --
+  -- In this example, we define a 2D mapping to a 3-field struct.
+  --
+  -- foo is bound to a full-struct loader that takes 2+3+1 arguments:
+  -- first the mapping indices to load; then a memory index for each field;
+  -- and finally a 3-parameter function that gets called with memory getters.
+  --
+  -- The variables a, b, and c are bound to slot functions, such that
+  -- a i j is the slot ⟨ k , i , j , 0 ⟩, and so on.
+  --
+  slot_∷_×_∷_ : ∀ {t : Set}
+    → (k m n : ℕ)
+    → (m of S⁰ Word to
+        (n of Ref to
+          (∀ {x} → n of S⁰ Word to S¹ x → S¹ x))
+        → n of (m of S⁰ Word to S⁰ Slot) to t)
+    → t
+  slot k ∷ m × n ∷ cont =
+    uncurryᵛ
+      (cont (fmap m curryᵛ (curryᵛ with-loader)))
+      (tabulateᵛ λ i → curryᵛ {m} λ v → k-slot v i)
+
+    where
+      -- Make the slot ⟨ ⟨ k , v₁ , ... , vₘ ⟩ , i ⟩.
+      k-slot : Vec (S⁰ Word) m → Fin n → S⁰ Slot
+      k-slot v i = member (⟨ (Vec→⟨S⁰⟩ (reverseᵛ (nat k ∷ᵛ v)))) (toℕ i)
+
+      -- Make the slot prefix ⟨ k , v₁ , ... , vₘ ⟩.
+      k-scope : Vec (S⁰ Word) m → S⁰ Slot
+      k-scope v = ⟨ Vec→⟨S⁰⟩ (reverseᵛ (nat k ∷ᵛ v))
+
+      with-loader
+        : Vec (S⁰ Word) m
+        → Vec Ref n
+        → ∀ {x} → (n of S⁰ Word to S¹ x)
+        → S¹ x
+      with-loader ixs []ᵛ g = g  -- Degenerate case of zero struct fields.
+      with-loader ixs refs@(_ ∷ᵛ _) g =
+        let
+          setup =
+            -- Build something like
+            --
+            --     scope! ⟨ k , ixs... ⟩
+            --   │ ref₁ ≜ get (scoped 0)
+            --   │ ref₂ ≜ get (scoped 1)
+            --   │ ...
+            --
+            -- by mapping and folding the refs vector.
+            scope! (k-scope ixs) │
+            foldr₁ᵛ (λ s₁ s₂ → s₁ │ s₂)
+              (mapᵛ (λ { (i and r) → r ≜ get (scoped (toℕ i)) })
+                (zipᵛ (allFinᵛ n) refs))
+
+          proceed =
+            -- Call the body function with the memory load expressions.
+            uncurryᵛ g (mapᵛ # refs)
+
+        in setup │ proceed
+
+      f₂ : Vec (m of S⁰ Word to S⁰ Slot) n
+      f₂ = tabulateᵛ λ i → curryᵛ {m} λ v → k-slot v i
 
 
 -- Section: Reasoning about stack manipulations
@@ -634,6 +772,7 @@ module EVM-Math where
 
 module Sic→EVM where
   open Sⁿ
+  open Sⁿ-analysis
   open EVM
   open EVM-Math
 
@@ -680,8 +819,6 @@ module Sic→EVM where
   ⟦ ⟨ one x , y ⟧⁰ᵉ   = ⟦ x ⟧⁰ᵉ ⟫ ⟦ y ⟧⁰ᵉ ⟫ hash-two
   ⟦ ⟨ (x , y) , z ⟧⁰ᵉ = ⟦ ⟨ (x , y) ⟧⁰ᵉ ⟫ ⟦ z ⟧⁰ᵉ ⟫ hash-two
 
-  open Products renaming (_,_ to _and_)
-
   S¹→Oᴱ : ∀ {n} → ℕ → S¹ n → Oᴱ
   S¹→Oᴱ m s@(iff x) =
     tag s (⟦ x ⟧⁰ᵉ ⟫ ISZERO ⟫ REVERTIF)
@@ -699,6 +836,7 @@ module Sic→EVM where
         (mapᵛ
           (λ { (i and x) → ⟦ x ⟧⁰ᵉ ⟫ PUSH (m +ℕ toℕ i * wordsize) ⟫ MSTORE })
           (zipᵛ (allFinᵛ (suc n)) v)))
+     where open Products renaming (_,_ to _and_)
   S¹→Oᴱ m s@(scope! x) =
     tag s (⟦ x ⟧⁰ᵉ ⟫ PUSH %scope ⟫ MSTORE)
   S¹→Oᴱ m (x │ y) =
@@ -706,6 +844,25 @@ module Sic→EVM where
 
   S¹→tagged-Oᴱ : ∀ {n} → ℕ → S¹ n → Oᴱ
   S¹→tagged-Oᴱ m x = tag x (S¹→Oᴱ m x)
+
+  return : ℕ → ℕ → Oᴱ
+  return _ 0 = STOP
+  return offset n =
+    PUSH (n * wordsize) ⟫
+    PUSH (m₀ +ℕ offset * wordsize) ⟫
+    RETURN
+
+  ⟦_⟧²ᵉ : S² Addrᴱ String → Oᴱ
+  ⟦ x & y ⟧²ᵉ = ⟦ x ⟧²ᵉ ⟫ ⟦ y ⟧²ᵉ
+  ⟦ sig ⟶ x ⟧²ᵉ =
+    let m = S¹-memory-usage x
+        n = S¹-fyi-size x
+    in PUSH %sig ⟫ MLOAD ⟫ PUSHSIG sig ⟫ EQ ⟫ ISZERO ⟫
+       ELSE (S¹→Oᴱ m x) ⟫ return m n
+  ⟦ case p then x else y ⟧²ᵉ =
+    ⟦ p ⟧⁰ᵉ ⟫ ELSE ⟦ y ⟧²ᵉ ⟫ ⟦ x ⟧²ᵉ
+  ⟦ auth a ∷ x else y ⟧²ᵉ =
+    PUSHADDR a ⟫ CALLER ⟫ EQ ⟫ ELSE ⟦ y ⟧²ᵉ ⟫ ⟦ x ⟧²ᵉ
 
   -- This prelude is inserted into every compiled S².
   prelude =
@@ -717,32 +874,6 @@ module Sic→EVM where
   revert-jumpdest : ℕ
   revert-jumpdest = 4
 
-  constructor-prelude =
-    PUSH 13 ⟫ CODESIZE ⟫ SUB ⟫ DUP 1 ⟫
-    PUSH 13 ⟫ PUSH 0 ⟫ CODECOPY ⟫ PUSH 0 ⟫ RETURN
-
-  return : ℕ → ℕ → Oᴱ
-  return _ 0 = STOP
-  return offset n =
-    PUSH (n * wordsize) ⟫
-    PUSH (m₀ +ℕ offset * wordsize) ⟫
-    RETURN
-
-  sig-check : String → Oᴱ
-  sig-check s =
-    PUSH %sig ⟫ MLOAD ⟫ PUSHSIG s ⟫ EQ
-
-  ⟦_⟧²ᵉ : S² Addrᴱ String → Oᴱ
-  ⟦ sig ⟶ x ⟧²ᵉ =
-    sig-check sig ⟫ ISZERO
-      ⟫ ELSE (S¹→Oᴱ (S¹-memory-usage x) x)
-      ⟫ return (S¹-memory-usage x) (S¹-fyi-size x)
-  ⟦ x & y ⟧²ᵉ = ⟦ x ⟧²ᵉ ⟫ ⟦ y ⟧²ᵉ
-  ⟦ case p then x else y ⟧²ᵉ =
-    ⟦ p ⟧⁰ᵉ ⟫ ELSE ⟦ y ⟧²ᵉ ⟫ ⟦ x ⟧²ᵉ
-  ⟦ auth a ∷ x else y ⟧²ᵉ =
-    PUSHADDR a ⟫ CALLER ⟫ EQ ⟫ ELSE ⟦ y ⟧²ᵉ ⟫ ⟦ x ⟧²ᵉ
-
   S²→Oᴱ : ∀ {Guy Act}
         → (Guy → Addrᴱ)
         → (Act → String)
@@ -751,6 +882,11 @@ module Sic→EVM where
 
   compile : S² Addrᴱ String → Oᴱ
   compile = S²→Oᴱ (λ x → x) (λ x → x)
+
+  constructor-prelude : Oᴱ
+  constructor-prelude =
+    PUSH 13 ⟫ CODESIZE ⟫ SUB ⟫ DUP 1 ⟫
+    PUSH 13 ⟫ PUSH 0 ⟫ CODECOPY ⟫ PUSH 0 ⟫ RETURN
 
 
 -- Section: Assembling EVM assembly
@@ -795,6 +931,8 @@ module External where
                   . abiKeccak
                   . encodeUtf8 #-}
 
+
+-- This module is a bit hard to understand.
 module EVM-Assembly where
   open Sic→EVM using (revert-jumpdest)
   open EVM
@@ -938,6 +1076,7 @@ module EVM-Assembly where
 
 module Linking where
   open Sⁿ
+  open Sⁿ-analysis
   open EVM
   open EVM-Assembly
   open Sic→EVM
@@ -1051,152 +1190,17 @@ module Linking where
     run (assemble-and-print (compile-and-link f₁ f₂ x))
 
 
--- Section: Dappsys, free stuff for dapp developers
---
--- We now define a “standard library” in the Sic language.
---
-
-module Dappsys where
-  open Sⁿ
-  open Naturals
-  open Varargs
-
-  fyi : (n : ℕ) → n of S⁰ Word to S¹ n
-  fyi n = curryᵛ {n} fyiᵛ
-
-  _↑_ : S⁰ Slot → S⁰ Word → S¹ 0
-  _↓_ : S⁰ Slot → S⁰ Word → S¹ 0
-  _↥_ : S⁰ Slot → S⁰ Word → S¹ 0
-  _↧_ : S⁰ Slot → S⁰ Word → S¹ 0
-
-  n ↑ v = n ← get n + v
-  n ↥ v = n ← get n + v │ iff get n ≥ 0
-  n ↓ v = n ↑ (- v)
-  n ↧ v = n ↥ (- v)
-
-  -- The “move statement” which subtracts and adds the same quantity
-  -- to different places, failing if either place becomes negative.
-  _↧_↥_ : S⁰ Slot → S⁰ Slot → S⁰ Word → S¹ 0
-  k₁ ↧ k₂ ↥ v = (k₁ ↧ v) │ (k₂ ↥ v)
-
-  infix 19 _↧_↥_ _↧_ _↥_
-
-module Slots where
-  open Naturals
-  open Vectors
-  open FiniteSets
-
-  open Varargs
-  open Sⁿ
-
-  ♯ : ∀ {t} → (n : ℕ) → (n of S⁰ Word to t) → t
-  ♯ n f = uncurryᵛ f (mapᵛ (λ i → $ ($$ (toℕ i))) (allFinᵛ n))
-
-  private
-    Vec→⟨S⁰⟩ : ∀ {n} → Vec (S⁰ Word) (suc n) → ⟨S⁰⟩
-    Vec→⟨S⁰⟩ (x ∷ᵛ []ᵛ)    = one x
-    Vec→⟨S⁰⟩ (x ∷ᵛ y ∷ᵛ v) = Vec→⟨S⁰⟩ (y ∷ᵛ v) , x
-
-    fmap
-      : ∀ {t t₁ t₂} → (n : ℕ) → (t₁ → t₂)
-      → n of t to t₁
-      → n of t to t₂
-    fmap ℕ.zero f x = f x
-    fmap (suc n) f x = λ a → fmap n f (x a)
-
-  slot_∷_ : ∀ {t : Set} → ℕ → (S⁰ Slot → t) → t
-  slot k ∷ f = f (at k)
-
-  open Products renaming (_,_ to _and_)
-
-  -- This is so higher-order I had to lease a new quiet office space
-  -- to even think about implementing it.  The logic is not complex,
-  -- but we jump through hoops to get the desired syntax at the use site:
-  --
-  --   slot k maps 2 to 3 ∷ λ foo a b c →
-  --     foo ($ 0) ($ 1) 7 8 9  λ aᵢⱼ bᵢⱼ cᵢⱼ →
-  --       a i j ← aᵢⱼ + bᵢⱼ ∙ cᵢⱼ
-  --
-  -- In this example, we define a 2D mapping to a 3-field struct.
-  --
-  -- foo is bound to a full-struct loader that takes 2+3+1 arguments:
-  -- first the mapping indices to load; then a memory index for each field;
-  -- and finally a 3-parameter function that gets called with memory getters.
-  --
-  -- The variables a, b, and c are bound to slot functions, such that
-  -- a i j is the slot ⟨ k , i , j , 0 ⟩, and so on.
-  --
-  slot_∷_×_∷_ : ∀ {t : Set}
-    → (k m n : ℕ)
-    → (m of S⁰ Word to
-        (n of Ref to
-          (∀ {x} → n of S⁰ Word to S¹ x → S¹ x))
-        → n of (m of S⁰ Word to S⁰ Slot) to t)
-    → t
-  slot k ∷ m × n ∷ cont =
-    uncurryᵛ
-      (cont (fmap m curryᵛ (curryᵛ with-loader)))
-      (tabulateᵛ λ i → curryᵛ {m} λ v → k-slot v i)
-
-    where
-      -- Make the slot ⟨ ⟨ k , v₁ , ... , vₘ ⟩ , i ⟩.
-      k-slot : Vec (S⁰ Word) m → Fin n → S⁰ Slot
-      k-slot v i = member (⟨ (Vec→⟨S⁰⟩ (reverseᵛ (nat k ∷ᵛ v)))) (toℕ i)
-
-      -- Make the slot prefix ⟨ k , v₁ , ... , vₘ ⟩.
-      k-scope : Vec (S⁰ Word) m → S⁰ Slot
-      k-scope v = ⟨ Vec→⟨S⁰⟩ (reverseᵛ (nat k ∷ᵛ v))
-
-      with-loader
-        : Vec (S⁰ Word) m
-        → Vec Ref n
-        → ∀ {x} → (n of S⁰ Word to S¹ x)
-        → S¹ x
-      with-loader ixs []ᵛ g = g  -- Degenerate case of zero struct fields.
-      with-loader ixs refs@(_ ∷ᵛ _) g =
-        let
-          setup =
-            -- Build something like
-            --
-            --     scope! ⟨ k , ixs... ⟩
-            --   │ ref₁ ≜ get (scoped 0)
-            --   │ ref₂ ≜ get (scoped 1)
-            --   │ ...
-            --
-            -- by mapping and folding the refs vector.
-            scope! (k-scope ixs) │
-            foldr₁ᵛ (λ s₁ s₂ → s₁ │ s₂)
-              (mapᵛ (λ { (i and r) → r ≜ get (scoped (toℕ i)) })
-                (zipᵛ (allFinᵛ n) refs))
-
-          proceed =
-            -- Call the body function with the memory load expressions.
-            uncurryᵛ g (mapᵛ # refs)
-
-        in setup │ proceed
-
-      f₂ : Vec (m of S⁰ Word to S⁰ Slot) n
-      f₂ = tabulateᵛ λ i → curryᵛ {m} λ v → k-slot v i
-
-  ¶ : ∀ {i A G}
-      → A
-      → (n : ℕ)
-      → (n of S⁰ Word to S¹ i)
-      → S² G A
-  ¶ a b c = a ⟶ ♯ b c
-
-
 -- Public modules for language users.
 
+open Sⁿ public
+open Dappsys public
+open Storage public
 open Strings public
 open OverloadedNumbers public
-open Sⁿ public
 open Sic→EVM public
 open External public
 open Linking public
 open EVM-Assembly public
 open EVM public
-open Dappsys public
-open Slots public
 
 -- And that’s all, folks.
