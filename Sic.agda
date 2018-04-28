@@ -1,32 +1,16 @@
-{-
-                  ┌────────────────────────────────┐
-                  │ Sic: Symbolic Instruction Code │
-                  └────────────────────────────────┘
-
- We define Sic, a smart contract definition language, and a compiler.
-
- Sic has no loops and its only conditional statement is assertion.
- It is blockchain-agnostic; Sic programs do not depend on EVM details.
-
- We also define an “abstract contract machine” inspired by the EVM.
- It is agnostic about hashing functions, memory layouts, ABI, etc.
-
- Sic is compiled via abstract machine code into EVM code.
-
- ---------------------------------------------------------------------
- Copyright © 2018  Mikael Brockman, Daniel Brockman, Rainy McRainface
-
- This program is free software: you can redistribute it and/or modify
- it under the terms of the GNU Affero General Public License as
- published by the Free Software Foundation, either version 3 of the
- License, or (at your option) any later version.
-
- This program is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU Affero General Public License for more details.
-
--}
+--     Sic: A smart contract language and its compiler to EVM
+--
+-- Copyright © 2018  Mikael Brockman, Daniel Brockman, Rainy McRainface
+--
+-- This program is free software: you can redistribute it and/or modify
+-- it under the terms of the GNU Affero General Public License as
+-- published by the Free Software Foundation, either version 3 of the
+-- License, or (at your option) any later version.
+--
+-- This program is distributed in the hope that it will be useful,
+-- but WITHOUT ANY WARRANTY; without even the implied warranty of
+-- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+-- GNU Affero General Public License for more details.
 
 module Sic where
 
