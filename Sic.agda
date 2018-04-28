@@ -174,7 +174,7 @@ module Sⁿ where
     _⟶_ : ∀ {n} → Act → S¹ n → S² Guy Act
     _&_ : S² Guy Act → S² Guy Act → S² Guy Act
     case_then_else_ : S⁰ Word → S² Guy Act → S² Guy Act → S² Guy Act
-    auth_∷_else_ : Guy → S² Guy Act → S² Guy Act → S² Guy Act
+    auth_∷_ : Guy → S² Guy Act → S² Guy Act
 
   infix   1  case_then_else_
   infixr  2  _&_
@@ -256,8 +256,8 @@ module Sⁿ-analysis where
     transform-S² f₁ f₂ x & transform-S² f₁ f₂ y
   transform-S² f₁ f₂ (case p then x else y) =
     case p then transform-S² f₁ f₂ x else transform-S² f₁ f₂ y
-  transform-S² f₁ f₂ (auth a ∷ x else y) =
-    auth (f₁ a) ∷ transform-S² f₁ f₂ x else transform-S² f₁ f₂ y
+  transform-S² f₁ f₂ (auth a ∷ x) =
+    auth (f₁ a) ∷ transform-S² f₁ f₂ x
 
 
 -- Section: Metaprogramming utilities
@@ -861,8 +861,8 @@ module Sic→EVM where
        ELSE (S¹→Oᴱ m x) ⟫ return m n
   ⟦ case p then x else y ⟧²ᵉ =
     ⟦ p ⟧⁰ᵉ ⟫ ELSE ⟦ y ⟧²ᵉ ⟫ ⟦ x ⟧²ᵉ
-  ⟦ auth a ∷ x else y ⟧²ᵉ =
-    PUSHADDR a ⟫ CALLER ⟫ EQ ⟫ ELSE ⟦ y ⟧²ᵉ ⟫ ⟦ x ⟧²ᵉ
+  ⟦ auth a ∷ x ⟧²ᵉ =
+    PUSHADDR a ⟫ CALLER ⟫ EQ ⟫ ISZERO ⟫ ELSE ⟦ x ⟧²ᵉ
 
   -- This prelude is inserted into every compiled S².
   prelude =
@@ -1140,14 +1140,11 @@ module Linking where
                 (λ y′ → ♯ IO.return (just (case p then x′ else y′)))
                 (♯ IO.return nothing)))
          (♯ IO.return nothing)
-  resolve-S² f (auth a ∷ x else y) =
+  resolve-S² f (auth a ∷ x) =
     ♯ resolve (f a) >>= maybe
         (λ a′ → ♯
            (♯ resolve-S² f x >>= maybe
-                 (λ x′ → ♯
-                   (♯ resolve-S² f y >>= maybe
-                        (λ y′ → ♯ IO.return (just (auth a′ ∷ x′ else y′)))
-                        (♯ IO.return nothing)))
+                 (λ x′ → ♯ IO.return (just (auth a′ ∷ x′)))
                  (♯ IO.return nothing)))
         (♯ IO.return nothing)
 

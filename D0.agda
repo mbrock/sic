@@ -10,14 +10,7 @@ D⁰ = slot 0 ∷ λ K →
      slot 1 ∷ 1 × 4 ∷ λ ilk → λ ψ φ Ω Σ →
      slot 2 ∷ 2 × 4 ∷ λ urn → λ c d C D →
 
-  auth root ∷
-    ¶ slip 4 (λ i j ΔC ΔD → C i j ←+ ΔC │ D i j ←+ ΔD)
-  & ¶ mold 4 (λ i φᵢ ψᵢ Ωᵢ → φ i ← φᵢ │ ψ i ← ψᵢ │ Ω i ← Ωᵢ)
-  & ¶ grab 2 (λ i j → c i j ← 0 │ d i j ← 0)
-  & ¶ cage 0 (K ← 1)
-
-  else
-    ¶ frob 3 (λ i Δc Δd →
+  ¶ frob 3 (λ i Δc Δd →
     -- Enforce cage absence
        iff ¬ get K
     -- Load ilk and urn state
@@ -32,9 +25,16 @@ D⁰ = slot 0 ∷ λ K →
     │  c i u ←+ cᵢᵤ │ d i u ←+ dᵢᵤ │ Σ i ←+ Σᵢ
     │  C i u ←+ Cᵢᵤ − Δc
     │  D i u ←+ Dᵢᵤ − Δd × φᵢ)
+
   & ¶ live 0 (fyi 1 (¬ get K))
-  & ¶ feel 1 (λ i → ilk i 0 1 2 3 (fyi 4))
+  & ¶ feel 1 (λ i   → ilk i   0 1 2 3 (fyi 4))
   & ¶ look 2 (λ i j → urn i j 0 1 2 3 (fyi 4))
+
+  & (auth root ∷
+       ¶ slip 4 (λ i j ΔC ΔD → C i j ←+ ΔC │ D i j ←+ ΔD)
+     & ¶ mold 4 (λ i φᵢ ψᵢ Ωᵢ → φ i ← φᵢ │ ψ i ← ψᵢ │ Ω i ← Ωᵢ)
+     & ¶ grab 2 (λ i j → c i j ← 0 │ d i j ← 0)
+     & ¶ cage 0 (K ← 1))
 
 ABI : 𝟖 → String
 ABI =
