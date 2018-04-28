@@ -7,7 +7,7 @@ data ⊥ : Set where
 data Math : Set where
   IADD ISUB IMUL RMUL RPOW : Math
 
-T⁰ : S² ⊥ Math Holy
+T⁰ : S² ⊥ Math
 T⁰ = ¶ IADD 2 (λ x y → fyi₁ (x + y))
    & ¶ ISUB 2 (λ x y → fyi₁ (x − y))
    & ¶ IMUL 2 (λ x y → fyi₁ (x × y))

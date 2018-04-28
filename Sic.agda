@@ -175,16 +175,6 @@ module Sⁿ where
       one  : S⁰ Word → ⟨S⁰⟩
       _,_ : ⟨S⁰⟩ → S⁰ Word → ⟨S⁰⟩
 
-  -- An S¹ is “Holy” if it doesn’t do any external calls.
-  data Ease : Set where
-    Holy Vile : Ease
-
-  _⊔ᵉ_ : Op₂ Ease
-  Holy ⊔ᵉ Holy = Holy
-  Holy ⊔ᵉ Vile = Vile
-  Vile ⊔ᵉ Holy = Vile
-  Vile ⊔ᵉ Vile = Vile
-
   -- This is for checking that you don’t use “fyi” more than once
   -- in one action.
   fyi-ok : ℕ → ℕ → Set
@@ -194,29 +184,27 @@ module Sⁿ where
 
   -- S¹, the set of Sic actions.
   -- The ℕ type parameter is the number of values returned via “fyi”.
-  data S¹ : Ease → ℕ → Set where
-    iff_ : S⁰ Word → S¹ Holy 0
-    _≜_  : Ref → S⁰ Word → S¹ Holy 0
-    _←_  : S⁰ Slot → S⁰ Word → S¹ Holy 0
-    _←+_ : S⁰ Slot → S⁰ Word → S¹ Holy 0
-    fyi  : ∀ {n} → (xs : Vec (S⁰ Word) (suc n)) → S¹ Holy (suc n)
-    ext  : ∀ {n} → String → S⁰ Word → Vec (S⁰ Word) n → S¹ Vile 0
-    move_of_from_to_ : S⁰ Word → S⁰ Word → S⁰ Word → S⁰ Word → S¹ Vile 0
-    _│_  : ∀ {m n i₁ i₂}
-         → S¹ i₁ m → S¹ i₂ n → {_ : fyi-ok m n}
-         → S¹ (i₁ ⊔ᵉ i₂) (m ⊔ n)
-    scope! : S⁰ Slot → S¹ Holy 0
+  data S¹ : ℕ → Set where
+    iff_ : S⁰ Word → S¹ 0
+    _≜_  : Ref → S⁰ Word → S¹ 0
+    _←_  : S⁰ Slot → S⁰ Word → S¹ 0
+    _←+_ : S⁰ Slot → S⁰ Word → S¹ 0
+    fyi  : ∀ {n} → (xs : Vec (S⁰ Word) (suc n)) → S¹ (suc n)
+    ext  : ∀ {n} → String → S⁰ Word → Vec (S⁰ Word) n → S¹ 0
+    move_of_from_to_ : S⁰ Word → S⁰ Word → S⁰ Word → S⁰ Word → S¹ 0
+    _│_  : ∀ {m n} → S¹ m → S¹ n → {_ : fyi-ok m n} → S¹ (m ⊔ n)
+    scope! : S⁰ Slot → S¹ 0
 
-  S¹-fyi-size : ∀ {ease n} → S¹ ease n → ℕ
-  S¹-fyi-size {_} {n} _ = n
+  S¹-fyi-size : ∀ {n} → S¹ n → ℕ
+  S¹-fyi-size {n} _ = n
 
 
   -- We define helpers for returning up to 4 values...
   module fyi-helpers where
-    fyi₁ : S⁰ Word → S¹ Holy 1
-    fyi₂ : S⁰ Word → S⁰ Word → S¹ Holy 2
-    fyi₃ : S⁰ Word → S⁰ Word → S⁰ Word → S¹ Holy 3
-    fyi₄ : S⁰ Word → S⁰ Word → S⁰ Word → S⁰ Word → S¹ Holy 4
+    fyi₁ : S⁰ Word → S¹ 1
+    fyi₂ : S⁰ Word → S⁰ Word → S¹ 2
+    fyi₃ : S⁰ Word → S⁰ Word → S⁰ Word → S¹ 3
+    fyi₄ : S⁰ Word → S⁰ Word → S⁰ Word → S⁰ Word → S¹ 4
     fyi₁ a = fyi (a ∷ᵛ []ᵛ)
     fyi₂ a b = fyi (a ∷ᵛ b ∷ᵛ []ᵛ)
     fyi₃ a b c = fyi (a ∷ᵛ b ∷ᵛ c ∷ᵛ []ᵛ)
@@ -226,14 +214,14 @@ module Sⁿ where
 
   -- ...and for calling externally with up to 4 values.
   module ext-helpers where
-    extⁿ : String → S⁰ Word → List (S⁰ Word) → S¹ Vile 0
+    extⁿ : String → S⁰ Word → List (S⁰ Word) → S¹ 0
     extⁿ s x xs = ext s x (fromListᵛ xs)
 
-    ext₀ : String → S⁰ Word → S¹ Vile 0
-    ext₁ : String → S⁰ Word → S⁰ Word → S¹ Vile 0
-    ext₂ : String → S⁰ Word → S⁰ Word → S⁰ Word → S¹ Vile 0
-    ext₃ : String → S⁰ Word → S⁰ Word → S⁰ Word → S⁰ Word → S¹ Vile 0
-    ext₄ : String → S⁰ Word → S⁰ Word → S⁰ Word → S⁰ Word → S⁰ Word → S¹ Vile 0
+    ext₀ : String → S⁰ Word → S¹ 0
+    ext₁ : String → S⁰ Word → S⁰ Word → S¹ 0
+    ext₂ : String → S⁰ Word → S⁰ Word → S⁰ Word → S¹ 0
+    ext₃ : String → S⁰ Word → S⁰ Word → S⁰ Word → S⁰ Word → S¹ 0
+    ext₄ : String → S⁰ Word → S⁰ Word → S⁰ Word → S⁰ Word → S⁰ Word → S¹ 0
     ext₀ s x = extⁿ s x []
     ext₁ s x a = extⁿ s x [ a ]
     ext₂ s x a b = extⁿ s x ( a ∷ [ b ] )
@@ -256,32 +244,11 @@ module Sⁿ where
   -- you will provide the identity of each “guy” as a parameter
   -- to the deployment procedure.
   --
-  data S² (Guy : Set) (Act : Set) : Ease → Set where
-    _⟶_
-      : ∀ {ease n}
-      → Act
-      → S¹ ease n
-      → S² Guy Act ease
-
-    _&_
-      : ∀ {ease₁ ease₂}
-      → S² Guy Act ease₁
-      → S² Guy Act ease₂
-      → S² Guy Act (ease₁ ⊔ᵉ ease₂)
-
-    case_then_else_
-      : ∀ {ease₁ ease₂}
-      → S⁰ Word
-      → S² Guy Act ease₁
-      → S² Guy Act ease₂
-      → S² Guy Act (ease₁ ⊔ᵉ ease₂)
-
-    auth_∷_else_
-      : ∀ {ease₁ ease₂}
-      → Guy
-      → S² Guy Act ease₁
-      → S² Guy Act ease₂
-      → S² Guy Act (ease₁ ⊔ᵉ ease₂)
+  data S² (Guy : Set) (Act : Set) : Set where
+    _⟶_ : ∀ {n} → Act → S¹ n → S² Guy Act
+    _&_ : S² Guy Act → S² Guy Act → S² Guy Act
+    case_then_else_ : S⁰ Word → S² Guy Act → S² Guy Act → S² Guy Act
+    auth_∷_else_ : Guy → S² Guy Act → S² Guy Act → S² Guy Act
 
   -- Syntax precedence list
 
@@ -489,7 +456,7 @@ module Sⁿ→Oⁿ where
     ⟦ - x ⟧⁰       = #ₒ 0  ┆ ⟦ x ⟧⁰ ┆ −ₒ
 
   -- Compiling statement sequences
-  ⟦_⟧¹ : ∀ {ease n} → S¹ ease n → O¹
+  ⟦_⟧¹ : ∀ {n} → S¹ n → O¹
   ⟦ iff x ⟧¹  = iffₒ ⟦ x ⟧⁰
   ⟦ fyi x ⟧¹  = fyiₒ (mapᵛ ⟦_⟧⁰ x)
   ⟦ ext s c a ⟧¹ = extₒ s (⟦_⟧⁰ c) (mapᵛ ⟦_⟧⁰ a)
@@ -503,7 +470,7 @@ module Sⁿ→Oⁿ where
       (mapᵛ ⟦_⟧⁰ (src ∷ᵛ dst ∷ᵛ wad ∷ᵛ []ᵛ))
 
   -- Compiling signature dispatch sequences
-  ⟦_⟧² : ∀ {ease Guy Act} → S² Guy Act ease → O² Guy Act
+  ⟦_⟧² : ∀ {Guy Act} → S² Guy Act → O² Guy Act
   ⟦ s ⟶ k ⟧² =
     actₒ s (S¹-fyi-size k) ⟦ k ⟧¹
   ⟦ a & b     ⟧² =
@@ -519,16 +486,16 @@ module Sⁿ→Oⁿ where
     open Sⁿ
     open Relations
 
-    S¹-memory : ∀ {ease n} → S¹ ease n → ℕ
+    S¹-memory : ∀ {n} → S¹ n → ℕ
     S¹-memory s = O¹-var-memory ⟦ s ⟧¹
 
-    example-1 : S¹-memory {_} {0} (at 0 ← nat 0) ≣ 0
+    example-1 : S¹-memory {0} (at 0 ← nat 0) ≣ 0
     example-1 = refl
 
-    example-2 : S¹-memory {_} {0} (0 ≜ nat 0) ≣ 1
+    example-2 : S¹-memory {0} (0 ≜ nat 0) ≣ 1
     example-2 = refl
 
-    example-3 : S¹-memory {_} {0} (0 ≜ # 1 + # 2) ≣ 3
+    example-3 : S¹-memory {0} (0 ≜ # 1 + # 2) ≣ 3
     example-3 = refl
 
 
@@ -988,19 +955,19 @@ module Sic→EVM where
   open Sⁿ    using (S²)
   open Sⁿ→Oⁿ using (⟦_⟧²)
 
-  S²→Oᴱ : ∀ {Guy Act ease}
+  S²→Oᴱ : ∀ {Guy Act}
         → (Guy → Addrᴱ)
         → (Act → String)
-        → S² Guy Act ease → Oᴱ
+        → S² Guy Act → Oᴱ
   S²→Oᴱ f g s = prelude ⟫ ⟦ map-O²-guy f (map-O²-act g ⟦ s ⟧²) ⟧²ᵉ ⟫ REVERT
 
-  S²→O² : ∀ {Guy Act ease} → S² Guy Act ease → O² Guy Act
+  S²→O² : ∀ {Guy Act} → S² Guy Act → O² Guy Act
   S²→O² x = ⟦ x ⟧²
 
   O²→Oᴱ : O² Addrᴱ String → Oᴱ
   O²→Oᴱ x = prelude ⟫ ⟦ x ⟧²ᵉ ⟫ REVERT
 
-  compile : ∀ {ease} → S² Addrᴱ String ease → Oᴱ
+  compile : S² Addrᴱ String → Oᴱ
   compile = S²→Oᴱ (λ x → x) (λ x → x)
 
 
@@ -1268,10 +1235,10 @@ module Linking where
         (♯ IO.return nothing)
 
   compile-and-assemble
-    : ∀ {Guy Act ease}
+    : ∀ {Guy Act}
     → (Guy → Addrᴱ)
     → (Act → String)
-    → S² Guy Act ease → String
+    → S² Guy Act → String
   compile-and-assemble f₁ f₂ s² =
     B⁰⋆→String (⋆ (code (S²→Oᴱ f₁ f₂ s²)))
 
@@ -1279,10 +1246,10 @@ module Linking where
   assemble x = B⁰⋆→String (⋆ (code x))
 
   compile-and-link
-    : ∀ {Guy Act ease}
+    : ∀ {Guy Act}
     → (Guy → ID)
     → (Act → String)
-    → S² Guy Act ease
+    → S² Guy Act
     → IO (Maybe Oᴱ)
   compile-and-link f₁ f₂ x =
     ♯ resolve-O² f₁ (map-O²-act f₂ (S²→O² x)) >>=
@@ -1297,8 +1264,8 @@ module Linking where
       (♯ putStrLn "Error: linking failed.")
 
   link
-    : ∀ {Guy Act ease}
-    → S² Guy Act ease
+    : ∀ {Guy Act}
+    → S² Guy Act
     → (Guy → ID)
     → (Act → String)
     → IO.Primitive.IO ⊤
@@ -1315,10 +1282,10 @@ module Dappsys where
   open Sⁿ
   open Naturals
 
-  _↑_ : S⁰ Slot → S⁰ Word → S¹ Holy 0
-  _↓_ : S⁰ Slot → S⁰ Word → S¹ Holy 0
-  _↥_ : S⁰ Slot → S⁰ Word → S¹ Holy 0
-  _↧_ : S⁰ Slot → S⁰ Word → S¹ Holy 0
+  _↑_ : S⁰ Slot → S⁰ Word → S¹ 0
+  _↓_ : S⁰ Slot → S⁰ Word → S¹ 0
+  _↥_ : S⁰ Slot → S⁰ Word → S¹ 0
+  _↧_ : S⁰ Slot → S⁰ Word → S¹ 0
 
   n ↑ v = n ← get n + v
   n ↥ v = n ← get n + v │ iff get n ≥ 0
@@ -1327,7 +1294,7 @@ module Dappsys where
 
   -- The “move statement” which subtracts and adds the same quantity
   -- to different places, failing if either place becomes negative.
-  _↧_↥_ : S⁰ Slot → S⁰ Slot → S⁰ Word → S¹ Holy 0
+  _↧_↥_ : S⁰ Slot → S⁰ Slot → S⁰ Word → S¹ 0
   k₁ ↧ k₂ ↥ v = (k₁ ↧ v) │ (k₂ ↥ v)
 
   infix 19 _↧_↥_ _↧_ _↥_
@@ -1405,7 +1372,7 @@ module Slots where
     → (k m n : ℕ)
     → (m of S⁰ Word to
         (n of Ref to
-          (∀ {x} → n of S⁰ Word to S¹ Holy x → S¹ Holy x))
+          (∀ {x} → n of S⁰ Word to S¹ x → S¹ x))
         → n of (m of S⁰ Word to S⁰ Slot) to t)
     → t
   slot k ∷ m × n ∷ cont =
@@ -1425,8 +1392,8 @@ module Slots where
       with-loader
         : Vec (S⁰ Word) m
         → Vec Ref n
-        → ∀ {x} → (n of S⁰ Word to S¹ Holy x)
-        → S¹ Holy x
+        → ∀ {x} → (n of S⁰ Word to S¹ x)
+        → S¹ x
       with-loader ixs []ᵛ g = g  -- Degenerate case of zero struct fields.
       with-loader ixs refs@(_ ∷ᵛ _) g =
         let
@@ -1456,8 +1423,8 @@ module Slots where
   ¶ : ∀ {i A G}
       → A
       → (n : ℕ)
-      → (n of S⁰ Word to S¹ Holy i)
-      → S² G A Holy
+      → (n of S⁰ Word to S¹ i)
+      → S² G A
   ¶ a b c = a ⟶ ♯ b c
 
 

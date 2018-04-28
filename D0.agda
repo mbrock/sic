@@ -5,7 +5,7 @@ open import Sic
 data 𝟏 : Set where root : 𝟏
 data 𝟖 : Set where cage live mold feel slip look grab frob : 𝟖
 
-D⁰ : S² 𝟏 𝟖 Holy
+D⁰ : S² 𝟏 𝟖
 D⁰ = slot 0 ∷ λ K →
      slot 1 ∷ 1 × 4 ∷ λ ilk → λ ψ φ Ω Σ →
      slot 2 ∷ 2 × 4 ∷ λ urn → λ c d C D →
