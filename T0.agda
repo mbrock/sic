@@ -8,11 +8,11 @@ data Math : Set where
   IADD ISUB IMUL RMUL RPOW : Math
 
 T⁰ : S² ⊥ Math
-T⁰ = ¶ IADD 2 (λ x y → fyi₁ (x + y))
-   & ¶ ISUB 2 (λ x y → fyi₁ (x − y))
-   & ¶ IMUL 2 (λ x y → fyi₁ (x × y))
-   & ¶ RMUL 2 (λ x y → fyi₁ (x ∙ y))
-   & ¶ RPOW 2 (λ x y → fyi₁ (x ^ y))
+T⁰ = ¶ IADD 2 (λ x y → fyi 1 (x + y))
+   & ¶ ISUB 2 (λ x y → fyi 1 (x − y))
+   & ¶ IMUL 2 (λ x y → fyi 1 (x × y))
+   & ¶ RMUL 2 (λ x y → fyi 1 (x ∙ y))
+   & ¶ RPOW 2 (λ x y → fyi 1 (x ^ y))
 
 main = link T⁰ (λ ())
   (λ { IADD → "iadd(int256,int256)"

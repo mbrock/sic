@@ -173,7 +173,7 @@ module Sⁿ where
     _≜_  : Ref → S⁰ Word → S¹ 0
     _←_  : S⁰ Slot → S⁰ Word → S¹ 0
     _←+_ : S⁰ Slot → S⁰ Word → S¹ 0
-    fyi  : ∀ {n} → (xs : Vec (S⁰ Word) (suc n)) → S¹ (suc n)
+    fyiᵛ : ∀ {n} → (xs : Vec (S⁰ Word) n) → S¹ n
     ext  : ∀ {n} → String → S⁰ Word → Vec (S⁰ Word) n → S¹ 0
     _│_  : ∀ {m n} → S¹ m → S¹ n → {_ : fyi-ok m n} → S¹ (m ⊔ n)
     scope! : S⁰ Slot → S¹ 0
@@ -181,37 +181,6 @@ module Sⁿ where
   S¹-fyi-size : ∀ {n} → S¹ n → ℕ
   S¹-fyi-size {n} _ = n
 
-
-  -- We define helpers for returning up to 4 values...
-  module fyi-helpers where
-    fyi₁ : S⁰ Word → S¹ 1
-    fyi₂ : S⁰ Word → S⁰ Word → S¹ 2
-    fyi₃ : S⁰ Word → S⁰ Word → S⁰ Word → S¹ 3
-    fyi₄ : S⁰ Word → S⁰ Word → S⁰ Word → S⁰ Word → S¹ 4
-    fyi₁ a = fyi (a ∷ᵛ []ᵛ)
-    fyi₂ a b = fyi (a ∷ᵛ b ∷ᵛ []ᵛ)
-    fyi₃ a b c = fyi (a ∷ᵛ b ∷ᵛ c ∷ᵛ []ᵛ)
-    fyi₄ a b c d = fyi (a ∷ᵛ b ∷ᵛ c ∷ᵛ d ∷ᵛ []ᵛ)
-
-  open fyi-helpers public
-
-  -- ...and for calling externally with up to 4 values.
-  module ext-helpers where
-    extⁿ : String → S⁰ Word → List (S⁰ Word) → S¹ 0
-    extⁿ s x xs = ext s x (fromListᵛ xs)
-
-    ext₀ : String → S⁰ Word → S¹ 0
-    ext₁ : String → S⁰ Word → S⁰ Word → S¹ 0
-    ext₂ : String → S⁰ Word → S⁰ Word → S⁰ Word → S¹ 0
-    ext₃ : String → S⁰ Word → S⁰ Word → S⁰ Word → S⁰ Word → S¹ 0
-    ext₄ : String → S⁰ Word → S⁰ Word → S⁰ Word → S⁰ Word → S⁰ Word → S¹ 0
-    ext₀ s x = extⁿ s x []
-    ext₁ s x a = extⁿ s x [ a ]
-    ext₂ s x a b = extⁿ s x ( a ∷ [ b ] )
-    ext₃ s x a b c = extⁿ s x ( a ∷ b ∷ [ c ] )
-    ext₄ s x a b c d = extⁿ s x ( a ∷ b ∷ c ∷ [ d ] )
-
-  open ext-helpers public
 
   -- S², the set of Sic contracts with named actions.
 
@@ -256,6 +225,31 @@ module Sⁿ where
   infix  50 get_
   infixr 60 ⟨_
   infixr 61 _,_
+
+
+module Varargs where
+  open Naturals
+  open Vectors
+
+  _of_to_ : (n : ℕ) → Set → Set → Set
+  ℕ.zero of t₁ to t₂ = t₂
+  suc n  of t₁ to t₂ = t₁ → n of t₁ to t₂
+
+  curryᵛ : ∀ {n a b} → (Vec a n → b) → n of a to b
+  curryᵛ {ℕ.zero} f = f []ᵛ
+  curryᵛ {suc n} f = λ x → curryᵛ λ v → f (x ∷ᵛ v)
+
+  uncurryᵛ : ∀ {n a b} → n of a to b → Vec a n → b
+  uncurryᵛ f []ᵛ = f
+  uncurryᵛ f (x ∷ᵛ v) = uncurryᵛ (f x) v
+
+  private
+    open Relations
+    uncurryᵛ-curryᵛ≡id
+      : ∀ {n a b} → (f : Vec a n → b) → (v : Vec a n)
+      → uncurryᵛ (curryᵛ f) v ≣ f v
+    uncurryᵛ-curryᵛ≡id f []ᵛ = refl
+    uncurryᵛ-curryᵛ≡id f (x ∷ᵛ v) = uncurryᵛ-curryᵛ≡id (λ y → f (x ∷ᵛ y)) v
 
 
 module OverloadedNumbers where
@@ -340,7 +334,7 @@ module Oⁿ where
     defₒ : Ref → O⁰ 0 1  → O¹
     setₒ : ℕ → O⁰ 0 1  → O¹
     scope!ₒ : O⁰ 0 1 → O¹
-    fyiₒ : ∀ {n} → Vec (O⁰ 0 1) (suc n) → O¹
+    fyiₒ : ∀ {n} → Vec (O⁰ 0 1) n → O¹
     extₒ : ∀ {n} → String → O⁰ 0 1 → Vec (O⁰ 0 1) n → O¹
 
   data O² (Guy : Set) (Act : Set) : Set where
@@ -381,15 +375,16 @@ module Oⁿ where
   O⁰-memory x = 0
 
   O¹-var-memory : O¹ → ℕ
-  O¹-var-memory (defₒ (## i) x) = suc i ⊔ O⁰-memory x
-  O¹-var-memory (fyiₒ xs)      = foldr₁ᵛ _⊔_ (mapᵛ O⁰-memory xs)
-  O¹-var-memory (extₒ s c xs)  = foldrᵛ (λ _ → ℕ) _⊔_ 0 (mapᵛ O⁰-memory xs)
-  O¹-var-memory (iffₒ x)       = O⁰-memory x
-  O¹-var-memory (setₖₒ k x)    = O⁰-memory k ⊔ O⁰-memory x
-  O¹-var-memory (setₖₒ₊ k x)   = O⁰-memory k ⊔ O⁰-memory x
-  O¹-var-memory (setₒ i x)     = O⁰-memory x
-  O¹-var-memory (scope!ₒ k)    = O⁰-memory k
-  O¹-var-memory (o₁ ∥ o₂)      = O¹-var-memory o₁ ⊔ O¹-var-memory o₂
+  O¹-var-memory (defₒ (## i) x)  = suc i ⊔ O⁰-memory x
+  O¹-var-memory (fyiₒ []ᵛ)       = 0
+  O¹-var-memory (fyiₒ (x ∷ᵛ xs)) = foldr₁ᵛ _⊔_ (mapᵛ O⁰-memory (x ∷ᵛ xs))
+  O¹-var-memory (extₒ s c xs)    = foldrᵛ (λ _ → ℕ) _⊔_ 0 (mapᵛ O⁰-memory xs)
+  O¹-var-memory (iffₒ x)         = O⁰-memory x
+  O¹-var-memory (setₖₒ k x)      = O⁰-memory k ⊔ O⁰-memory x
+  O¹-var-memory (setₖₒ₊ k x)     = O⁰-memory k ⊔ O⁰-memory x
+  O¹-var-memory (setₒ i x)       = O⁰-memory x
+  O¹-var-memory (scope!ₒ k)      = O⁰-memory k
+  O¹-var-memory (o₁ ∥ o₂)        = O¹-var-memory o₁ ⊔ O¹-var-memory o₂
 
   O¹-fyi-memory : O¹ → ℕ
   O¹-fyi-memory (fyiₒ {n} xs) = suc n
@@ -441,7 +436,7 @@ module Sⁿ→Oⁿ where
   -- Compiling statement sequences
   ⟦_⟧¹ : ∀ {n} → S¹ n → O¹
   ⟦ iff x ⟧¹  = iffₒ ⟦ x ⟧⁰
-  ⟦ fyi x ⟧¹  = fyiₒ (mapᵛ ⟦_⟧⁰ x)
+  ⟦ fyiᵛ x ⟧¹  = fyiₒ (mapᵛ ⟦_⟧⁰ x)
   ⟦ ext s c a ⟧¹ = extₒ s (⟦_⟧⁰ c) (mapᵛ ⟦_⟧⁰ a)
   ⟦ i ≜ x ⟧¹  = defₒ i ⟦ x ⟧⁰
   ⟦ k ← x ⟧¹  = setₖₒ ⟦ k ⟧⁰ ⟦ x ⟧⁰
@@ -883,7 +878,8 @@ module Sic→EVM where
     O¹→Oᴱ′ m₁ m₂ (setₖₒ₊ k x)  =
       ⟦ x ⟧⁰ᵉ ⟫ DUP 1 ⟫ PUSH 0 ⟫ SGT ⟫ REVERTIF ⟫
       ⟦ k ⟧⁰ᵉ ⟫ SSTORE
-    O¹→Oᴱ′ m₁ m₂ (fyiₒ xs)     = fyiₒ→Oᴱ offset xs
+    O¹→Oᴱ′ m₁ m₂ (fyiₒ []ᵛ) = NOOP
+    O¹→Oᴱ′ m₁ m₂ (fyiₒ (x ∷ᵛ xs))     = fyiₒ→Oᴱ offset (x ∷ᵛ xs)
       where offset = m₁ * wordsize +ℕ m₀
     O¹→Oᴱ′ m₁ m₂ (extₒ s c xs) = extₒ→Oᴱ offset s c xs
       where offset = m₂ * wordsize +ℕ m₀
@@ -1261,6 +1257,10 @@ module Linking where
 module Dappsys where
   open Sⁿ
   open Naturals
+  open Varargs
+
+  fyi : (n : ℕ) → n of S⁰ Word to S¹ n
+  fyi n = curryᵛ {n} fyiᵛ
 
   _↑_ : S⁰ Slot → S⁰ Word → S¹ 0
   _↓_ : S⁰ Slot → S⁰ Word → S¹ 0
@@ -1278,30 +1278,6 @@ module Dappsys where
   k₁ ↧ k₂ ↥ v = (k₁ ↧ v) │ (k₂ ↥ v)
 
   infix 19 _↧_↥_ _↧_ _↥_
-
-module Varargs where
-  open Naturals
-  open Vectors
-
-  _of_to_ : (n : ℕ) → Set → Set → Set
-  ℕ.zero of t₁ to t₂ = t₂
-  suc n  of t₁ to t₂ = t₁ → n of t₁ to t₂
-
-  curryᵛ : ∀ {n a b} → (Vec a n → b) → n of a to b
-  curryᵛ {ℕ.zero} f = f []ᵛ
-  curryᵛ {suc n} f = λ x → curryᵛ λ v → f (x ∷ᵛ v)
-
-  uncurryᵛ : ∀ {n a b} → n of a to b → Vec a n → b
-  uncurryᵛ f []ᵛ = f
-  uncurryᵛ f (x ∷ᵛ v) = uncurryᵛ (f x) v
-
-  private
-    open Relations
-    uncurryᵛ-curryᵛ≡id
-      : ∀ {n a b} → (f : Vec a n → b) → (v : Vec a n)
-      → uncurryᵛ (curryᵛ f) v ≣ f v
-    uncurryᵛ-curryᵛ≡id f []ᵛ = refl
-    uncurryᵛ-curryᵛ≡id f (x ∷ᵛ v) = uncurryᵛ-curryᵛ≡id (λ y → f (x ∷ᵛ y)) v
 
 module Slots where
   open Naturals

@@ -32,9 +32,9 @@ D⁰ = slot 0 ∷ λ K →
     │  c i u ←+ cᵢᵤ │ d i u ←+ dᵢᵤ │ Σ i ←+ Σᵢ
     │  C i u ←+ Cᵢᵤ − Δc
     │  D i u ←+ Dᵢᵤ − Δd × φᵢ)
-  & ¶ live 0 (fyi₁ (¬ get K))
-  & ¶ feel 1 (λ i → ilk i 0 1 2 3 fyi₄)
-  & ¶ look 2 (λ i j → urn i j 0 1 2 3 fyi₄)
+  & ¶ live 0 (fyi 1 (¬ get K))
+  & ¶ feel 1 (λ i → ilk i 0 1 2 3 (fyi 4))
+  & ¶ look 2 (λ i j → urn i j 0 1 2 3 (fyi 4))
 
 ABI : 𝟖 → String
 ABI =
