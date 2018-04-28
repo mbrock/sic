@@ -11,27 +11,24 @@ D⁰ = slot 0 ∷ λ K →
      slot 2 ∷ 2 × 4 ∷ λ urn → λ c d C D →
 
   ¶ frob 3 (λ i Δc Δd →
-    -- Enforce cage absence
        iff ¬ get K
-    -- Load ilk and urn state
     │  ilk i   4 5 6 7  λ ψᵢ φᵢ Ωᵢ Σᵢ →
        urn i u 0 1 2 3  λ cᵢᵤ dᵢᵤ Cᵢᵤ Dᵢᵤ →
-    -- Increase or decrease cᵢᵤ, dᵢᵤ, and Σᵢ
        0 ≜ cᵢᵤ + Δc │ 1 ≜ dᵢᵤ + Δd │ 7 ≜ Σᵢ + Δd
-    -- Enforce safety
     │  iff (φᵢ × dᵢᵤ ≤ ψᵢ × cᵢᵤ) ∨ (Δd ≤ 0 ∧ Δc ≥ 0)
     │  iff (φᵢ × Σᵢ ≤ Ωᵢ)        ∨ (Δd ≤ 0)
-    -- Update state, enforcing nonnegative values
-    │  c i u ←+ cᵢᵤ │ d i u ←+ dᵢᵤ │ Σ i ←+ Σᵢ
-    │  C i u ←+ Cᵢᵤ − Δc
-    │  D i u ←+ Dᵢᵤ − Δd × φᵢ)
+    │  [≥0] c i u ← cᵢᵤ
+    │  [≥0] d i u ← dᵢᵤ
+    │  [≥0] Σ i   ← Σᵢ
+    │  [≥0] C i u ← Cᵢᵤ − Δc
+    │  [≥0] D i u ← Dᵢᵤ − Δd × φᵢ)
 
   & ¶ live 0 (fyi 1 (¬ get K))
   & ¶ feel 1 (λ i   → ilk i   0 1 2 3 (fyi 4))
   & ¶ look 2 (λ i j → urn i j 0 1 2 3 (fyi 4))
 
   & (auth root ∷
-       ¶ slip 4 (λ i j ΔC ΔD → C i j ←+ ΔC │ D i j ←+ ΔD)
+       ¶ slip 4 (λ i j ΔC ΔD → [≥0] C i j ← ΔC │ [≥0] D i j ← ΔD)
      & ¶ mold 4 (λ i φᵢ ψᵢ Ωᵢ → φ i ← φᵢ │ ψ i ← ψᵢ │ Ω i ← Ωᵢ)
      & ¶ grab 2 (λ i j → c i j ← 0 │ d i j ← 0)
      & ¶ cage 0 (K ← 1))

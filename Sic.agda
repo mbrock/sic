@@ -155,13 +155,13 @@ module Sⁿ where
   -- S¹, the set of Sic actions.
   mutual
     data S¹ : ℕ → Set where
-      iff_   : S⁰ Word → S¹ 0
-      _≜_    : Ref → S⁰ Word → S¹ 0
-      _←_    : S⁰ Slot → S⁰ Word → S¹ 0
-      _←+_   : S⁰ Slot → S⁰ Word → S¹ 0
-      fyiᵛ   : ∀ {n} → (xs : Vec (S⁰ Word) n) → S¹ n
-      _│_    : ∀ {m n} → S¹ m → S¹ n → {_ : fyi-ok m n} → S¹ (m ⊔ n)
-      scope! : S⁰ Slot → S¹ 0
+      iff_    : S⁰ Word → S¹ 0
+      _≜_     : Ref → S⁰ Word → S¹ 0
+      _←_     : S⁰ Slot → S⁰ Word → S¹ 0
+      [≥0]_←_ : S⁰ Slot → S⁰ Word → S¹ 0
+      fyiᵛ    : ∀ {n} → (xs : Vec (S⁰ Word) n) → S¹ n
+      _│_     : ∀ {m n} → S¹ m → S¹ n → {_ : fyi-ok m n} → S¹ (m ⊔ n)
+      scope!  : S⁰ Slot → S¹ 0
 
     -- (Only one fyi per S¹.)
     fyi-ok : ℕ → ℕ → Set
@@ -180,7 +180,7 @@ module Sⁿ where
   infixr  2  _&_
   infixr  3  _⟶_
   infixr  4  _│_
-  infix  10  iff_ _≜_ _←_ _←+_
+  infix  10  iff_ _≜_ _←_ [≥0]_←_
   infixl 31  _∨_
   infixl 32  _∧_
   infixl 33  ¬_
@@ -241,7 +241,7 @@ module Sⁿ-analysis where
   S¹-memory-usage (iff x)           = S⁰-memory-usage x
   S¹-memory-usage (## i ≜ x)        = suc i ⊔ S⁰-memory-usage x
   S¹-memory-usage (x ← y)           = S⁰-memory-usage x ⊔ S⁰-memory-usage y
-  S¹-memory-usage (x ←+ y)          = S⁰-memory-usage x ⊔ S⁰-memory-usage y
+  S¹-memory-usage ([≥0] x ← y)      = S⁰-memory-usage x ⊔ S⁰-memory-usage y
   S¹-memory-usage (fyiᵛ []ᵛ)        = 0
   S¹-memory-usage (fyiᵛ v@(_ ∷ᵛ _)) = foldr₁ᵛ _⊔_ (mapᵛ S⁰-memory-usage v)
   S¹-memory-usage (x │ y)           = S¹-memory-usage x ⊔ S¹-memory-usage y
@@ -826,7 +826,7 @@ module Sic→EVM where
     tag s (⟦ x ⟧⁰ᵉ ⟫ PUSH (m₀ +ℕ m * wordsize) ⟫ MSTORE)
   S¹→Oᴱ m s@(x ← y) =
     tag s (⟦ y ⟧⁰ᵉ ⟫ ⟦ x ⟧⁰ᵉ ⟫ SSTORE)
-  S¹→Oᴱ m s@(x ←+ y) =
+  S¹→Oᴱ m s@([≥0] x ← y) =
     tag s (⟦ y ⟧⁰ᵉ ⟫ DUP 1 ⟫ PUSH 0 ⟫ SGT ⟫ REVERTIF ⟫ ⟦ x ⟧⁰ᵉ ⟫ SSTORE)
   S¹→Oᴱ {0} m s@(fyiᵛ []ᵛ) =
     tag s NOOP
