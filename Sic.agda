@@ -15,7 +15,7 @@
 module Sic where
 
 
--- Section 0: External dependencies
+-- Section: External dependencies
 --
 -- We use a bunch of definitions from the standard library.
 -- For clarity, we divide our imports into custom bundles,
@@ -109,7 +109,7 @@ module Lists where
     public
 
 
--- Section 1: Sic syntax data types
+-- Section: Sic syntax data types
 --
 -- We define a hierarchy of syntax data types:
 --
@@ -129,6 +129,9 @@ module Sⁿ where
   data Arg : Set where $$ : ℕ → Arg
   data Ref : Set where ## : ℕ → Ref
 
+  ref-index : Ref → ℕ
+  ref-index (## n) = n
+
   data Type : Set where
     Word : Type
     Slot : Type
@@ -137,22 +140,19 @@ module Sⁿ where
 
     -- S⁰, the set of Sic expressions
     data S⁰ : Type → Set where
-      -_ ¬_               : Op₁ (S⁰ Word)
-      _+_ _−_ _×_ _∙_ _^_ : Op₂ (S⁰ Word)
-      _<_ _>_ _≥_ _≤_ _≡_ : Op₂ (S⁰ Word)
-      _∨_ _∧_             : Op₂ (S⁰ Word)
-
-      u : S⁰ Word -- The invoking user's ID
-      t : S⁰ Word -- The current time
-      ray : S⁰ Word -- The ray 1.0
-      nat : ℕ → S⁰ Word -- A natural number literal
-      at_ : ℕ → S⁰ Slot -- A simple storage slot
-      scoped : ℕ → S⁰ Slot -- A scoped slot
-      member : S⁰ Slot → ℕ → S⁰ Slot -- XXX do this better
-      get_ : S⁰ Slot → S⁰ Word -- Value of a storage slot
-      #  : Ref → S⁰ Word -- Value of a memory slot
-      $  : Arg → S⁰ Word -- Value of an argument
-      ⟨_ : ⟨S⁰⟩ → S⁰ Slot -- Hash of a sequence of values
+      -_ ¬_ : Op₁ (S⁰ Word)
+      _+_ _−_ _×_ _∙_ _^_ _<_ _>_ _≥_ _≤_ _≡_ _∨_ _∧_ : Op₂ (S⁰ Word)
+      u : S⁰ Word                    -- The invoking user's ID
+      t : S⁰ Word                    -- The current time
+      ray : S⁰ Word                  -- The ray 1.0
+      nat : ℕ → S⁰ Word              -- A natural number literal
+      at_ : ℕ → S⁰ Slot              -- A simple storage slot
+      scoped : ℕ → S⁰ Slot           -- A scoped slot
+      member : S⁰ Slot → ℕ → S⁰ Slot -- A slot with index
+      get_ : S⁰ Slot → S⁰ Word       -- Value of a storage slot
+      #  : Ref → S⁰ Word             -- Value of a memory slot
+      $  : Arg → S⁰ Word             -- Value of an argument
+      ⟨_ : ⟨S⁰⟩ → S⁰ Slot            -- Hash of a sequence of values
 
     -- A nonempty list of S⁰ terms.
     data ⟨S⁰⟩ : Set where
@@ -167,43 +167,81 @@ module Sⁿ where
   fyi-ok (suc _) (suc _) = ⊥
 
   -- S¹, the set of Sic actions.
-  -- The ℕ type parameter is the number of values returned via “fyi”.
   data S¹ : ℕ → Set where
-    iff_ : S⁰ Word → S¹ 0
-    _≜_  : Ref → S⁰ Word → S¹ 0
-    _←_  : S⁰ Slot → S⁰ Word → S¹ 0
-    _←+_ : S⁰ Slot → S⁰ Word → S¹ 0
-    fyiᵛ : ∀ {n} → (xs : Vec (S⁰ Word) n) → S¹ n
-    ext  : ∀ {n} → String → S⁰ Word → Vec (S⁰ Word) n → S¹ 0
-    _│_  : ∀ {m n} → S¹ m → S¹ n → {_ : fyi-ok m n} → S¹ (m ⊔ n)
+    iff_   : S⁰ Word → S¹ 0
+    _≜_    : Ref → S⁰ Word → S¹ 0
+    _←_    : S⁰ Slot → S⁰ Word → S¹ 0
+    _←+_   : S⁰ Slot → S⁰ Word → S¹ 0
+    fyiᵛ   : ∀ {n} → (xs : Vec (S⁰ Word) n) → S¹ n
+    _│_    : ∀ {m n} → S¹ m → S¹ n → {_ : fyi-ok m n} → S¹ (m ⊔ n)
     scope! : S⁰ Slot → S¹ 0
 
   S¹-fyi-size : ∀ {n} → S¹ n → ℕ
   S¹-fyi-size {n} _ = n
 
+  mutual
+    S⁰-memory-usage : ∀ {t} → S⁰ t → ℕ
+    S⁰-memory-usage (- x)        = S⁰-memory-usage x
+    S⁰-memory-usage (¬ x)        = S⁰-memory-usage x
+    S⁰-memory-usage (x + y)      = S⁰-memory-usage x ⊔ S⁰-memory-usage y
+    S⁰-memory-usage (x − y)      = S⁰-memory-usage x ⊔ S⁰-memory-usage y
+    S⁰-memory-usage (x × y)      = S⁰-memory-usage x ⊔ S⁰-memory-usage y
+    S⁰-memory-usage (x ∙ y)      = S⁰-memory-usage x ⊔ S⁰-memory-usage y
+    S⁰-memory-usage (x ^ y)      = S⁰-memory-usage x ⊔ S⁰-memory-usage y
+    S⁰-memory-usage (x < y)      = S⁰-memory-usage x ⊔ S⁰-memory-usage y
+    S⁰-memory-usage (x > y)      = S⁰-memory-usage x ⊔ S⁰-memory-usage y
+    S⁰-memory-usage (x ≥ y)      = S⁰-memory-usage x ⊔ S⁰-memory-usage y
+    S⁰-memory-usage (x ≤ y)      = S⁰-memory-usage x ⊔ S⁰-memory-usage y
+    S⁰-memory-usage (x ≡ y)      = S⁰-memory-usage x ⊔ S⁰-memory-usage y
+    S⁰-memory-usage (x ∨ y)      = S⁰-memory-usage x ⊔ S⁰-memory-usage y
+    S⁰-memory-usage (x ∧ y)      = S⁰-memory-usage x ⊔ S⁰-memory-usage y
+    S⁰-memory-usage u            = 0
+    S⁰-memory-usage t            = 0
+    S⁰-memory-usage ray          = 0
+    S⁰-memory-usage (nat x)      = 0
+    S⁰-memory-usage (at x)       = 0
+    S⁰-memory-usage (scoped x)   = 0
+    S⁰-memory-usage (member x i) = S⁰-memory-usage x
+    S⁰-memory-usage (get x)      = S⁰-memory-usage x
+    S⁰-memory-usage (# (## x))   = suc x
+    S⁰-memory-usage ($ x)        = 0
+    S⁰-memory-usage (⟨ x)        = ⟨S⁰⟩-memory-usage x
+
+    ⟨S⁰⟩-memory-usage : ⟨S⁰⟩ → ℕ
+    ⟨S⁰⟩-memory-usage (one x)  = S⁰-memory-usage x
+    ⟨S⁰⟩-memory-usage (xs , x) = S⁰-memory-usage x ⊔ ⟨S⁰⟩-memory-usage xs
+
+  S¹-memory-usage : ∀ {n} → S¹ n → ℕ
+  S¹-memory-usage (iff x)           = S⁰-memory-usage x
+  S¹-memory-usage (## i ≜ x)        = suc i ⊔ S⁰-memory-usage x
+  S¹-memory-usage (x ← y)           = S⁰-memory-usage x ⊔ S⁰-memory-usage y
+  S¹-memory-usage (x ←+ y)          = S⁰-memory-usage x ⊔ S⁰-memory-usage y
+  S¹-memory-usage (fyiᵛ []ᵛ)        = 0
+  S¹-memory-usage (fyiᵛ v@(_ ∷ᵛ _)) = foldr₁ᵛ _⊔_ (mapᵛ S⁰-memory-usage v)
+  S¹-memory-usage (x │ y)           = S¹-memory-usage x ⊔ S¹-memory-usage y
+  S¹-memory-usage (scope! x)        = S⁰-memory-usage x
 
   -- S², the set of Sic contracts with named actions.
-
-  -- We apologize for using the somewhat gender-biased noun “guy”
-  -- as the generic term for an external entity that acts on us.
-  --
-  -- However, note that Guy, as a metavariable, must be instantiated
-  -- by some actual set of Alices and Bobs.
-  --
-  -- S² acts are defined by who is authorized to perform them.
-  --
-  -- When deploying a concrete system from an S² specification,
-  -- you will provide the identity of each “guy” as a parameter
-  -- to the deployment procedure.
-  --
   data S² (Guy : Set) (Act : Set) : Set where
     _⟶_ : ∀ {n} → Act → S¹ n → S² Guy Act
     _&_ : S² Guy Act → S² Guy Act → S² Guy Act
     case_then_else_ : S⁰ Word → S² Guy Act → S² Guy Act → S² Guy Act
     auth_∷_else_ : Guy → S² Guy Act → S² Guy Act → S² Guy Act
 
-  -- Syntax precedence list
+  transform-S²
+    : ∀ {G₁ G₂ A₁ A₂} → (G₁ → G₂) → (A₁ → A₂)
+    → S² G₁ A₁ → S² G₂ A₂
+  transform-S² f₁ f₂ (a ⟶ x) =
+    f₂ a ⟶ x
+  transform-S² f₁ f₂ (x & y) =
+    transform-S² f₁ f₂ x & transform-S² f₁ f₂ y
+  transform-S² f₁ f₂ (case p then x else y) =
+    case p then transform-S² f₁ f₂ x else transform-S² f₁ f₂ y
+  transform-S² f₁ f₂ (auth a ∷ x else y) =
+    auth (f₁ a) ∷ transform-S² f₁ f₂ x else transform-S² f₁ f₂ y
 
+
+  -- Syntax precedence list
   infix  1 case_then_else_
   infixr 2 _&_
   infixr 3 _⟶_
@@ -226,6 +264,11 @@ module Sⁿ where
   infixr 60 ⟨_
   infixr 61 _,_
 
+
+-- Section: Metaprogramming utilities
+--
+-- We extend the Agda environment with some useful stuff.
+--
 
 module Varargs where
   open Naturals
@@ -250,7 +293,6 @@ module Varargs where
       → uncurryᵛ (curryᵛ f) v ≣ f v
     uncurryᵛ-curryᵛ≡id f []ᵛ = refl
     uncurryᵛ-curryᵛ≡id f (x ∷ᵛ v) = uncurryᵛ-curryᵛ≡id (λ y → f (x ∷ᵛ y)) v
-
 
 module OverloadedNumbers where
   open Naturals
@@ -278,203 +320,7 @@ module OverloadedNumbers where
   {-# BUILTIN FROMNAT from-ℕ #-}
 
 
--- Section 3: Oⁿ, linearized versions of Sⁿ
---
--- The first phase of compiling is to linearize the recursive expressions;
--- thus, Oⁿ is Sⁿ with expressions flattened into “reverse Polish notation.”
---
-
-module Oⁿ where
-  open Basics
-  open Naturals
-  open Vectors
-  open Lists
-  open Strings
-  open Sⁿ using (Ref; ##)
-
-  -- The O⁰ operations have stack effects, which we encode in the types.
-  -- For example, the type of +ₒ denotes taking two items and leaving one.
-  -- Sequences like a ┆ b ┆ c must be “well-formed.”
-
-  data O⁰ : ℕ → ℕ → Set where
-    _┆_     : ∀ {i j k} → O⁰ i j → O⁰ j k → O⁰ i k
-    #ₒ      : ∀ {i} → ℕ → O⁰           i   (suc i)
-    rayₒ    : ∀ {i} →     O⁰           i   (suc i)
-    refₒ    : ∀ {i} → ℕ → O⁰           i   (suc i)
-    getₒ    : ∀ {i} → ℕ → O⁰           i   (suc i)
-    argₒ    : ∀ {i} → ℕ → O⁰           i   (suc i)
-    callerₒ : ∀ {i}     → O⁰           i   (suc i)
-    timeₒ   : ∀ {i}     → O⁰           i   (suc i)
-    getₖₒ   : ∀ {i}     → O⁰      (suc i)  (suc i)
-    scopedₒ : ∀ {i}     → O⁰      (suc i)  (suc i)
-    H¹ₒ     : ∀ {i}     → O⁰      (suc i)  (suc i)
-    H²ₒ     : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
-    +ₒ      : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
-    −ₒ      : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
-    ×ₒ      : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
-    %+ₒ     : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
-    %−ₒ     : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
-    %×ₒ     : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
-    ∙ₒ      : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
-    ^ₒ      : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
-    ≡ₒ      : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
-    ≥ₒ      : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
-    ≤ₒ      : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
-    >ₒ      : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
-    <ₒ      : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
-    ¬ₒ      : ∀ {i}     → O⁰      (suc i)  (suc i)
-    ∧ₒ      : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
-    ∨ₒ      : ∀ {i}     → O⁰ (suc (suc i)) (suc i)
-
-  data O¹ : Set where
-    _∥_ : O¹ → O¹ → O¹
-    iffₒ : O⁰ 0 1  → O¹
-    setₖₒ : O⁰ 0 1 → O⁰ 0 1  → O¹
-    setₖₒ₊ : O⁰ 0 1 → O⁰ 0 1  → O¹
-    defₒ : Ref → O⁰ 0 1  → O¹
-    setₒ : ℕ → O⁰ 0 1  → O¹
-    scope!ₒ : O⁰ 0 1 → O¹
-    fyiₒ : ∀ {n} → Vec (O⁰ 0 1) n → O¹
-    extₒ : ∀ {n} → String → O⁰ 0 1 → Vec (O⁰ 0 1) n → O¹
-
-  data O² (Guy : Set) (Act : Set) : Set where
-    actₒ : Act → ℕ → O¹ → O² Guy Act
-    seqₒ : Op₂ (O² Guy Act)
-    caseₒ : O⁰ 0 1 → Op₂ (O² Guy Act)
-    authₒ : Guy → Op₂ (O² Guy Act)
-
-  map-O²-act : ∀ {Guy Act₁ Act₂} → (Act₁ → Act₂) → O² Guy Act₁ → O² Guy Act₂
-  map-O²-act f (actₒ s x₁ x₂) =
-    actₒ (f s) x₁ x₂
-  map-O²-act f (seqₒ x y) =
-    seqₒ (map-O²-act f x) (map-O²-act f y)
-  map-O²-act f (caseₒ p x y) =
-    caseₒ p (map-O²-act f x) (map-O²-act f y)
-  map-O²-act f (authₒ g x y) =
-    authₒ g (map-O²-act f x) (map-O²-act f y)
-
-  map-O²-guy : ∀ {Guy₁ Guy₂ Act} → (Guy₁ → Guy₂) → O² Guy₁ Act → O² Guy₂ Act
-  map-O²-guy f (actₒ s x₁ x₂) =
-    actₒ s x₁ x₂
-  map-O²-guy f (seqₒ x₁ x₂) =
-    seqₒ (map-O²-guy f x₁) (map-O²-guy f x₂)
-  map-O²-guy f (caseₒ p x₁ x₂) =
-    caseₒ p (map-O²-guy f x₁) (map-O²-guy f x₂)
-  map-O²-guy f (authₒ g x₁ x₂) =
-    authₒ (f g) (map-O²-guy f x₁) (map-O²-guy f x₂)
-
-  infixr  5 _┆_
-  infixr 10 _∥_
-
-  -- In order to allocate memory (say, for EVM return values),
-  -- we need to compute the memory requirements of operations.
-
-  O⁰-memory : ∀ {m n} → O⁰ m n → ℕ
-  O⁰-memory (refₒ i)  = suc i
-  O⁰-memory (o₁ ┆ o₂) = O⁰-memory o₁ ⊔ O⁰-memory o₂
-  O⁰-memory x = 0
-
-  O¹-var-memory : O¹ → ℕ
-  O¹-var-memory (defₒ (## i) x)  = suc i ⊔ O⁰-memory x
-  O¹-var-memory (fyiₒ []ᵛ)       = 0
-  O¹-var-memory (fyiₒ (x ∷ᵛ xs)) = foldr₁ᵛ _⊔_ (mapᵛ O⁰-memory (x ∷ᵛ xs))
-  O¹-var-memory (extₒ s c xs)    = foldrᵛ (λ _ → ℕ) _⊔_ 0 (mapᵛ O⁰-memory xs)
-  O¹-var-memory (iffₒ x)         = O⁰-memory x
-  O¹-var-memory (setₖₒ k x)      = O⁰-memory k ⊔ O⁰-memory x
-  O¹-var-memory (setₖₒ₊ k x)     = O⁰-memory k ⊔ O⁰-memory x
-  O¹-var-memory (setₒ i x)       = O⁰-memory x
-  O¹-var-memory (scope!ₒ k)      = O⁰-memory k
-  O¹-var-memory (o₁ ∥ o₂)        = O¹-var-memory o₁ ⊔ O¹-var-memory o₂
-
-  O¹-fyi-memory : O¹ → ℕ
-  O¹-fyi-memory (fyiₒ {n} xs) = suc n
-  O¹-fyi-memory (o₁ ∥ o₂) = O¹-fyi-memory o₁ ⊔ O¹-fyi-memory o₂
-  O¹-fyi-memory _         = 0
-
-
-module Sⁿ→Oⁿ where
-  open Sⁿ
-  open Oⁿ
-
-  open Naturals
-  open Vectors
-
-  mutual
-    ⟨S⁰⟩→O⁰ : ∀ {i} → ⟨S⁰⟩ → O⁰ i (suc i)
-    ⟨S⁰⟩→O⁰ (one x)       = ⟦ x ⟧⁰ ┆ H¹ₒ
-    ⟨S⁰⟩→O⁰ (one x , y)   = ⟦ x ⟧⁰ ┆ ⟦ y ⟧⁰ ┆ H²ₒ
-    ⟨S⁰⟩→O⁰ ((x , y) , z) = ⟨S⁰⟩→O⁰ (x , y) ┆ ⟦ z ⟧⁰ ┆ H²ₒ
-
-    -- Compiling expressions
-    ⟦_⟧⁰ : ∀ {i T} → S⁰ T → O⁰ i (suc i)
-    ⟦ ⟨ xs ⟧⁰      = ⟨S⁰⟩→O⁰ xs
-    ⟦ ray ⟧⁰       = rayₒ
-    ⟦ at n ⟧⁰      = #ₒ n
-    ⟦ nat n ⟧⁰     = #ₒ n
-    ⟦ get x ⟧⁰     = ⟦ x ⟧⁰ ┆ getₖₒ
-    ⟦ scoped n ⟧⁰  = #ₒ n ┆ scopedₒ
-    ⟦ member x n ⟧⁰  = ⟦ x ⟧⁰ ┆ #ₒ n ┆ +ₒ
-    ⟦ # (## x) ⟧⁰ = refₒ x
-    ⟦ $ ($$ x) ⟧⁰ = argₒ x
-    ⟦ u ⟧⁰         = callerₒ
-    ⟦ t ⟧⁰         = timeₒ
-    ⟦ x + y ⟧⁰     = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ +ₒ
-    ⟦ x − y ⟧⁰     = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ −ₒ
-    ⟦ x × y ⟧⁰     = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ ×ₒ
-    ⟦ x ∙ y ⟧⁰     = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ ∙ₒ
-    ⟦ x ^ y ⟧⁰     = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ ^ₒ
-    ⟦ x ∨ y ⟧⁰     = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ ∨ₒ
-    ⟦ x ∧ y ⟧⁰     = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ ∧ₒ
-    ⟦ x ≥ y ⟧⁰     = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ ≥ₒ
-    ⟦ x ≤ y ⟧⁰     = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ ≤ₒ
-    ⟦ x > y ⟧⁰     = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ >ₒ
-    ⟦ x < y ⟧⁰     = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ <ₒ
-    ⟦ x ≡ y ⟧⁰     = ⟦ y ⟧⁰ ┆ ⟦ x ⟧⁰ ┆ ≡ₒ
-    ⟦ ¬ x ⟧⁰       = ⟦ x ⟧⁰ ┆ ¬ₒ
-    ⟦ - x ⟧⁰       = #ₒ 0  ┆ ⟦ x ⟧⁰ ┆ −ₒ
-
-  -- Compiling statement sequences
-  ⟦_⟧¹ : ∀ {n} → S¹ n → O¹
-  ⟦ iff x ⟧¹  = iffₒ ⟦ x ⟧⁰
-  ⟦ fyiᵛ x ⟧¹  = fyiₒ (mapᵛ ⟦_⟧⁰ x)
-  ⟦ ext s c a ⟧¹ = extₒ s (⟦_⟧⁰ c) (mapᵛ ⟦_⟧⁰ a)
-  ⟦ i ≜ x ⟧¹  = defₒ i ⟦ x ⟧⁰
-  ⟦ k ← x ⟧¹  = setₖₒ ⟦ k ⟧⁰ ⟦ x ⟧⁰
-  ⟦ k ←+ x ⟧¹ = setₖₒ₊ ⟦ k ⟧⁰ ⟦ x ⟧⁰
-  ⟦ x │ y ⟧¹  = ⟦ x ⟧¹ ∥ ⟦ y ⟧¹
-  ⟦ scope! s ⟧¹ = scope!ₒ ⟦ s ⟧⁰
-
-  -- Compiling signature dispatch sequences
-  ⟦_⟧² : ∀ {Guy Act} → S² Guy Act → O² Guy Act
-  ⟦ s ⟶ k ⟧² =
-    actₒ s (S¹-fyi-size k) ⟦ k ⟧¹
-  ⟦ a & b     ⟧² =
-    seqₒ ⟦ a ⟧² ⟦ b ⟧²
-  ⟦ case p then a else b ⟧² =
-    caseₒ ⟦ p ⟧⁰ ⟦ a ⟧² ⟦ b ⟧²
-  ⟦ auth g ∷ a else b ⟧² =
-    authₒ g ⟦ a ⟧² ⟦ b ⟧²
-
-
-  -- Some compile-time assertions
-  private
-    open Sⁿ
-    open Relations
-
-    S¹-memory : ∀ {n} → S¹ n → ℕ
-    S¹-memory s = O¹-var-memory ⟦ s ⟧¹
-
-    example-1 : S¹-memory {0} (at 0 ← nat 0) ≣ 0
-    example-1 = refl
-
-    example-2 : S¹-memory {0} (0 ≜ nat 0) ≣ 1
-    example-2 = refl
-
-    example-3 : S¹-memory {0} (0 ≜ # 1 + # 2) ≣ 3
-    example-3 = refl
-
-
--- Section 4: Reasoning about stack manipulations
+-- Section: Reasoning about stack manipulations
 --
 -- We define a subset of the EVM stack operations for the purpose
 -- of proving the stack effects of “pure” stack operations.
@@ -608,7 +454,7 @@ module StackReasoning (A : Set) where
         7 ¤ ((a + b) , a , b , ◎) ∎
 
 
--- Section 5: EVM assembly
+-- Section: EVM assembly
 --
 -- We now introduce a data type denoting EVM assembly.
 --
@@ -617,7 +463,7 @@ module StackReasoning (A : Set) where
 --
 
 module EVM where
-  open Oⁿ
+  open Sⁿ
   open Naturals
   open Strings
   open Vectors
@@ -631,7 +477,7 @@ module EVM where
   %rpowˣ = 2 * wordsize
   %rpowⁿ = 3 * wordsize
   %rpowᶻ = 4 * wordsize
-  %sig = 5 * wordsize
+  %sig   = 5 * wordsize
   %scope = 6 * wordsize
 
   -- Let mₒ be the first memory address for non-reserved variables.
@@ -653,7 +499,7 @@ module EVM where
     ELSE         : Oᴱ → Oᴱ
     LOOP         : Oᴱ → Oᴱ → Oᴱ
     _⟫_          : Oᴱ → Oᴱ → Oᴱ
-    tag          : O¹ → Oᴱ → Oᴱ
+    tag          : ∀ {n} → S¹ n → Oᴱ → Oᴱ
 
   -- The stack reasoning module is very useful for defining
   -- pure stack operations with verified stack effects,
@@ -694,7 +540,7 @@ module EVM where
   snippet = ⟦_⟧
 
 
--- Section 6: EVM safe math and exponentiation
+-- Section: EVM safe math and exponentiation
 --
 -- For the EVM, we define our own overflow safe arithmetic.
 --
@@ -744,11 +590,9 @@ module EVM-Math where
           62 ¤ (no-overflow? x y , x × y , ◎) ∎
 
   ISUB = SWAP 1 ⟫ PUSH 0 ⟫ SUB ⟫ IADD
-
   RONE = PUSH 27 ⟫ PUSH 10 ⟫ EXP
   RHALF = PUSH 2 ⟫ RONE ⟫ SDIV
   RTRUNC = RONE ⟫ SWAP 1 ⟫ SDIV
-
   RMUL =
     IMUL ⟫ RHALF ⟫ PUSH 0 ⟫ DUP 3 ⟫ SLT ⟫
     PUSH 0 ⟫ NOT ⟫ MUL ⟫ MUL ⟫ IADD ⟫ RTRUNC
@@ -785,12 +629,11 @@ module EVM-Math where
     ) ⟫ GETZ
 
 
--- Section 7: Compiling Sic machine code to EVM assembly
+-- Section: Compiling Sic to EVM assembly
 --
 
 module Sic→EVM where
-  open Sⁿ using (##)
-  open Oⁿ
+  open Sⁿ
   open EVM
   open EVM-Math
 
@@ -799,97 +642,70 @@ module Sic→EVM where
   open Vectors
   open Strings
 
+  hash-one : Oᴱ
+  hash-one =
+    PUSH %hash¹ ⟫ MSTORE ⟫ PUSH wordsize ⟫ PUSH 0 ⟫ KECCAK256
+
   hash-two : Oᴱ
   hash-two =
     PUSH %hash¹ ⟫ MSTORE ⟫ PUSH %hash² ⟫ MSTORE ⟫
     PUSH (2 * wordsize) ⟫ PUSH 0 ⟫ KECCAK256
 
-  ⟦_⟧⁰ᵉ : ∀ {i j} → O⁰ i j → Oᴱ
-  ⟦ #ₒ n    ⟧⁰ᵉ  = PUSH n
-  ⟦ rayₒ ⟧⁰ᵉ     = RONE
-  ⟦ timeₒ   ⟧⁰ᵉ  = TIMESTAMP
-  ⟦ x₁ ┆ x₂ ⟧⁰ᵉ  = ⟦ x₁ ⟧⁰ᵉ ⟫ ⟦ x₂ ⟧⁰ᵉ
-  ⟦ callerₒ ⟧⁰ᵉ  = CALLER
-  ⟦ refₒ x  ⟧⁰ᵉ  = PUSH (x * wordsize +ℕ m₀) ⟫ MLOAD
-  ⟦ getₒ x  ⟧⁰ᵉ  = PUSH x ⟫ SLOAD
-  ⟦ argₒ x  ⟧⁰ᵉ  = PUSH (4 +ℕ x * wordsize) ⟫ CALLDATALOAD
-  ⟦ getₖₒ   ⟧⁰ᵉ  = SLOAD
-  ⟦ scopedₒ ⟧⁰ᵉ  = PUSH %scope ⟫ MLOAD ⟫ ADD
-  ⟦ +ₒ      ⟧⁰ᵉ  = IADD
-  ⟦ −ₒ      ⟧⁰ᵉ  = ISUB
-  ⟦ ×ₒ      ⟧⁰ᵉ  = IMUL
-  ⟦ %+ₒ     ⟧⁰ᵉ  = ADD
-  ⟦ %−ₒ     ⟧⁰ᵉ  = SUB
-  ⟦ %×ₒ     ⟧⁰ᵉ  = MUL
-  ⟦ ∙ₒ      ⟧⁰ᵉ  = RMUL
-  ⟦ ^ₒ      ⟧⁰ᵉ  = RPOW
-  ⟦ ≡ₒ      ⟧⁰ᵉ  = EQ
-  ⟦ ≥ₒ      ⟧⁰ᵉ  = SLT ⟫ ISZERO
-  ⟦ ≤ₒ      ⟧⁰ᵉ  = SGT ⟫ ISZERO
-  ⟦ >ₒ      ⟧⁰ᵉ  = SGT
-  ⟦ <ₒ      ⟧⁰ᵉ  = SLT
-  ⟦ ¬ₒ      ⟧⁰ᵉ  = ISZERO
-  ⟦ ∧ₒ      ⟧⁰ᵉ  = AND
-  ⟦ ∨ₒ      ⟧⁰ᵉ  = OR
-  ⟦ H¹ₒ     ⟧⁰ᵉ  = PUSH %hash¹ ⟫ MSTORE ⟫
-                    PUSH wordsize ⟫ PUSH 0 ⟫ KECCAK256
-  ⟦ H²ₒ     ⟧⁰ᵉ  = hash-two
+  ⟦_⟧⁰ᵉ : ∀ {t} → S⁰ t → Oᴱ
+  ⟦ - x ⟧⁰ᵉ           = PUSH 0 ⟫ ⟦ x ⟧⁰ᵉ ⟫ ISUB
+  ⟦ ¬ x ⟧⁰ᵉ           = ⟦ x ⟧⁰ᵉ ⟫ ISZERO
+  ⟦ x + y ⟧⁰ᵉ         = ⟦ y ⟧⁰ᵉ ⟫ ⟦ x ⟧⁰ᵉ ⟫ IADD
+  ⟦ x − y ⟧⁰ᵉ         = ⟦ y ⟧⁰ᵉ ⟫ ⟦ x ⟧⁰ᵉ ⟫ ISUB
+  ⟦ x × y ⟧⁰ᵉ         = ⟦ y ⟧⁰ᵉ ⟫ ⟦ x ⟧⁰ᵉ ⟫ IMUL
+  ⟦ x ∙ y ⟧⁰ᵉ         = ⟦ y ⟧⁰ᵉ ⟫ ⟦ x ⟧⁰ᵉ ⟫ RMUL
+  ⟦ x ^ y ⟧⁰ᵉ         = ⟦ y ⟧⁰ᵉ ⟫ ⟦ x ⟧⁰ᵉ ⟫ EXP
+  ⟦ x < y ⟧⁰ᵉ         = ⟦ y ⟧⁰ᵉ ⟫ ⟦ x ⟧⁰ᵉ ⟫ SLT
+  ⟦ x > y ⟧⁰ᵉ         = ⟦ y ⟧⁰ᵉ ⟫ ⟦ x ⟧⁰ᵉ ⟫ SGT
+  ⟦ x ≥ y ⟧⁰ᵉ         = ⟦ y ⟧⁰ᵉ ⟫ ⟦ x ⟧⁰ᵉ ⟫ SLT ⟫ ISZERO
+  ⟦ x ≤ y ⟧⁰ᵉ         = ⟦ y ⟧⁰ᵉ ⟫ ⟦ x ⟧⁰ᵉ ⟫ SGT ⟫ ISZERO
+  ⟦ x ≡ y ⟧⁰ᵉ         = ⟦ y ⟧⁰ᵉ ⟫ ⟦ x ⟧⁰ᵉ ⟫ EQ
+  ⟦ x ∨ y ⟧⁰ᵉ         = ⟦ y ⟧⁰ᵉ ⟫ ⟦ x ⟧⁰ᵉ ⟫ OR
+  ⟦ x ∧ y ⟧⁰ᵉ         = ⟦ y ⟧⁰ᵉ ⟫ ⟦ x ⟧⁰ᵉ ⟫ AND
+  ⟦ u ⟧⁰ᵉ             = CALLER
+  ⟦ t ⟧⁰ᵉ             = TIMESTAMP
+  ⟦ ray ⟧⁰ᵉ           = RONE
+  ⟦ nat x ⟧⁰ᵉ         = PUSH x
+  ⟦ at x ⟧⁰ᵉ          = PUSH x
+  ⟦ scoped x ⟧⁰ᵉ      = PUSH x ⟫ PUSH %scope ⟫ MLOAD ⟫ ADD
+  ⟦ member x i ⟧⁰ᵉ    = ⟦ x ⟧⁰ᵉ ⟫ PUSH i ⟫ ADD
+  ⟦ get x ⟧⁰ᵉ         = ⟦ x ⟧⁰ᵉ ⟫ SLOAD
+  ⟦ # (## x) ⟧⁰ᵉ      = PUSH (m₀ +ℕ x * wordsize) ⟫ MLOAD
+  ⟦ $ ($$ x) ⟧⁰ᵉ      = PUSH (4  +ℕ x * wordsize) ⟫ CALLDATALOAD
+  ⟦ ⟨ one x ⟧⁰ᵉ       = ⟦ x ⟧⁰ᵉ ⟫ hash-one
+  ⟦ ⟨ one x , y ⟧⁰ᵉ   = ⟦ x ⟧⁰ᵉ ⟫ ⟦ y ⟧⁰ᵉ ⟫ hash-two
+  ⟦ ⟨ (x , y) , z ⟧⁰ᵉ = ⟦ ⟨ (x , y) ⟧⁰ᵉ ⟫ ⟦ z ⟧⁰ᵉ ⟫ hash-two
 
-  open Products
+  open Products renaming (_,_ to _and_)
 
-  O⁰#→Oᴱ : ∀ {n} → ℕ → (Fin n × O⁰ 0 1) → Oᴱ
-  O⁰#→Oᴱ i (j , x) = ⟦ x ⟧⁰ᵉ ⟫ PUSH (i +ℕ (toℕ j) * wordsize) ⟫ MSTORE
+  S¹→Oᴱ : ∀ {n} → ℕ → S¹ n → Oᴱ
+  S¹→Oᴱ m s@(iff x) =
+    tag s (⟦ x ⟧⁰ᵉ ⟫ ISZERO ⟫ REVERTIF)
+  S¹→Oᴱ m s@(## i ≜ x) =
+    tag s (⟦ x ⟧⁰ᵉ ⟫ PUSH (m₀ +ℕ m * wordsize) ⟫ MSTORE)
+  S¹→Oᴱ m s@(x ← y) =
+    tag s (⟦ y ⟧⁰ᵉ ⟫ ⟦ x ⟧⁰ᵉ ⟫ SSTORE)
+  S¹→Oᴱ m s@(x ←+ y) =
+    tag s (⟦ y ⟧⁰ᵉ ⟫ DUP 1 ⟫ PUSH 0 ⟫ SGT ⟫ REVERTIF ⟫ ⟦ x ⟧⁰ᵉ ⟫ SSTORE)
+  S¹→Oᴱ {0} m s@(fyiᵛ []ᵛ) =
+    tag s NOOP
+  S¹→Oᴱ {suc n} m s@(fyiᵛ v@(_ ∷ᵛ _)) =
+    tag s
+      (foldr₁ᵛ _⟫_
+        (mapᵛ
+          (λ { (i and x) → ⟦ x ⟧⁰ᵉ ⟫ PUSH (m +ℕ toℕ i * wordsize) ⟫ MSTORE })
+          (zipᵛ (allFinᵛ (suc n)) v)))
+  S¹→Oᴱ m s@(scope! x) =
+    tag s (⟦ x ⟧⁰ᵉ ⟫ PUSH %scope ⟫ MSTORE)
+  S¹→Oᴱ m (x │ y) =
+    S¹→Oᴱ m x ⟫ S¹→Oᴱ m y
 
-  fyiₒ→Oᴱ : ∀ {n} → ℕ → Vec (O⁰ 0 1) (suc n) → Oᴱ
-  fyiₒ→Oᴱ {n} i xs =
-    foldr₁ᵛ _⟫_ (mapᵛ (O⁰#→Oᴱ i) (zipᵛ (allFinᵛ (suc n)) xs))
-
-  push-sig : String → Oᴱ
-  push-sig s = PUSHSIG s ⟫ PUSH 224 ⟫ PUSH 2 ⟫ EXP ⟫ MUL
-
-  extₒ→Oᴱ : ∀ {n} → ℕ → String → O⁰ 0 1 → Vec (O⁰ 0 1) n → Oᴱ
-  extₒ→Oᴱ i s c []ᵛ = push-sig s ⟫ PUSH instart ⟫ MSTORE ⟫ call
-                   where
-                     insize = 4
-                     instart = i
-                     call = PUSH 0 ⟫ PUSH 0 ⟫ PUSH insize
-                            ⟫ PUSH instart ⟫ PUSH 0 ⟫ ⟦ c ⟧⁰ᵉ
-                            ⟫ GAS ⟫ CALL ⟫ ISZERO ⟫ REVERTIF
-  extₒ→Oᴱ {n} i s c (x ∷ᵛ xs) = push-sig s ⟫ PUSH instart ⟫ MSTORE ⟫
-   foldr₁ᵛ _⟫_
-       (mapᵛ (O⁰#→Oᴱ (instart +ℕ 4)) (zipᵛ (allFinᵛ n) (x ∷ᵛ xs)))
-     ⟫ call
-   where
-     open import Data.List.NonEmpty using (foldr₁; map; length)
-     ys = (x ∷ᵛ xs)
-     insize = 4 +ℕ wordsize * n
-     instart = i
-     call = PUSH 0 ⟫ PUSH 0 ⟫ PUSH insize
-            ⟫ PUSH instart ⟫ PUSH 0 ⟫ ⟦ c ⟧⁰ᵉ
-            ⟫ GAS ⟫ CALL ⟫ ISZERO ⟫ REVERTIF
-
-
-  mutual
-    O¹→Oᴱ′ : ℕ → ℕ → O¹ → Oᴱ
-    O¹→Oᴱ′ m₁ m₂ (iffₒ o)      = ⟦ o ⟧⁰ᵉ ⟫ ISZERO ⟫ REVERTIF
-    O¹→Oᴱ′ m₁ m₂ (defₒ (## i) x) = ⟦ x ⟧⁰ᵉ ⟫ PUSH (i * wordsize +ℕ m₀) ⟫ MSTORE
-    O¹→Oᴱ′ m₁ m₂ (setₒ i x)    = ⟦ x ⟧⁰ᵉ ⟫ PUSH i ⟫ SSTORE
-    O¹→Oᴱ′ m₁ m₂ (setₖₒ k x)   = ⟦ x ⟧⁰ᵉ ⟫ ⟦ k ⟧⁰ᵉ ⟫ SSTORE
-    O¹→Oᴱ′ m₁ m₂ (setₖₒ₊ k x)  =
-      ⟦ x ⟧⁰ᵉ ⟫ DUP 1 ⟫ PUSH 0 ⟫ SGT ⟫ REVERTIF ⟫
-      ⟦ k ⟧⁰ᵉ ⟫ SSTORE
-    O¹→Oᴱ′ m₁ m₂ (fyiₒ []ᵛ) = NOOP
-    O¹→Oᴱ′ m₁ m₂ (fyiₒ (x ∷ᵛ xs))     = fyiₒ→Oᴱ offset (x ∷ᵛ xs)
-      where offset = m₁ * wordsize +ℕ m₀
-    O¹→Oᴱ′ m₁ m₂ (extₒ s c xs) = extₒ→Oᴱ offset s c xs
-      where offset = m₂ * wordsize +ℕ m₀
-    O¹→Oᴱ′ m₁ m₂ (scope!ₒ k) = ⟦ k ⟧⁰ᵉ ⟫ PUSH %scope ⟫ MSTORE
-    O¹→Oᴱ′ m₁ m₂ (o₁ ∥ o₂)     = ⟦ o₁ with-var m₁ with-fyi m₂ ⟧¹ᵉ ⟫
-                                 ⟦ o₂ with-var m₁ with-fyi m₂ ⟧¹ᵉ
-
-    ⟦_with-var_with-fyi_⟧¹ᵉ : O¹ → ℕ → ℕ → Oᴱ
-    ⟦ o@(_ ∥ _) with-var m₁ with-fyi m₂ ⟧¹ᵉ = O¹→Oᴱ′ m₁ m₂ o
-    ⟦ o with-var m₁ with-fyi m₂ ⟧¹ᵉ = tag o (O¹→Oᴱ′ m₁ m₂ o)
+  S¹→tagged-Oᴱ : ∀ {n} → ℕ → S¹ n → Oᴱ
+  S¹→tagged-Oᴱ m x = tag x (S¹→Oᴱ m x)
 
   -- This prelude is inserted into every compiled S².
   prelude =
@@ -906,48 +722,38 @@ module Sic→EVM where
     PUSH 13 ⟫ PUSH 0 ⟫ CODECOPY ⟫ PUSH 0 ⟫ RETURN
 
   return : ℕ → ℕ → Oᴱ
+  return _ 0 = STOP
   return offset n =
     PUSH (n * wordsize) ⟫
     PUSH (m₀ +ℕ offset * wordsize) ⟫
     RETURN
 
-  sig-check : String → ℕ → Oᴱ
-  sig-check s n =
+  sig-check : String → Oᴱ
+  sig-check s =
     PUSH %sig ⟫ MLOAD ⟫ PUSHSIG s ⟫ EQ
 
-  ⟦_⟧²ᵉ : O² Addrᴱ String → Oᴱ
-  ⟦ seqₒ a b   ⟧²ᵉ = ⟦ a ⟧²ᵉ ⟫ ⟦ b ⟧²ᵉ
-  ⟦ actₒ s n k ⟧²ᵉ =
-    sig-check s n ⟫
-      let m₁ = O¹-var-memory k
-          m₂ = m₁ +ℕ (O¹-fyi-memory k)
-      in
-        ISZERO ⟫ ELSE (⟦ k with-var m₁ with-fyi m₂ ⟧¹ᵉ ⟫ return m₁ n)
-  ⟦ caseₒ p a b ⟧²ᵉ =
-    ⟦ p ⟧⁰ᵉ ⟫ ELSE ⟦ b ⟧²ᵉ ⟫ ⟦ a ⟧²ᵉ
-  ⟦ authₒ x a b ⟧²ᵉ =
-    PUSHADDR x ⟫ CALLER ⟫ EQ ⟫ ELSE ⟦ b ⟧²ᵉ ⟫ ⟦ a ⟧²ᵉ
-
-  open Sⁿ    using (S²)
-  open Sⁿ→Oⁿ using (⟦_⟧²)
+  ⟦_⟧²ᵉ : S² Addrᴱ String → Oᴱ
+  ⟦ sig ⟶ x ⟧²ᵉ =
+    sig-check sig ⟫ ISZERO
+      ⟫ ELSE (S¹→Oᴱ (S¹-memory-usage x) x)
+      ⟫ return (S¹-memory-usage x) (S¹-fyi-size x)
+  ⟦ x & y ⟧²ᵉ = ⟦ x ⟧²ᵉ ⟫ ⟦ y ⟧²ᵉ
+  ⟦ case p then x else y ⟧²ᵉ =
+    ⟦ p ⟧⁰ᵉ ⟫ ELSE ⟦ y ⟧²ᵉ ⟫ ⟦ x ⟧²ᵉ
+  ⟦ auth a ∷ x else y ⟧²ᵉ =
+    PUSHADDR a ⟫ CALLER ⟫ EQ ⟫ ELSE ⟦ y ⟧²ᵉ ⟫ ⟦ x ⟧²ᵉ
 
   S²→Oᴱ : ∀ {Guy Act}
         → (Guy → Addrᴱ)
         → (Act → String)
         → S² Guy Act → Oᴱ
-  S²→Oᴱ f g s = prelude ⟫ ⟦ map-O²-guy f (map-O²-act g ⟦ s ⟧²) ⟧²ᵉ ⟫ REVERT
-
-  S²→O² : ∀ {Guy Act} → S² Guy Act → O² Guy Act
-  S²→O² x = ⟦ x ⟧²
-
-  O²→Oᴱ : O² Addrᴱ String → Oᴱ
-  O²→Oᴱ x = prelude ⟫ ⟦ x ⟧²ᵉ ⟫ REVERT
+  S²→Oᴱ f g s = prelude ⟫ ⟦ transform-S² f g s ⟧²ᵉ ⟫ REVERT
 
   compile : S² Addrᴱ String → Oᴱ
   compile = S²→Oᴱ (λ x → x) (λ x → x)
 
 
--- Section 8: Assembling EVM assembly
+-- Section: Assembling EVM assembly
 --
 -- We define the concrete output format of the Agda program.
 --
@@ -1038,63 +844,63 @@ module EVM-Assembly where
   open Relations
 
   code′ : Oᴱ → Σ ℕ B¹
-  code′ NOOP = , op B0
-  code′ (tag o¹ oᴱ) = code′ oᴱ
-  code′ (x₁ ⟫ x₂) = , (proj₂ (code′ x₁) ⦂ proj₂ (code′ x₂))
-  code′ ADD = , op B1 0x01
-  code′ ADDRESS = , op B1 0x30
-  code′ AND = , op B1 0x16
+  code′ NOOP         = , op B0
+  code′ ADD          = , op B1 0x01
+  code′ ADDRESS      = , op B1 0x30
+  code′ AND          = , op B1 0x16
   code′ CALLDATALOAD = , op B1 0x35
-  code′ CALL = , op B1 0xf1
-  code′ CALLER = , op B1 0x33
-  code′ CODESIZE = , op B1 0x38
-  code′ CODECOPY = , op B1 0x39
-  code′ EQ = , op B1 0x14
-  code′ GAS = , op B1 0x5a
-  code′ JUMPDEST = , op B1 0x5b
-  code′ (JUMP x)  = , op B1 0x61 ⦂ op B2 (+ x) ⦂ op B1 0x56
-  code′ (JUMPI x) = , op B1 0x61 ⦂ op B2 (+ x) ⦂ op B1 0x57
+  code′ CALL         = , op B1 0xf1
+  code′ CALLER       = , op B1 0x33
+  code′ CODESIZE     = , op B1 0x38
+  code′ CODECOPY     = , op B1 0x39
+  code′ EQ           = , op B1 0x14
+  code′ GAS          = , op B1 0x5a
+  code′ JUMPDEST     = , op B1 0x5b
+  code′ (JUMP x)     = , op B1 0x61 ⦂ op B2 (+ x) ⦂ op B1 0x56
+  code′ (JUMPI x)    = , op B1 0x61 ⦂ op B2 (+ x) ⦂ op B1 0x57
+  code′ KECCAK256    = , op B1 0x20
+  code′ MLOAD        = , op B1 0x51
+  code′ MSTORE       = , op B1 0x52
+  code′ MUL          = , op B1 0x02
+  code′ MOD          = , op B1 0x06
+  code′ EXP          = , op B1 0x0a
+  code′ OR           = , op B1 0x17
+  code′ (PUSH x) with x ≤? 255
+  ... | yes _        = , op B1 0x60 ⦂ op B1 x
+  ... | no _         = , op B1 0x61 ⦂ op B2 (+ x)
+  code′ (PUSHSIG x)  = , op B1 0x63 ⦂ op BSig x
+  code′ (PUSHADDR x) = , op B1 0x73 ⦂ op BAddr x
+  code′ DIV          = , op B1 0x04
+  code′ SDIV         = , op B1 0x05
+  code′ SGT          = , op B1 0x13
+  code′ SLOAD        = , op B1 0x54
+  code′ SLT          = , op B1 0x12
+  code′ NOT          = , op B1 0x19
+  code′ ISZERO       = , op B1 0x15
+  code′ POP          = , op B1 0x50
+  code′ SSTORE       = , op B1 0x55
+  code′ STOP         = , op B1 0x00
+  code′ SUB          = , op B1 0x03
+  code′ TIMESTAMP    = , op B1 0x42
+  code′ (DUP x)      = , op B1 (0x7f +ℕ x)
+  code′ (SWAP x)     = , op B1 (0x8f +ℕ x)
+  code′ REVERT       = , op B1 0xfd
+  code′ REVERTIF     = , op B1 0x60 ⦂ op B1 revert-jumpdest ⦂ op B1 0x57
+  code′ RETURN       = , op B1 0xf3
+  code′ XOR          = , op B1 0x18
+  code′ (tag o¹ oᴱ)  = code′ oᴱ
+  code′ (x₁ ⟫ x₂)    = , (proj₂ (code′ x₁) ⦂ proj₂ (code′ x₂))
   code′ (ELSE x) with code′ x
-  ... | i , bs = , op B1 0x61 ⦂ Δ (+ (i +ℕ skip)) ⦂ op B1 0x57 ⦂ bs ⦂ op B1 0x5b
-    where skip = 3
+  ... | i , bs       = , op B1 0x61 ⦂ Δ (+ (i +ℕ skip)) ⦂ op B1 0x57 ⦂ bs ⦂ op B1 0x5b
+    where skip       = 3
   code′ (LOOP p k) with code′ p
   ... | iₚ , bsₚ   with code′ k
-  ... | iₖ , bsₖ =
+  ... | iₖ , bsₖ     =
     , op B1 0x5b ⦂ bsₚ ⦂ op B1 0x15 ⦂ op B1 0x61 ⦂ Δ (+ (3 +ℕ iₖ +ℕ 4))
       ⦂ op B1 0x57 ⦂ bsₖ
       ⦂ op B1 0x61 ⦂ Δ (-ℤ (+ skip)) ⦂ op B1 0x56
       ⦂ op B1 0x5b
-    where skip = 1 +ℕ iₖ +ℕ 5 +ℕ iₚ +ℕ 1
-  code′ KECCAK256 = , op B1 0x20
-  code′ MLOAD = , op B1 0x51
-  code′ MSTORE = , op B1 0x52
-  code′ MUL = , op B1 0x02
-  code′ MOD = , op B1 0x06
-  code′ EXP = , op B1 0x0a
-  code′ OR = , op B1 0x17
-  code′ (PUSH x) with x ≤? 255
-  ... | yes _ = , op B1 0x60 ⦂ op B1 x
-  ... | no _  = , op B1 0x61 ⦂ op B2 (+ x)
-  code′ (PUSHSIG x) = , op B1 0x63 ⦂ op BSig x
-  code′ (PUSHADDR x) = , op B1 0x73 ⦂ op BAddr x
-  code′ DIV = , op B1 0x04
-  code′ SDIV = , op B1 0x05
-  code′ SGT = , op B1 0x13
-  code′ SLOAD = , op B1 0x54
-  code′ SLT = , op B1 0x12
-  code′ NOT = , op B1 0x19
-  code′ ISZERO = , op B1 0x15
-  code′ POP = , op B1 0x50
-  code′ SSTORE = , op B1 0x55
-  code′ STOP = , op B1 0x00
-  code′ SUB = , op B1 0x03
-  code′ TIMESTAMP = , op B1 0x42
-  code′ (DUP x) = , op B1 (0x7f +ℕ x)
-  code′ (SWAP x) = , op B1 (0x8f +ℕ x)
-  code′ REVERT = , op B1 0xfd
-  code′ REVERTIF = , op B1 0x60 ⦂ op B1 revert-jumpdest ⦂ op B1 0x57
-  code′ RETURN = , op B1 0xf3
-  code′ XOR = , op B1 0x18
+    where skip       = 1 +ℕ iₖ +ℕ 5 +ℕ iₚ +ℕ 1
 
   code : (o : Oᴱ) → B¹ (proj₁ (code′ o))
   code o = proj₂ (code′ o)
@@ -1102,9 +908,10 @@ module EVM-Assembly where
   open import Data.String
     using (String; toList; fromList)
     renaming (_++_ to _string++_)
-  open import Data.List using (length; replicate)
-
-  open import Data.Nat.Show using (showInBase)
+  open import Data.List
+    using (length; replicate)
+  open import Data.Nat.Show
+    using (showInBase)
 
   0-pad : ℕ → String → String
   0-pad n s with (+ n) -ℤ (+ length (toList s))
@@ -1117,21 +924,20 @@ module EVM-Assembly where
       string++ "}"
 
   ℤ→hex : ℕ → ℤ → String
-  ℤ→hex n (+_ x) = 0-pad n (showInBase 16 x)
+  ℤ→hex n (+_ x)       = 0-pad n (showInBase 16 x)
   ℤ→hex _ (ℤ.negsuc n) = "{erroneously-negative}"
 
   B⁰⋆→String : B⁰⋆ → String
-  B⁰⋆→String (B0     ⟩ x₁) = B⁰⋆→String x₁
-  B⁰⋆→String (B1   x ⟩ x₁) = ℤ→hex 2 (+ x) string++ B⁰⋆→String x₁
-  B⁰⋆→String (B2   x ⟩ x₁) = ℤ→hex 4 x string++ B⁰⋆→String x₁
-  B⁰⋆→String (BSig x ⟩ x₁) = keccak256 x string++ B⁰⋆→String x₁
+  B⁰⋆→String fin            = ""
+  B⁰⋆→String (B0     ⟩ x₁)  = B⁰⋆→String x₁
+  B⁰⋆→String (B1   x ⟩ x₁)  = ℤ→hex 2 (+ x) string++ B⁰⋆→String x₁
+  B⁰⋆→String (B2   x ⟩ x₁)  = ℤ→hex 4 x string++ B⁰⋆→String x₁
+  B⁰⋆→String (BSig x ⟩ x₁)  = keccak256 x string++ B⁰⋆→String x₁
   B⁰⋆→String (BAddr x ⟩ x₁) =
     stringFromList (toListᵛ x) string++ B⁰⋆→String x₁
-  B⁰⋆→String fin = ""
 
 module Linking where
   open Sⁿ
-  open Oⁿ
   open EVM
   open EVM-Assembly
   open Sic→EVM
@@ -1177,37 +983,33 @@ module Linking where
   resolve (hardcoded x) = IO.return (just x)
   resolve (construct) = IO.return nothing
 
-  -- Resolve all the guys in an O² using I/O.
-  resolve-O²
-    : ∀ {guy act}
-    → (guy → ID)
-    → O² guy act
-    → IO (Maybe (O² Addrᴱ act))
-  resolve-O² f (actₒ a n x) =
-    IO.return (just (actₒ a n x))
-  resolve-O² f (seqₒ x₁ x₂) =
-    ♯ resolve-O² f x₁ >>= maybe
-        (λ y₁′ → ♯
-          (♯ resolve-O² f x₂ >>= maybe
-               (λ y₂′ → ♯ IO.return (just (seqₒ y₁′ y₂′)))
-               (♯ IO.return nothing)))
-        (♯ IO.return nothing)
-  resolve-O² f (caseₒ p x₁ x₂) =
-    ♯ resolve-O² f x₁ >>= maybe
-      (λ y₁′ → ♯
-        (♯ resolve-O² f x₂ >>= maybe
-          (λ y₂′ → ♯ IO.return (just (caseₒ p y₁′ y₂′)))
-          (♯ IO.return nothing)))
-      (♯ IO.return nothing)
-  resolve-O² f (authₒ g x₁ x₂) =
-    ♯ resolve (f g) >>= maybe
-        (λ g′ → ♯
-          (♯ resolve-O² f x₁ >>= maybe
-            (λ y₁′ → ♯
-              (♯ resolve-O² f x₂ >>= maybe
-                (λ y₂′ → ♯ IO.return (just (authₒ g′ y₁′ y₂′)))
+  -- Resolve all the guys in an S² using I/O.
+  resolve-S² : ∀ {G A} → (G → ID) → S² G A → IO (Maybe (S² Addrᴱ A))
+  resolve-S² f (a ⟶ x) =
+    IO.return (just (a ⟶ x))
+  resolve-S² f (x & y) =
+    ♯ resolve-S² f x >>= maybe
+         (λ x′ → ♯
+           (♯ resolve-S² f y >>= maybe
+                (λ y′ → ♯ IO.return (just (x′ & y′)))
                 (♯ IO.return nothing)))
-            (♯ IO.return nothing)))
+         (♯ IO.return nothing)
+  resolve-S² f (case p then x else y) =
+    ♯ resolve-S² f x >>= maybe
+         (λ x′ → ♯
+           (♯ resolve-S² f y >>= maybe
+                (λ y′ → ♯ IO.return (just (case p then x′ else y′)))
+                (♯ IO.return nothing)))
+         (♯ IO.return nothing)
+  resolve-S² f (auth a ∷ x else y) =
+    ♯ resolve (f a) >>= maybe
+        (λ a′ → ♯
+           (♯ resolve-S² f x >>= maybe
+                 (λ x′ → ♯
+                   (♯ resolve-S² f y >>= maybe
+                        (λ y′ → ♯ IO.return (just (auth a′ ∷ x′ else y′)))
+                        (♯ IO.return nothing)))
+                 (♯ IO.return nothing)))
         (♯ IO.return nothing)
 
   compile-and-assemble
@@ -1228,9 +1030,9 @@ module Linking where
     → S² Guy Act
     → IO (Maybe Oᴱ)
   compile-and-link f₁ f₂ x =
-    ♯ resolve-O² f₁ (map-O²-act f₂ (S²→O² x)) >>=
+    ♯ resolve-S² f₁ (transform-S² (λ { g → g }) f₂ x) >>=
         maybe
-          (λ y → ♯ (IO.return (just (O²→Oᴱ y))))
+          (λ y → ♯ (IO.return (just (compile y))))
           (♯ IO.return nothing)
 
   assemble-and-print : IO (Maybe Oᴱ) → IO ⊤
@@ -1249,7 +1051,7 @@ module Linking where
     run (assemble-and-print (compile-and-link f₁ f₂ x))
 
 
--- Section 9: Dappsys, free stuff for dapp developers
+-- Section: Dappsys, free stuff for dapp developers
 --
 -- We now define a “standard library” in the Sic language.
 --
@@ -1384,7 +1186,8 @@ module Slots where
   ¶ a b c = a ⟶ ♯ b c
 
 
--- Now we open up our modules to users of the language.
+-- Public modules for language users.
+
 open Strings public
 open OverloadedNumbers public
 open Sⁿ public
@@ -1395,3 +1198,5 @@ open EVM-Assembly public
 open EVM public
 open Dappsys public
 open Slots public
+
+-- And that’s all, folks.
