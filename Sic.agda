@@ -625,13 +625,20 @@ module StackReasoning (A : Set) where
     -- XXX: this gas cost is a lie until we implement big word pushing
     minint : ∀ {s g} → g ¤ s ⤇ verylow+ g ¤ (minInt , s)
 
-    dup₁  : ∀ {g a s} → g ¤ (a , s) ⤇ base+ g ¤ (a , a , s)
-    dup₂  : ∀ {g a b s} → g ¤ (a , b , s) ⤇ base+ g ¤ (b , a , b , s)
-    dup₃  : ∀ {g a b c s} → g ¤ (a , b , c , s) ⤇ base+ g ¤ (c , a , b , c , s)
-    dup₄  : ∀ {g a b c d s} → g ¤ (a , b , c , d , s) ⤇ base+ g ¤ (d , a , b , c , d , s)
-    dup₅  : ∀ {g a b c d e s} → g ¤ (a , b , c , d , e , s) ⤇ base+ g ¤ (e , a , b , c , d , e , s)
-    dup₆  : ∀ {g a b c d e f s} → g ¤ (a , b , c , d , e , f , s) ⤇ base+ g ¤ (f , a , b , c , d , e , f , s)
-    dup₇  : ∀ {g a b c d e f h s} → g ¤ (a , b , c , d , e , f , h , s) ⤇ base+ g ¤ (h , a , b , c , d , e , f , h , s)
+    dup₁ : ∀ {g a s} → g ¤ (a , s)
+              ⤇ base+ g ¤ (a , a , s)
+    dup₂ : ∀ {g a b s} → g ¤ (a , b , s)
+              ⤇ base+ g ¤ (b , a , b , s)
+    dup₃ : ∀ {g a b c s} → g ¤ (a , b , c , s)
+              ⤇ base+ g ¤ (c , a , b , c , s)
+    dup₄ : ∀ {g a b c d s} → g ¤ (a , b , c , d , s)
+              ⤇ base+ g ¤ (d , a , b , c , d , s)
+    dup₅ : ∀ {g a b c d e s} → g ¤ (a , b , c , d , e , s)
+              ⤇ base+ g ¤ (e , a , b , c , d , e , s)
+    dup₆ : ∀ {g a b c d e f s} → g ¤ (a , b , c , d , e , f , s)
+              ⤇ base+ g ¤ (f , a , b , c , d , e , f , s)
+    dup₇ : ∀ {g a b c d e f h s} → g ¤ (a , b , c , d , e , f , h , s)
+              ⤇ base+ g ¤ (h , a , b , c , d , e , f , h , s)
 
   -- Now we define the necessary algebraic structure
   -- for importing the preorder reasoning module.

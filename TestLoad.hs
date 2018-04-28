@@ -37,7 +37,7 @@ load vm = do
       hexByteString "code" . encodeUtf8 . pack <$> getEnv x
 
   exampleCode <-
-    loadFromEnv "EXAMPLE_CODE"
+    loadFromEnv "T0_CODE"
   tokenCode <-
     loadFromEnv "PIE_CODE"
   binCode <-

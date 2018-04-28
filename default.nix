@@ -147,6 +147,7 @@ in
         export PIE_CODE=${solidity aux-root "Pie"}
         export DAPP_ROOT=${coins-root}
         export DAPP_FILE=${coins-root}/out/frob.t.sol.json
+        export count=100
       '';
 
     ghci = ''
