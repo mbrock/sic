@@ -21,37 +21,30 @@ allGems :: [Token]
 allGems = enumFrom ETH
 
 data Ilk = Ilk
-  { spot :: Ray
-  , rate :: Ray
-  , line :: Integer
-  , arts :: Integer
-  , gem  :: Token
+  { φ :: Ray
+  , ψ :: Ray
+  , ω :: Integer
+  , σ :: Integer
   } deriving (Eq, Show)
 
 emptyIlk :: Token -> Ilk
-emptyIlk t = Ilk
-  { spot = 0
-  , rate = 1
-  , line = 0
-  , arts = 0
-  , gem = t
-  }
+emptyIlk t = Ilk 0 1 0 0
 
 data Urn = Urn
   { ink :: Integer
   , art :: Integer
   } deriving (Eq, Show)
 
-newtype Id a = Id Integer
+newtype Id a = Id ByteString
   deriving (Ord, Eq, Show)
 
-data Model v =
+data Model (v :: * -> *) =
   Model
     { accounts  :: Set Word160
     , balances  :: Map (Token, Word160) Word256
     , approvals :: Set (Token, Word160, Word160)
-    , ilks      :: Map (Var (Id Ilk) v) Ilk
-    , urns      :: Map (Var (Id Ilk) v, Word160) Urn
+    , ilks      :: Map (Id Ilk) Ilk
+    , urns      :: Map (Id Ilk, Word160) Urn
     }
 
 deriving instance Show1 v => Show (Model v)
@@ -71,7 +64,7 @@ someAccount = Gen.element . Set.toList . accounts
 someToken :: Gen Token
 someToken = Gen.element allTokens
 
-someIlk :: Model v -> Gen (Var (Id Ilk) v, Ilk)
+someIlk :: Model v -> Gen (Id Ilk, Ilk)
 someIlk = Gen.element . Map.toList . ilks
 
 zeroBalancesFor :: Word160 -> Map (Token, Word160) Word256

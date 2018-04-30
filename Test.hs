@@ -5,7 +5,7 @@ import TestLoad
 import TestModel
 import TestBasicMath
 import TestDebug
-import TestToken
+import TestD0
 
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range

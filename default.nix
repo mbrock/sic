@@ -140,7 +140,7 @@ in
           root: name:
             "$(cat ${root}/out/${name}.bin | tr -d '\n')";
       in ''
-        export ROOT=0000000000000000000000000000000000000000
+        export ROOT=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
         export T0_CODE=$(./T0 | tr -d '\n')
         export D0_CODE=$(./D0 | tr -d '\n')
         export BIN_CODE=${solidity coins-root "Bin"}

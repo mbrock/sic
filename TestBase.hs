@@ -45,10 +45,8 @@ import System.IO.Unsafe as X
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
 
-performIO = unsafePerformIO
-
 root :: Integral a => a
-root = cast ethrunAddress
+root = cast 0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 cast :: (Integral a, Num b) => a -> b
 cast = fromIntegral
@@ -266,9 +264,7 @@ instance HasResolution e => Fractional (Decimal e) where
 
 {-# NOINLINE testCount #-}
 testCount :: TestLimit
-testCount = cast (read (performIO (getEnv "count")))
-
-
+testCount = cast (read (unsafePerformIO (getEnv "count")))
 
 rayMultiplicationSafe :: Integral a => Ray -> a -> Bool
 rayMultiplicationSafe r x =

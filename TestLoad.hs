@@ -14,6 +14,7 @@ data Global = Global
   { globalExample :: !Word160
   , globalVatAddress :: !Word160
   , globalTokenAddress :: !(Token -> Word160)
+  , globalD0Address :: !Word160
   , globalInitialVm  :: !VM
   }
 
@@ -26,6 +27,7 @@ Global
   { globalExample = example
   , globalVatAddress = vatAddress
   , globalTokenAddress = tokenAddress
+  , globalD0Address = d0Address
   , globalInitialVm = initialVm
   } = global
 
@@ -42,6 +44,8 @@ load vm = do
     loadFromEnv "PIE_CODE"
   binCode <-
     loadFromEnv "BIN_CODE"
+  d0Code <-
+    loadFromEnv "D0_CODE"
 
   pure . flip evalState vm $ do
     example <-
@@ -64,10 +68,14 @@ load vm = do
       create binCode
         [AbiAddress dai, AbiAddress 0, AbiAddress 0]
 
+    d0 <-
+      create d0Code []
+
     vm' <- get
     return Global
       { globalExample = cast example
       , globalVatAddress = cast vat
+      , globalD0Address = cast d0
       , globalTokenAddress =
           cast .
             \case DAI -> dai; MKR -> mkr; ETH -> eth; DGX -> dgx; OMG -> omg
