@@ -21,10 +21,10 @@ allGems :: [Token]
 allGems = enumFrom ETH
 
 data Ilk = Ilk
-  { φ :: Ray
-  , ψ :: Ray
-  , ω :: Integer
-  , σ :: Integer
+  { phi :: Ray
+  , psi :: Ray
+  , omega :: Integer
+  , sigma :: Integer
   } deriving (Eq, Show)
 
 emptyIlk :: Token -> Ilk

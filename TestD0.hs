@@ -100,11 +100,6 @@ data Mold      (v :: * -> *) = Mold (Id Ilk) Ray Ray Wad  deriving (Eq, Show)
 
 data Feel (v :: * -> *) = Feel (Id Ilk)                   deriving (Eq, Show)
 
--- This type family gives the symbolic result type for each action type.
-type family Outcome c where
-  Outcome c    = Result
-
-
 -- A command is sent either to some arbitrary contract or to a named token.
 data Target = ToContract Word160 | ToToken Token
   deriving (Eq, Show)
@@ -360,10 +355,10 @@ ilkFromStruct v =
   case toList v of
     [AbiUInt 256 a, AbiUInt 256 b, AbiUInt 256 c, AbiUInt 256 d] ->
       Ilk
-        { φ = fixed a
-        , ψ = fixed b
-        , ω = cast c
-        , σ = cast d
+        { phi = fixed a
+        , psi = fixed b
+        , omega = cast c
+        , sigma = cast d
         }
     _ ->
       error "invalid ilk struct"

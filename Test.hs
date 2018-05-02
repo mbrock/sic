@@ -70,13 +70,14 @@ main = do
 -- Right now it just alters one random opcode according to
 -- a stupid scheme given below.
 
+mutationTarget :: Applicative f => (ByteString -> f ByteString) -> VM -> f VM
+mutationTarget = env . contracts . ix (cast d0Address) . bytecode
+
 mutate :: MonadIO m => VM -> m VM
 mutate vm = do
-  let
-    code = vm ^. env . contracts . ix (cast vatAddress) . bytecode
+  let code = vm ^. mutationTarget
   i <- liftIO (randomRIO (0, BS.length code))
-  pure $
-    vm & env . contracts . ix (cast vatAddress) . bytecode . ix i %~ mutateOp
+  pure $ vm & mutationTarget . ix i %~ mutateOp
 
 mutateOp :: Word8 -> Word8
 mutateOp x =
