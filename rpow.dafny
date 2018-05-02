@@ -1,0 +1,47 @@
+function pow(x: nat, n: nat): nat {
+  if (n == 0) then
+    1
+   else
+    x * pow(x, n - 1)
+}
+
+lemma powlemma(x: nat, n: nat)
+  ensures pow(x, n) * pow(x, n) == pow(x, n * 2)
+{
+  if n > 0 {
+    powlemma(x, n - 1) ;
+  }
+}
+
+lemma powmullemma(x: nat, y: nat, n: nat)
+  ensures pow(x, n) * pow(y, n) == pow(x * y, n)
+{
+  if n > 0 {
+    powmullemma(x, y, n - 1) ;
+  }
+}
+
+method rpow(x: nat, n: nat) returns (res:nat)
+  ensures res == pow(x, n)
+{
+  var xx: nat := x;
+  var nn: nat := n;
+  var rr: nat := 1;
+  while nn > 0
+    decreases nn
+    invariant pow(x,n) == rr * pow(xx, nn)
+  {
+    if (nn % 2 == 0) {
+      xx := xx * xx;
+      nn := nn / 2;
+      powmullemma(xx, xx, nn/2);
+      powlemma(xx, nn / 2);
+    } else {
+      rr := xx * rr;
+      nn := nn - 1;
+    }
+  }
+  assert nn == 0;
+  return rr;
+}
+
