@@ -123,15 +123,15 @@ in
     checkPhase = ''
       ${envPhase}
       runghc Test.hs
-      output=$(set -x; runghc Test.hs --mutation) || true
-      if message=$(grep ✓ <<<"$output"); then
-        echo $'\e[31m'"$message"$'\e[0m'
-        exit 1
-      else
-        echo -n $'\e[32m'
-        grep "failed after" <<<"$output"
-        echo -n $'\e[0m'
-      fi
+      # output=$(set -x; runghc Test.hs --mutation) || true
+      # if message=$(grep ✓ <<<"$output"); then
+      #   echo $'\e[31m'"$message"$'\e[0m'
+      #   exit 1
+      # else
+      #   echo -n $'\e[32m'
+      #   grep "failed after" <<<"$output"
+      #   echo -n $'\e[0m'
+      # fi
     '';
 
     envPhase =
