@@ -797,7 +797,7 @@ module Sic→EVM where
   ⟦ x − y ⟧⁰ᵉ         = ⟦ y ⟧⁰ᵉ ⟫ ⟦ x ⟧⁰ᵉ ⟫ ISUB
   ⟦ x × y ⟧⁰ᵉ         = ⟦ y ⟧⁰ᵉ ⟫ ⟦ x ⟧⁰ᵉ ⟫ IMUL
   ⟦ x ∙ y ⟧⁰ᵉ         = ⟦ y ⟧⁰ᵉ ⟫ ⟦ x ⟧⁰ᵉ ⟫ RMUL
-  ⟦ x ^ y ⟧⁰ᵉ         = ⟦ y ⟧⁰ᵉ ⟫ ⟦ x ⟧⁰ᵉ ⟫ EXP
+  ⟦ x ^ y ⟧⁰ᵉ         = ⟦ y ⟧⁰ᵉ ⟫ ⟦ x ⟧⁰ᵉ ⟫ RPOW
   ⟦ x < y ⟧⁰ᵉ         = ⟦ y ⟧⁰ᵉ ⟫ ⟦ x ⟧⁰ᵉ ⟫ SLT
   ⟦ x > y ⟧⁰ᵉ         = ⟦ y ⟧⁰ᵉ ⟫ ⟦ x ⟧⁰ᵉ ⟫ SGT
   ⟦ x ≥ y ⟧⁰ᵉ         = ⟦ y ⟧⁰ᵉ ⟫ ⟦ x ⟧⁰ᵉ ⟫ SLT ⟫ ISZERO
