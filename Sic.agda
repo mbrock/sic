@@ -858,7 +858,7 @@ module Sic→EVM where
     let m = S¹-memory-usage x
         n = S¹-fyi-size x
     in PUSH %sig ⟫ MLOAD ⟫ PUSHSIG sig ⟫ EQ ⟫ ISZERO ⟫
-       ELSE (S¹→Oᴱ m x) ⟫ return m n
+       ELSE (S¹→Oᴱ m x ⟫ return m n)
   ⟦ case p then x else y ⟧²ᵉ =
     ⟦ p ⟧⁰ᵉ ⟫ ELSE ⟦ y ⟧²ᵉ ⟫ ⟦ x ⟧²ᵉ
   ⟦ auth a ∷ x ⟧²ᵉ =
