@@ -37,7 +37,7 @@ method rpow(x: int, n: nat) returns (res: int)
     }
 
     nn := nn / 2;
-    if (n > 0) {
+    if (nn > 0) {
       var x0: int := xx;
       xx := xx * xx;
       calc {
